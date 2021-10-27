@@ -77,15 +77,15 @@ module.exports = (config) => {
             test: /\.glsl$/,
             use: ['raw-loader']
           },
-          {
-            test: /\.ts$/,
-            enforce: 'post',
-            include: path.resolve('src/engine/'),
-            use: {
-              loader: 'istanbul-instrumenter-loader',
-              options: { esModules: true }
-            }
-          }
+          // {
+          //   test: /\.ts$/,
+          //   enforce: 'post',
+          //   include: path.resolve('src/engine/'),
+          //   use: {
+          //     loader: 'istanbul-instrumenter-loader',
+          //     options: { esModules: true }
+          //   }
+          // }
         ]
       }
     },

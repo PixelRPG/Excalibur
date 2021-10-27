@@ -13,7 +13,8 @@ const umdOutput = {
   library: {
     name: 'ex',
     type: 'umd'
-  }
+  },
+  hashFunction: 'xxhash64'
 };
 
 const esmOutput = {
@@ -21,7 +22,8 @@ const esmOutput = {
   filename: '[name].js',
   library: {
     type: 'module'
-  }
+  },
+  hashFunction: 'xxhash64'
 };
 
 module.exports = (env, argv) => ({
