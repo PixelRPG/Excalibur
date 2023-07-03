@@ -46,8 +46,8 @@ describe('A loader', () => {
     const loader = new ex.Loader([, , , ,]);
     (loader as any)._image.onload = () => {
       loader.wireEngine(engine);
-      loader.draw(engine.ctx);
-      ensureImagesLoaded(engine.canvas, 'src/spec/images/LoaderSpec/zero.png').then(([canvas, image]) => {
+      loader.draw(loader.canvas.ctx);
+      ensureImagesLoaded(loader.canvas.ctx.canvas, 'src/spec/images/LoaderSpec/zero.png').then(([canvas, image]) => {
         expect(canvas).toEqualImage(image);
         done();
       });
@@ -61,8 +61,8 @@ describe('A loader', () => {
       loader.markResourceComplete();
 
       loader.wireEngine(engine);
-      loader.draw(engine.ctx);
-      ensureImagesLoaded(engine.canvas, 'src/spec/images/LoaderSpec/fifty.png').then(([canvas, image]) => {
+      loader.draw(loader.canvas.ctx);
+      ensureImagesLoaded(loader.canvas.ctx.canvas, 'src/spec/images/LoaderSpec/fifty.png').then(([canvas, image]) => {
         expect(canvas).toEqualImage(image);
         done();
       });
@@ -78,8 +78,8 @@ describe('A loader', () => {
       loader.markResourceComplete();
 
       loader.wireEngine(engine);
-      loader.draw(engine.ctx);
-      ensureImagesLoaded(engine.canvas, 'src/spec/images/LoaderSpec/100.png').then(([canvas, image]) => {
+      loader.draw(loader.canvas.ctx);
+      ensureImagesLoaded(loader.canvas.ctx.canvas, 'src/spec/images/LoaderSpec/100.png').then(([canvas, image]) => {
         expect(canvas).toEqualImage(image);
         done();
       });
@@ -96,11 +96,12 @@ describe('A loader', () => {
       loader.wireEngine(engine);
       loader.showPlayButton();
 
-      loader.draw(engine.ctx);
-      ensureImagesLoaded(engine.canvas, 'src/spec/images/LoaderSpec/playbuttonshown-noprogressbar.png').then(([canvas, image]) => {
-        expect(canvas).toEqualImage(image);
-        done();
-      });
+      loader.draw(loader.canvas.ctx);
+      ensureImagesLoaded(loader.canvas.ctx.canvas, 'src/spec/images/LoaderSpec/playbuttonshown-noprogressbar.png')
+        .then(([canvas, image]) => {
+          expect(canvas).toEqualImage(image);
+          done();
+        });
     };
   });
 
@@ -109,7 +110,7 @@ describe('A loader', () => {
     loader.wireEngine(engine);
     loader.playButtonPosition = ex.vec(42, 77);
     loader.showPlayButton();
-    loader.draw(engine.ctx);
+    loader.draw(loader.canvas.ctx);
     // there is some dom pollution want to be sure we get the RIGHT root element
     const playbutton = (loader as any)._playButtonRootElement as HTMLDivElement;
     expect(playbutton.style.left).toBe('42px');
@@ -122,8 +123,8 @@ describe('A loader', () => {
       loader.wireEngine(engine);
       loader.logoPosition = ex.vec(0, 0);
       loader.showPlayButton();
-      loader.draw(engine.ctx);
-      ensureImagesLoaded(engine.canvas, 'src/spec/images/LoaderSpec/logo-position.png').then(([canvas, image]) => {
+      loader.draw(loader.canvas.ctx);
+      ensureImagesLoaded(loader.canvas.ctx.canvas, 'src/spec/images/LoaderSpec/logo-position.png').then(([canvas, image]) => {
         expect(canvas).toEqualImage(image);
         done();
       });
@@ -140,8 +141,8 @@ describe('A loader', () => {
       loader.markResourceComplete();
       loader.markResourceComplete();
       loader.wireEngine(engine);
-      loader.draw(engine.ctx);
-      ensureImagesLoaded(engine.canvas, 'src/spec/images/LoaderSpec/loader-position-color.png').then(([canvas, image]) => {
+      loader.draw(loader.canvas.ctx);
+      ensureImagesLoaded(loader.canvas.ctx.canvas, 'src/spec/images/LoaderSpec/loader-position-color.png').then(([canvas, image]) => {
         expect(canvas).toEqualImage(image);
         done();
       });
@@ -176,6 +177,7 @@ describe('A loader', () => {
 
   it('can have the enter key pressed to start', (done) => {
     const loader = new ex.Loader([, , , ,]);
+    loader.wireEngine(engine);
     loader.loadingBarPosition = ex.vec(0, 0);
     loader.loadingBarColor = ex.Color.Red;
     loader.markResourceComplete();
@@ -214,24 +216,26 @@ describe('A loader', () => {
     target.dispatchEvent(evt);
   }
 
-  it('does not propagate the start button click to pointers', (done) => {
+  it('does not propagate the start button click to pointers', async () => {
     const engine = new ex.Engine({ width: 1000, height: 1000 });
+    (ex.WebAudio as any)._UNLOCKED = true;
+    const clock = engine.clock = engine.clock.toTestClock();
     const pointerHandler = jasmine.createSpy('pointerHandler');
     engine.input.pointers.primary.on('up', pointerHandler);
     const loader = new Loader([new ex.ImageSource('src/spec/images/GraphicsTextSpec/spritefont.png')]);
     engine.start(loader);
 
-    setTimeout(() => {
-      const btn = (loader as any)._playButton;
-      const btnClickHandler = jasmine.createSpy('btnClickHandler');
-      btn.addEventListener('pointerup', btnClickHandler);
-      const rect = btn.getBoundingClientRect();
-      executeMouseEvent('pointerup', btn as any, ex.Input.NativePointerButton.Left, rect.x + rect.width / 2, rect.y + rect.height / 2);
+    await loader.areResourcesLoaded();
+    clock.step(200);
 
-      expect(pointerHandler).not.toHaveBeenCalled();
-      expect(btnClickHandler).toHaveBeenCalled();
-      done();
-    }, 1000);
+    const btn = (loader as any)._playButton;
+    const btnClickHandler = jasmine.createSpy('btnClickHandler');
+    btn.addEventListener('pointerup', btnClickHandler);
+    const rect = btn.getBoundingClientRect();
+    executeMouseEvent('pointerup', btn as any, ex.Input.NativePointerButton.Left, rect.x + rect.width / 2, rect.y + rect.height / 2);
+
+    expect(pointerHandler).not.toHaveBeenCalled();
+    expect(btnClickHandler).toHaveBeenCalled();
   });
 
   it('updates the play button postion on resize', () => {
@@ -261,5 +265,73 @@ describe('A loader', () => {
       loader.playButtonRootElement.style.top];
 
     expect(oldPos).not.toEqual(newPos);
+  });
+
+  it('does not throw when more than 256 images are being loaded', (done) => {
+    /**
+     *
+     */
+    function drawRandomCircleOnContext(ctx) {
+      const x = Math.floor(Math.random() * 100);
+      const y = Math.floor(Math.random() * 100);
+      const radius = Math.floor(Math.random() * 20);
+
+      const r = Math.floor(Math.random() * 255);
+      const g = Math.floor(Math.random() * 255);
+      const b = Math.floor(Math.random() * 255);
+
+      ctx.beginPath();
+      ctx.arc(x, y, radius, Math.PI * 2, 0, false);
+      ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + b + ',1)';
+      ctx.fill();
+      ctx.closePath();
+    }
+
+    /**
+     *
+     */
+    function generateRandomImage() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 100;
+      canvas.height = 100;
+
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, 100, 100);
+
+      for (let i = 0; i < 20; i++) {
+        drawRandomCircleOnContext(ctx);
+      }
+      return canvas.toDataURL('image/png');
+    }
+
+    const logger = ex.Logger.getInstance();
+    spyOn(logger, 'error').and.callThrough();
+    const game = TestUtils.engine({
+      width: 100,
+      height: 100
+    });
+    const testClock = game.clock as ex.TestClock;
+
+    const loader = new ex.Loader();
+
+    const srcs = [];
+    for (let i = 0; i < 800; i++) {
+      srcs.push(generateRandomImage());
+    }
+    const images = srcs.map(src => new ex.ImageSource(src));
+    images.forEach((image) => {
+      image.ready.then(() => {
+        testClock.step(1);
+      });
+    });
+    loader.addResources(images);
+
+    const ready = TestUtils.runToReady(game, loader).then(() => {
+      expect(logger.error).not.toHaveBeenCalled();
+      done();
+    })
+      .catch(() => {
+        fail();
+      });
   });
 });

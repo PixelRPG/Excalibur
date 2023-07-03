@@ -1,9 +1,8 @@
 import { Util } from '../..';
 import { Pair } from '../Detection/Pair';
 import { Color } from '../../Color';
-import { Transform } from '../../EntityComponentSystem';
 import { ExcaliburGraphicsContext } from '../../Graphics/Context/ExcaliburGraphicsContext';
-import { Line } from '../../Math/line';
+import { LineSegment } from '../../Math/line-segment';
 import { Projection } from '../../Math/projection';
 import { Ray } from '../../Math/ray';
 import { Vector } from '../../Math/vector';
@@ -12,6 +11,7 @@ import { CollisionContact } from '../Detection/CollisionContact';
 import { DynamicTree } from '../Detection/DynamicTree';
 import { DynamicTreeCollisionProcessor } from '../Detection/DynamicTreeCollisionProcessor';
 import { Collider } from './Collider';
+import { Transform } from '../../Math/transform';
 
 export class CompositeCollider extends Collider {
   private _transform: Transform;
@@ -32,6 +32,7 @@ export class CompositeCollider extends Collider {
 
   addCollider(collider: Collider) {
     this.events.wire(collider.events);
+    collider.__compositeColliderId = this.id;
     this._colliders.push(collider);
     this._collisionProcessor.track(collider);
     this._dynamicAABBTree.trackCollider(collider);
@@ -39,6 +40,7 @@ export class CompositeCollider extends Collider {
 
   removeCollider(collider: Collider) {
     this.events.unwire(collider.events);
+    collider.__compositeColliderId = null;
     Util.removeItemFromArray(collider, this._colliders);
     this._collisionProcessor.untrack(collider);
     this._dynamicAABBTree.untrackCollider(collider);
@@ -135,9 +137,9 @@ export class CompositeCollider extends Collider {
     return contacts;
   }
 
-  getClosestLineBetween(other: Collider): Line {
+  getClosestLineBetween(other: Collider): LineSegment {
     const colliders = this.getColliders();
-    const lines: Line[] = [];
+    const lines: LineSegment[] = [];
     if (other instanceof CompositeCollider) {
       const otherColliders = other.getColliders();
       for (const colliderA of colliders) {
@@ -234,13 +236,6 @@ export class CompositeCollider extends Collider {
     }
   }
 
-  draw(ctx: CanvasRenderingContext2D, color?: Color, pos?: Vector): void {
-    const colliders = this.getColliders();
-    for (const collider of colliders) {
-      collider.draw(ctx, color, pos);
-    }
-  }
-
   public debug(ex: ExcaliburGraphicsContext, color: Color) {
     const colliders = this.getColliders();
     for (const collider of colliders) {
@@ -248,12 +243,6 @@ export class CompositeCollider extends Collider {
     }
   }
 
-  debugDraw(ctx: CanvasRenderingContext2D, color: Color): void {
-    const colliders = this.getColliders();
-    for (const collider of colliders) {
-      collider.draw(ctx, color);
-    }
-  }
   clone(): Collider {
     return new CompositeCollider(this._colliders.map((c) => c.clone()));
   }

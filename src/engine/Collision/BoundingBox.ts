@@ -3,7 +3,7 @@ import { Ray } from '../Math/ray';
 import { Color } from '../Color';
 import { Side } from './Side';
 import { ExcaliburGraphicsContext } from '../Graphics/Context/ExcaliburGraphicsContext';
-import { Matrix } from '../Math/matrix';
+import { AffineMatrix } from '../Math/affine-matrix';
 
 export interface BoundingBoxOptions {
   left: number;
@@ -42,6 +42,13 @@ export class BoundingBox {
       this.right = right;
       this.bottom = bottom;
     }
+  }
+
+  /**
+   * Returns a new instance of [[BoundingBox]] that is a copy of the current instance
+   */
+  public clone(): BoundingBox {
+    return new BoundingBox(this.left, this.top, this.right, this.bottom);
   }
 
   /**
@@ -140,14 +147,54 @@ export class BoundingBox {
     return BoundingBox.fromPoints(points);
   }
 
+  /**
+   * Scale a bounding box by a scale factor, optionally provide a point
+   * @param scale
+   * @param point
+   */
   public scale(scale: Vector, point: Vector = Vector.Zero): BoundingBox {
     const shifted = this.translate(point);
     return new BoundingBox(shifted.left * scale.x, shifted.top * scale.y, shifted.right * scale.x, shifted.bottom * scale.y);
   }
 
-  public transform(matrix: Matrix) {
-    const points = this.getPoints().map((p) => matrix.multv(p));
-    return BoundingBox.fromPoints(points);
+  /**
+   * Transform the axis aligned bounding box by a [[Matrix]], producing a new axis aligned bounding box
+   * @param matrix
+   */
+  public transform(matrix: AffineMatrix) {
+    // inlined these calculations to not use vectors would speed it up slightly
+    // const matFirstColumn = vec(matrix.data[0], matrix.data[1]);
+    // const xa = matFirstColumn.scale(this.left);
+    const xa1 = matrix.data[0] * this.left;
+    const xa2 = matrix.data[1] * this.left;
+
+    // const xb = matFirstColumn.scale(this.right);
+    const xb1 = matrix.data[0] * this.right;
+    const xb2 = matrix.data[1] * this.right;
+
+    // const matSecondColumn = vec(matrix.data[2], matrix.data[3]);
+    // const ya = matSecondColumn.scale(this.top);
+    const ya1 = matrix.data[2] * this.top;
+    const ya2 = matrix.data[3] * this.top;
+
+    // const yb = matSecondColumn.scale(this.bottom);
+    const yb1 = matrix.data[2] * this.bottom;
+    const yb2 = matrix.data[3] * this.bottom;
+
+    const matrixPos = matrix.getPosition();
+    // const topLeft = Vector.min(xa, xb).add(Vector.min(ya, yb)).add(matrixPos);
+    // const bottomRight = Vector.max(xa, xb).add(Vector.max(ya, yb)).add(matrixPos);
+    const left = Math.min(xa1, xb1) + Math.min(ya1, yb1) + matrixPos.x;
+    const top = Math.min(xa2, xb2) + Math.min(ya2, yb2) + matrixPos.y;
+    const right = Math.max(xa1, xb1) + Math.max(ya1, yb1) + matrixPos.x;
+    const bottom = Math.max(xa2, xb2) + Math.max(ya2, yb2) + matrixPos.y;
+
+    return new BoundingBox({
+      left,//: topLeft.x,
+      top,//: topLeft.y,
+      right,//: bottomRight.x,
+      bottom//: bottomRight.y
+    });
   }
 
   /**
@@ -231,7 +278,7 @@ export class BoundingBox {
     if (val instanceof Vector) {
       return this.left <= val.x && this.top <= val.y && this.bottom >= val.y && this.right >= val.x;
     } else if (val instanceof BoundingBox) {
-      if (this.left < val.left && this.top < val.top && val.bottom < this.bottom && val.right < this.right) {
+      if (this.left <= val.left && this.top <= val.top && val.bottom <= this.bottom && val.right <= this.right) {
         return true;
       }
       return false;
@@ -255,6 +302,25 @@ export class BoundingBox {
 
   public get dimensions(): Vector {
     return new Vector(this.width, this.height);
+  }
+
+  /**
+   * Returns true if the bounding boxes overlap.
+   * @param other
+   * @param epsilon Optionally specify a small epsilon (default 0) as amount of overlap to ignore as overlap.
+   * This epsilon is useful in stable collision simulations.
+   */
+  public overlaps(other: BoundingBox, epsilon?: number): boolean {
+    const e = epsilon || 0;
+    if (other.hasZeroDimensions()){
+      return this.contains(other);
+    }
+    if (this.hasZeroDimensions()) {
+      return other.contains(this);
+    }
+    const totalBoundingBox = this.combine(other);
+    return totalBoundingBox.width + e < other.width + this.width &&
+           totalBoundingBox.height + e < other.height + this.height;
   }
 
   /**
@@ -394,12 +460,6 @@ export class BoundingBox {
   public intersectWithSide(bb: BoundingBox): Side {
     const intersect = this.intersect(bb);
     return BoundingBox.getSideFromIntersection(intersect);
-  }
-
-  /* istanbul ignore next */
-  public debugDraw(ctx: CanvasRenderingContext2D, color: Color = Color.Yellow) {
-    ctx.strokeStyle = color.toString();
-    ctx.strokeRect(this.left, this.top, this.width, this.height);
   }
 
   /**

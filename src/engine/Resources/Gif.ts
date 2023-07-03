@@ -3,11 +3,9 @@ import { Sprite } from '../Graphics/Sprite';
 import { Color } from '../Color';
 import { SpriteSheet } from '../Graphics/SpriteSheet';
 import { Animation } from '../Graphics/Animation';
-import { Engine } from '../Engine';
 import { Loadable } from '../Interfaces/Index';
 import { ImageSource } from '../Graphics/ImageSource';
-import { LegacyDrawing } from '..';
-import { range } from '../Util/Util';
+import { range } from '../Math/util';
 /**
  * The [[Texture]] object allows games built in Excalibur to load image resources.
  * [[Texture]] is an [[Loadable]] which means it can be passed to a [[Loader]]
@@ -40,9 +38,21 @@ export class Gif implements Loadable<ImageSource[]> {
    * @param color      Optionally set the color to treat as transparent the gif, by default [[Color.Magenta]]
    * @param bustCache  Optionally load texture with cache busting
    */
-  constructor(public path: string, public color: Color = Color.Magenta, public bustCache = true) {
+  constructor(public path: string, public color: Color = Color.Magenta, bustCache = false) {
     this._resource = new Resource(path, 'arraybuffer', bustCache);
     this._transparentColor = color;
+  }
+
+  /**
+   * Should excalibur add a cache busting querystring? By default false.
+   * Must be set before loading
+   */
+  public get bustCache() {
+    return this._resource.bustCache;
+  }
+
+  public set bustCache(val: boolean) {
+    this._resource.bustCache = val;
   }
 
   /**
@@ -61,32 +71,6 @@ export class Gif implements Loadable<ImageSource[]> {
 
   public isLoaded() {
     return !!this.data;
-  }
-
-  /**
-   * Return a frame of the gif as a legacy sprite by index
-   * @deprecated
-   */
-  public toLegacySprite(id: number = 0): LegacyDrawing.Sprite {
-    return Sprite.toLegacySprite(this.toSprite(id));
-  }
-
-  /**
-   * Return the gif as a legacy spritesheet
-   * @deprecated
-   * @returns
-   */
-  public toLegacySpriteSheet(): LegacyDrawing.SpriteSheet {
-    return SpriteSheet.toLegacySpriteSheet(this.toSpriteSheet());
-  }
-
-  /**
-   * Return the gif as a legacy animation
-   * @deprecated
-   * @param speed
-   */
-  public toLegacyAnimation(engine: Engine, speed: number): LegacyDrawing.Animation {
-    return Animation.toLegacyAnimation(engine, this.toAnimation(speed));
   }
 
   /**

@@ -6,7 +6,7 @@ import { OnInitialize, OnPreUpdate, OnPostUpdate } from '../Interfaces/Lifecycle
 import { Engine } from '../Engine';
 import { InitializeEvent, PreUpdateEvent, PostUpdateEvent } from '../Events';
 import { EventDispatcher } from '../EventDispatcher';
-import { Util } from '..';
+import { Scene, Util } from '..';
 
 /**
  * Interface holding an entity component pair
@@ -75,6 +75,11 @@ export class Entity extends Class implements OnInitialize, OnPreUpdate, OnPostUp
    */
   public id: number = Entity._ID++;
 
+  /**
+   * The scene that the entity is in, if any
+   */
+  public scene: Scene = null;
+
   private _name: string = 'anonymous';
   protected _setName(name: string) {
     if (name) {
@@ -96,9 +101,13 @@ export class Entity extends Class implements OnInitialize, OnPreUpdate, OnPostUp
 
   /**
    * Kill the entity, means it will no longer be updated. Kills are deferred to the end of the update.
+   * If parented it will be removed from the parent when killed.
    */
   public kill() {
-    this.active = false;
+    if (this.active) {
+      this.active = false;
+      this.unparent();
+    }
   }
 
   public isKilled() {
@@ -251,9 +260,10 @@ export class Entity extends Class implements OnInitialize, OnPreUpdate, OnPostUp
    * Removes all children from this entity
    */
   public removeAllChildren(): Entity {
-    this.children.forEach((c) => {
-      this.removeChild(c);
-    });
+    // Avoid modifying the array issue by walking backwards
+    for (let i = this.children.length - 1; i >= 0; i--) {
+      this.removeChild(this.children[i]);
+    }
     return this;
   }
 
@@ -301,7 +311,7 @@ export class Entity extends Class implements OnInitialize, OnPreUpdate, OnPostUp
   /**
    * Adds a copy of all the components from another template entity as a "prefab"
    * @param templateEntity Entity to use as a template
-   * @param force Force component replacement if it aleady exists on the target entity
+   * @param force Force component replacement if it already exists on the target entity
    */
   public addTemplate(templateEntity: Entity, force: boolean = false): Entity {
     for (const c of templateEntity.getComponents()) {
@@ -325,7 +335,7 @@ export class Entity extends Class implements OnInitialize, OnPreUpdate, OnPostUp
         // Remove existing component type if exists when forced
         this.removeComponent(component);
       } else {
-        // early exit component exiss
+        // early exit component exits
         return this;
       }
     }
@@ -368,6 +378,13 @@ export class Entity extends Class implements OnInitialize, OnPreUpdate, OnPostUp
     }
 
     return this as any;
+  }
+
+  public clearComponents() {
+    const components = this.getComponents();
+    for (const c of components) {
+      this.removeComponent(c);
+    }
   }
 
   private _removeComponentByType(type: string) {
@@ -438,7 +455,7 @@ export class Entity extends Class implements OnInitialize, OnPreUpdate, OnPostUp
   /**
    * Initializes this entity, meant to be called by the Scene before first update not by users of Excalibur.
    *
-   * It is not recommended that internal excalibur methods be overriden, do so at your own risk.
+   * It is not recommended that internal excalibur methods be overridden, do so at your own risk.
    *
    * @internal
    */
@@ -451,7 +468,7 @@ export class Entity extends Class implements OnInitialize, OnPreUpdate, OnPostUp
   }
 
   /**
-   * It is not recommended that internal excalibur methods be overriden, do so at your own risk.
+   * It is not recommended that internal excalibur methods be overridden, do so at your own risk.
    *
    * Internal _preupdate handler for [[onPreUpdate]] lifecycle event
    * @internal
@@ -462,7 +479,7 @@ export class Entity extends Class implements OnInitialize, OnPreUpdate, OnPostUp
   }
 
   /**
-   * It is not recommended that internal excalibur methods be overriden, do so at your own risk.
+   * It is not recommended that internal excalibur methods be overridden, do so at your own risk.
    *
    * Internal _preupdate handler for [[onPostUpdate]] lifecycle event
    * @internal

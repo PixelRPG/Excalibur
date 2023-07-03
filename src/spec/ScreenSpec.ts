@@ -69,6 +69,8 @@ describe('A Screen', () => {
 
     expect(sut.resolution.width).toBe(800);
     expect(sut.resolution.height).toBe(600);
+    expect(sut.contentArea.width).toBe(800);
+    expect(sut.contentArea.height).toBe(600);
     expect(sut.viewport.width).toBe(1000);
     expect(sut.viewport.height).toBe(1000 / sut.aspectRatio);
   });
@@ -89,8 +91,208 @@ describe('A Screen', () => {
 
     expect(sut.resolution.width).toBe(800);
     expect(sut.resolution.height).toBe(600);
+    expect(sut.contentArea.width).toBe(800);
+    expect(sut.contentArea.height).toBe(600);
     expect(sut.viewport.width).toBe(800 * sut.aspectRatio);
     expect(sut.viewport.height).toBe(800);
+  });
+
+  it('can use the FitScreenAndFill display mode, screen aspectRatio > window aspect ratio', () => {
+    const sut = new ex.Screen({
+      canvas,
+      context,
+      browser,
+      displayMode: ex.DisplayMode.FitScreenAndFill,
+      viewport: { width: 800, height: 600 }
+    });
+
+    Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1300 });
+    Object.defineProperty(window, 'innerHeight', { writable: true, configurable: true, value: 1300 });
+
+    window.dispatchEvent(new Event('resize'));
+
+    expect(sut.resolution.width).toBe(800);
+    expect(sut.resolution.height).toBe(800);
+    expect(sut.contentArea.width).toBe(800);
+    expect(sut.contentArea.height).toBe(600);
+    expect(sut.viewport.width).toBe(1300);
+    expect(sut.viewport.height).toBe(1300);
+  });
+
+  it('can use the FitScreenAndFill display mode, screen aspectRatio < window aspect ratio', () => {
+    const sut = new ex.Screen({
+      canvas,
+      context,
+      browser,
+      displayMode: ex.DisplayMode.FitScreenAndFill,
+      viewport: { width: 800, height: 600 }
+    });
+
+    Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1300 });
+    Object.defineProperty(window, 'innerHeight', { writable: true, configurable: true, value: 800 });
+
+    window.dispatchEvent(new Event('resize'));
+
+    expect(sut.resolution.width).toBe(975);
+    expect(sut.resolution.height).toBe(600);
+    expect(sut.contentArea.width).toBe(800);
+    expect(sut.contentArea.height).toBe(600);
+    expect(sut.viewport.width).toBe(1300);
+    expect(sut.viewport.height).toBe(800);
+  });
+
+  it('can use the FitContainerAndFill display mode, screen aspectRatio > container aspect ratio', () => {
+    const parentEl = document.createElement('div');
+    document.body.removeChild(canvas);
+    parentEl.appendChild(canvas);
+    document.body.appendChild(parentEl);
+
+    const sut = new ex.Screen({
+      canvas,
+      context,
+      browser,
+      displayMode: ex.DisplayMode.FitContainerAndFill,
+      viewport: { width: 800, height: 600 }
+    });
+
+    parentEl.style.width = '1300px';
+    parentEl.style.height = '1300px';
+    parentEl.dispatchEvent(new Event('resize'));
+
+    expect(sut.parent).toBe(parentEl);
+    expect(sut.resolution.width).toBe(800);
+    expect(sut.resolution.height).toBe(800);
+    expect(sut.contentArea.width).toBe(800);
+    expect(sut.contentArea.height).toBe(600);
+    expect(sut.viewport.width).toBe(1300);
+    expect(sut.viewport.height).toBe(1300);
+
+  });
+
+  it('can use the FitContainerAndFill display mode, screen aspectRatio < container aspect ratio', () => {
+    const parentEl = document.createElement('div');
+    document.body.removeChild(canvas);
+    parentEl.appendChild(canvas);
+    document.body.appendChild(parentEl);
+
+    const sut = new ex.Screen({
+      canvas,
+      context,
+      browser,
+      displayMode: ex.DisplayMode.FitContainerAndFill,
+      viewport: { width: 800, height: 600 }
+    });
+
+    parentEl.style.width = '1300px';
+    parentEl.style.height = '800px';
+    parentEl.dispatchEvent(new Event('resize'));
+
+    expect(sut.parent).toBe(parentEl);
+    expect(sut.resolution.width).toBe(975);
+    expect(sut.resolution.height).toBe(600);
+    expect(sut.contentArea.width).toBe(800);
+    expect(sut.contentArea.height).toBe(600);
+    expect(sut.viewport.width).toBe(1300);
+    expect(sut.viewport.height).toBe(800);
+
+  });
+
+  it('can use the FitScreenAndZoom display mode, screen aspect ratio < window aspect ratio', () => {
+    const sut = new ex.Screen({
+      canvas,
+      context,
+      browser,
+      displayMode: ex.DisplayMode.FitScreenAndZoom,
+      viewport: { width: 800, height: 600 }
+    });
+
+    Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1300 });
+    Object.defineProperty(window, 'innerHeight', { writable: true, configurable: true, value: 800 });
+
+    window.dispatchEvent(new Event('resize'));
+
+    expect(sut.resolution.width).toBe(800);
+    expect(sut.resolution.height).toBe(600);
+    expect(sut.contentArea.width).toBe(800);
+    expect(sut.contentArea.height).toBeCloseTo(492.3, 1);
+    expect(sut.viewport.width).toBe(1300);
+    expect(sut.viewport.height).toBeCloseTo(975);
+  });
+
+  it('can use the FitScreenAndZoom display mode, screen aspect ratio > window aspect ratio', () => {
+    const sut = new ex.Screen({
+      canvas,
+      context,
+      browser,
+      displayMode: ex.DisplayMode.FitScreenAndZoom,
+      viewport: { width: 800, height: 600 }
+    });
+
+    Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1300 });
+    Object.defineProperty(window, 'innerHeight', { writable: true, configurable: true, value: 1300 });
+
+    window.dispatchEvent(new Event('resize'));
+
+    expect(sut.resolution.width).toBe(800);
+    expect(sut.resolution.height).toBe(600);
+    expect(sut.contentArea.width).toBe(600);
+    expect(sut.contentArea.height).toBe(600);
+    expect(sut.viewport.width).toBeCloseTo(1733.3, 1);
+    expect(sut.viewport.height).toBe(1300);
+  });
+
+  it('can use the FitContainerAndZoom display mode, screen aspect ratio < container aspect ratio', () => {
+
+    const parentEl = document.createElement('div');
+    document.body.removeChild(canvas);
+    parentEl.appendChild(canvas);
+    document.body.appendChild(parentEl);
+
+    const sut = new ex.Screen({
+      canvas,
+      context,
+      browser,
+      displayMode: ex.DisplayMode.FitContainerAndZoom,
+      viewport: { width: 800, height: 600 }
+    });
+
+    parentEl.style.width = '1300px';
+    parentEl.style.height = '800px';
+    parentEl.dispatchEvent(new Event('resize'));
+
+    expect(sut.resolution.width).toBe(800);
+    expect(sut.resolution.height).toBe(600);
+    expect(sut.contentArea.width).toBe(800);
+    expect(sut.contentArea.height).toBeCloseTo(492.3, 1);
+    expect(sut.viewport.width).toBe(1300);
+    expect(sut.viewport.height).toBeCloseTo(975);
+  });
+
+  it('can use the FitContainerAndZoom display mode, screen aspect ratio > container aspect ratio', () => {
+
+    const parentEl = document.createElement('div');
+    document.body.removeChild(canvas);
+    parentEl.appendChild(canvas);
+    document.body.appendChild(parentEl);
+
+    const sut = new ex.Screen({
+      canvas,
+      context,
+      browser,
+      displayMode: ex.DisplayMode.FitContainerAndZoom,
+      viewport: { width: 800, height: 600 }
+    });
+
+    parentEl.style.width = '1300px';
+    parentEl.style.height = '1300px';
+    parentEl.dispatchEvent(new Event('resize'));
+
+    expect(sut.resolution.width).toBe(800);
+    expect(sut.resolution.height).toBe(600);
+    expect(sut.contentArea.width).toBe(600);
+    expect(sut.contentArea.height).toBe(600);
+    expect(sut.viewport.width).toBeCloseTo(1733.3, 1);
+    expect(sut.viewport.height).toBe(1300);
   });
 
   describe('can use fit container display mode, the viewport', () => {
@@ -214,6 +416,45 @@ describe('A Screen', () => {
     expect(page).toBeVector(ex.vec(1183.33, 800));
     const screen = sut.pageToScreenCoordinates(page);
     expect(screen).toBeVector(ex.vec(800, 600));
+  });
+
+  it('will go fullscreen with the canvas element by default', () => {
+    const mockCanvas = jasmine.createSpyObj('canvas', ['addEventListener', 'removeEventListener', 'requestFullscreen']);
+    mockCanvas.style = {};
+    const sut = new ex.Screen({
+      canvas: mockCanvas,
+      context,
+      browser,
+      displayMode: ex.DisplayMode.Fixed,
+      viewport: { width: 800, height: 600 }
+    });
+
+    sut.goFullScreen();
+
+    expect(mockCanvas.requestFullscreen).toHaveBeenCalled();
+  });
+
+  it('will go fullscreen given an element id', () => {
+    const container = document.createElement('div');
+    container.id = 'some-id';
+    container.appendChild(canvas);
+    document.body.appendChild(container);
+
+    const sut = new ex.Screen({
+      canvas,
+      context,
+      browser,
+      displayMode: ex.DisplayMode.Fixed,
+      viewport: { width: 800, height: 600 }
+    });
+
+    const fakeElement = jasmine.createSpyObj('element', ['requestFullscreen']);
+    spyOn(document, 'getElementById').and.returnValue(fakeElement);
+
+    sut.goFullScreen('some-id');
+
+    expect(document.getElementById).toHaveBeenCalledWith('some-id');
+    expect(fakeElement.requestFullscreen).toHaveBeenCalled();
   });
 
   it('can round trip convert coordinates', () => {
@@ -459,6 +700,7 @@ describe('A Screen', () => {
     sut.setCurrentCamera(camera);
 
     sut.applyResolutionAndViewport();
+    camera._initialize({screen: sut, clock: { elapsed: () => 16}} as ex.Engine);
 
     // The camera is always center screen
     // The absense of a camera is treated like a camera at (0, 0) in world space
@@ -485,6 +727,7 @@ describe('A Screen', () => {
     sut.setCurrentCamera(camera);
 
     sut.applyResolutionAndViewport();
+    camera._initialize({screen: sut, clock: { elapsed: () => 16}} as ex.Engine);
 
     // The camera is always center screen
     // The absense of a camera is treated like a camera at (0, 0) in world space
@@ -510,6 +753,7 @@ describe('A Screen', () => {
 
     sut.setCurrentCamera(camera);
     sut.applyResolutionAndViewport();
+    camera._initialize({screen: sut, clock: { elapsed: () => 16}} as ex.Engine);
 
     const bounds = sut.getWorldBounds();
 
@@ -517,6 +761,32 @@ describe('A Screen', () => {
     expect(bounds.right).toBe(600);
     expect(bounds.bottom).toBe(450);
     expect(bounds.top).toBe(150);
+  });
+
+  it('can return world bounds with camera rotation', () => {
+    const sut = new ex.Screen({
+      canvas,
+      context,
+      browser,
+      viewport: { width: 800, height: 600 },
+      pixelRatio: 2
+    });
+    const camera = new Camera();
+    camera.x = 400;
+    camera.y = 300;
+    camera.rotation = Math.PI / 2;
+    camera.zoom = 2;
+
+    sut.setCurrentCamera(camera);
+    sut.applyResolutionAndViewport();
+    camera._initialize({screen: sut, clock: { elapsed: () => 16}} as ex.Engine);
+
+    const bounds = sut.getWorldBounds();
+
+    expect(bounds.left).toBe(250);
+    expect(bounds.right).toBe(550);
+    expect(bounds.bottom).toBe(500);
+    expect(bounds.top).toBe(100);
   });
 
   it('can calculate screen center without a camera and no relevant pixel ratio', () => {
@@ -607,8 +877,8 @@ describe('A Screen', () => {
     sut.applyResolutionAndViewport();
     expect(context.checkIfResolutionSupported).toHaveBeenCalled();
     expect(logger.warn).toHaveBeenCalledOnceWith(
-      `The currently configured resolution (${sut.resolution.width}x${sut.resolution.height})` +
-          ' is too large for the platform WebGL implementation, this may work but cause WebGL rendering to behave oddly.' +
+      `The currently configured resolution (${sut.resolution.width}x${sut.resolution.height}) and pixel ratio (${sut.pixelRatio})` +
+          ' are too large for the platform WebGL implementation, this may work but cause WebGL rendering to behave oddly.' +
           ' Try reducing the resolution or disabling Hi DPI scaling to avoid this' +
           ' (read more here https://excaliburjs.com/docs/screens#understanding-viewport--resolution).'
     );

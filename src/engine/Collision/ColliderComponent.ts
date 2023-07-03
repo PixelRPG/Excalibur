@@ -36,7 +36,6 @@ export class ColliderComponent extends Component<'ex.collider'> {
   private _collider: Collider;
   /**
    * Get the current collider geometry
-   * @returns
    */
   public get() {
     return this._collider;
@@ -71,6 +70,12 @@ export class ColliderComponent extends Component<'ex.collider'> {
     }
   }
 
+  public clone(): ColliderComponent {
+    const clone = new ColliderComponent(this._collider.clone());
+
+    return clone;
+  }
+
   /**
    * Return world space bounds
    */
@@ -93,7 +98,7 @@ export class ColliderComponent extends Component<'ex.collider'> {
     if (this._collider) {
       this._collider.owner = this.owner;
       if (tx) {
-        this._collider.update(tx);
+        this._collider.update(tx.get());
       }
     }
   }
@@ -101,7 +106,6 @@ export class ColliderComponent extends Component<'ex.collider'> {
   /**
    * Collide component with another
    * @param other
-   * @returns
    */
   collide(other: ColliderComponent): CollisionContact[] {
     let colliderA = this._collider;
@@ -194,7 +198,7 @@ export class ColliderComponent extends Component<'ex.collider'> {
    * By default, the box is center is at (0, 0) which means it is centered around the actors anchor.
    */
   usePolygonCollider(points: Vector[], center: Vector = Vector.Zero): PolygonCollider {
-    const poly = Shape.Polygon(points, false, center);
+    const poly = Shape.Polygon(points, center);
     return (this.set(poly));
   }
 
@@ -222,7 +226,6 @@ export class ColliderComponent extends Component<'ex.collider'> {
   /**
    * Setups up a [[CompositeCollider]] which can define any arbitrary set of excalibur colliders
    * @param colliders
-   * @returns
    */
   useCompositeCollider(colliders: Collider[]): CompositeCollider {
     return (this.set(new CompositeCollider(colliders)));

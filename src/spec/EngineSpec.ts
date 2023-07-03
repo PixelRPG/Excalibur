@@ -1,13 +1,22 @@
 import * as ex from '@excalibur';
 import { TestUtils } from './util/TestUtils';
-import { Mocks } from './util/Mocks';
-import { ensureImagesLoaded, ExcaliburMatchers } from 'excalibur-jasmine';
+import { ExcaliburAsyncMatchers, ExcaliburMatchers } from 'excalibur-jasmine';
+
+/**
+ *
+ */
+function flushWebGLCanvasTo2D(source: HTMLCanvasElement): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = source.width;
+  canvas.height = source.height;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(source, 0, 0);
+  return canvas;
+}
 
 describe('The engine', () => {
   let engine: ex.Engine;
   let scene: ex.Scene;
-  const mock = new Mocks.Mocker();
-  let loop: Mocks.GameLoopLike;
 
   const reset = () => {
     engine.stop();
@@ -22,39 +31,175 @@ describe('The engine', () => {
 
   beforeEach(() => {
     jasmine.addMatchers(ExcaliburMatchers);
+    jasmine.addAsyncMatchers(ExcaliburAsyncMatchers);
 
     engine = TestUtils.engine();
     scene = new ex.Scene();
     engine.add('default', scene);
     engine.goToScene('default');
-
-    loop = mock.loop(engine);
-
     engine.start();
+    const clock = engine.clock as ex.TestClock;
+    clock.step(1);
   });
 
   afterEach(() => {
     reset();
   });
 
+  it('should not throw if no loader provided', () => {
+    const exceptionSpy = jasmine.createSpy('exception');
+    const boot = () => {
+      const engine = TestUtils.engine();
+      const clock = engine.clock as ex.TestClock;
+      clock.setFatalExceptionHandler(exceptionSpy);
+      clock.start();
+      clock.step(100);
+    };
+
+    boot();
+
+    expect(exceptionSpy).not.toHaveBeenCalled();
+  });
   it('should show the play button by default', (done) => {
     reset();
     engine = TestUtils.engine({
       suppressPlayButton: false
     });
     (<any>engine)._suppressPlayButton = false;
-    engine.addScene('root', scene);
+    const imageSource = new ex.ImageSource('src/spec/images/SpriteSpec/icon.png');
 
-    loop = mock.loop(engine);
+    const loader = new ex.Loader([imageSource]);
+    engine.start(loader);
+    const testClock = engine.clock as ex.TestClock;
 
-    engine.start(new ex.Loader([new ex.LegacyDrawing.Texture('src/spec/images/SpriteSpec/icon.png', true)]));
-    setTimeout(() => {
-      ensureImagesLoaded(engine.canvas, 'src/spec/images/EngineSpec/engine-load-complete.png').then(([canvas, image]) => {
-        expect(document.getElementById('excalibur-play')).toBeDefined('Play button should exist in the document');
-        expect(canvas).toEqualImage(image);
-        done();
+    loader.areResourcesLoaded().then(() => {
+      testClock.run(2, 100); // 200 ms delay in loader
+      expect(document.getElementById('excalibur-play')).withContext('Play button should exist in the document').toBeDefined();
+      setTimeout(() => { // needed for the delay to work
+        testClock.run(1, 100);
+        engine.graphicsContext.flush();
+        expectAsync(TestUtils.flushWebGLCanvasTo2D(engine.canvas))
+          .toEqualImage('src/spec/images/EngineSpec/engine-load-complete.png').then(() => {
+            done();
+          });
       });
-    }, 600);
+    });
+  });
+
+  it('should log if loading fails', async () => {
+    class FailedLoader implements ex.Loadable<void> {
+      data = undefined;
+      load(): Promise<void> {
+        throw new Error('I failed');
+      }
+      isLoaded(): boolean {
+        return false;
+      }
+    }
+    const logger = ex.Logger.getInstance();
+    spyOn(logger, 'error');
+
+    engine = TestUtils.engine();
+
+
+    await engine.load(new FailedLoader());
+
+    expect(logger.error).toHaveBeenCalledWith('Error loading resources, things may not behave properly', new Error('I failed'));
+  });
+
+  it('can switch to the canvas fallback on command', () => {
+    engine = TestUtils.engine({
+      suppressPlayButton: false
+    });
+
+    const originalScreen = engine.screen;
+    const originalPointers = engine.input.pointers;
+    spyOn(engine.screen, 'dispose').and.callThrough();
+    spyOn(engine.input.pointers, 'detach').and.callThrough();
+    spyOn(engine.input.pointers, 'recreate').and.callThrough();
+
+    engine.useCanvas2DFallback();
+
+    expect(engine.graphicsContext).toBeInstanceOf(ex.ExcaliburGraphicsContext2DCanvas);
+    expect(originalScreen.dispose).toHaveBeenCalled();
+    expect(originalPointers.detach).toHaveBeenCalled();
+    expect(originalPointers.recreate).toHaveBeenCalled();
+  });
+
+  it('can switch to the canvas fallback on poor performance', async () => {
+    engine = TestUtils.engine({
+      suppressPlayButton: false
+    });
+    await TestUtils.runToReady(engine);
+    spyOn(engine, 'useCanvas2DFallback');
+
+    const clock = engine.clock as ex.TestClock;
+    clock.fpsSampler = new ex.FpsSampler({
+      initialFps: 10,
+      nowFn: () => 1
+    });
+
+    clock.run(100, 1);
+
+    expect(engine.useCanvas2DFallback).toHaveBeenCalled();
+  });
+
+  it('can use a fixed update fps and can catch up', async () => {
+    engine = TestUtils.engine({
+      fixedUpdateFps: 30
+    });
+
+    const clock = engine.clock as ex.TestClock;
+
+    await TestUtils.runToReady(engine);
+
+    spyOn(engine as any, '_update');
+    spyOn(engine as any, '_draw');
+
+    clock.step(101);
+
+    expect((engine as any)._update).toHaveBeenCalledTimes(3);
+    expect((engine as any)._draw).toHaveBeenCalledTimes(1);
+  });
+
+  it('can use a fixed update fps and will skip updates', async () => {
+    engine = TestUtils.engine({
+      fixedUpdateFps: 30
+    });
+
+    const clock = engine.clock as ex.TestClock;
+
+    await TestUtils.runToReady(engine);
+
+    spyOn(engine as any, '_update');
+    spyOn(engine as any, '_draw');
+
+    clock.step(16);
+    clock.step(16);
+    clock.step(16);
+
+    expect((engine as any)._update).toHaveBeenCalledTimes(1);
+    expect((engine as any)._draw).toHaveBeenCalledTimes(3);
+  });
+
+  it('can flag on to the canvas fallback', async () => {
+    engine = TestUtils.engine({
+      suppressPlayButton: false
+    }, ['use-canvas-context']);
+    await TestUtils.runToReady(engine);
+
+    expect(engine.graphicsContext).toBeInstanceOf(ex.ExcaliburGraphicsContext2DCanvas);
+  });
+
+  it('should update the frame stats every tick', () => {
+    engine = TestUtils.engine();
+    const testClock = engine.clock as ex.TestClock;
+    testClock.start();
+    expect(engine.stats.currFrame.id).toBe(0);
+    testClock.step(1);
+    expect(engine.stats.currFrame.id).toBe(1);
+    testClock.step(1);
+    expect(engine.stats.currFrame.id).toBe(2);
   });
 
   it('should have a default resolution to SVGA (800x600) if none specified', () => {
@@ -62,6 +207,20 @@ describe('The engine', () => {
     expect(engine.screen.displayMode).toBe(ex.DisplayMode.FitScreen);
     expect(engine.screen.resolution.width).toBe(800);
     expect(engine.screen.resolution.height).toBe(600);
+  });
+
+  it('should hint the texture loader image filter to Blended when aa=true', () => {
+    engine = TestUtils.engine({
+      antialiasing: true
+    });
+    expect(ex.TextureLoader.filtering).toBe(ex.ImageFiltering.Blended);
+  });
+
+  it('should hint the texture loader image filter to Pixel when aa=false', () => {
+    engine = TestUtils.engine({
+      antialiasing: false
+    });
+    expect(ex.TextureLoader.filtering).toBe(ex.ImageFiltering.Pixel);
   });
 
   it('should not show the play button when suppressPlayButton is turned on', (done) => {
@@ -78,87 +237,200 @@ describe('The engine', () => {
       })
     );
 
-    loop = mock.loop(engine);
+    const testClock = engine.clock as ex.TestClock;
+    const loader = new ex.Loader([new ex.ImageSource('src/spec/images/SpriteSpec/icon.png')]);
 
-    engine.start(new ex.Loader([new ex.LegacyDrawing.Texture('src/spec/images/SpriteSpec/icon.png', true)])).then(() => {
-      setTimeout(() => {
-        ensureImagesLoaded(engine.canvas, 'src/spec/images/EngineSpec/engine-suppress-play.png').then(([canvas, image]) => {
-          expect(canvas).toEqualImage(image);
+    TestUtils.runToReady(engine, loader).then(() => {
+      // With suppress play there is another 500 ms delay in engine load()
+      testClock.step(1);
+      engine.graphicsContext.flush();
+      expectAsync(TestUtils.flushWebGLCanvasTo2D(engine.canvas))
+        .toEqualImage('src/spec/images/EngineSpec/engine-suppress-play.png').then(() => {
           done();
         });
-      }, 600);
     });
   });
 
+  it('can set snapToPixel', () => {
+    engine = TestUtils.engine({width: 100, height: 100});
+    expect(engine.snapToPixel).toBeFalse();
+
+    engine.snapToPixel = true;
+
+    expect(engine.snapToPixel).toBeTrue();
+    expect(engine.graphicsContext.snapToPixel).toBeTrue();
+  });
+
+  it('can set pixelRatio', () => {
+    engine = TestUtils.engine({width: 100, height: 100, pixelRatio: 5, suppressHiDPIScaling: false});
+    expect(engine.pixelRatio).toBe(5);
+    expect(engine.screen.pixelRatio).toBe(5);
+    expect(engine.screen.scaledWidth).toBe(500);
+    expect(engine.screen.scaledHeight).toBe(500);
+  });
+
+  it('can use draw sorting', () => {
+    engine = TestUtils.engine({width: 100, height: 100, useDrawSorting: false}, []);
+    expect(engine.graphicsContext.useDrawSorting).toBe(false);
+
+    engine = TestUtils.engine({width: 100, height: 100, useDrawSorting: true}, []);
+    expect(engine.graphicsContext.useDrawSorting).toBe(true);
+  });
+
   it('should emit a preframe event', () => {
-    let fired = false;
-    engine.on('preframe', () => (fired = true));
-
-    loop.advance(100);
-
-    expect(fired).toBe(true);
+    const fired = jasmine.createSpy('fired');
+    engine.on('preframe', fired);
+    expect(fired).not.toHaveBeenCalled();
+    const clock = engine.clock as ex.TestClock;
+    clock.step(1);
+    clock.step(1);
+    expect(fired).toHaveBeenCalledTimes(2);
   });
 
   it('should emit a postframe event', () => {
-    let fired = false;
-    engine.on('postframe', () => (fired = true));
+    const fired = jasmine.createSpy('fired');
+    engine.on('postframe', fired);
 
-    loop.advance(100);
-
-    expect(fired).toBe(true);
+    expect(fired).not.toHaveBeenCalled();
+    const clock = engine.clock as ex.TestClock;
+    clock.step(1);
+    clock.step(1);
+    expect(fired).toHaveBeenCalledTimes(2);
   });
 
   it('should emit a preupdate event', () => {
-    let fired = false;
-    engine.on('preupdate', () => (fired = true));
-
-    loop.advance(100);
-
-    expect(fired).toBe(true);
+    const fired = jasmine.createSpy('fired');
+    engine.on('preupdate', fired);
+    expect(fired).not.toHaveBeenCalled();
+    const clock = engine.clock as ex.TestClock;
+    clock.step(1);
+    clock.step(1);
+    expect(fired).toHaveBeenCalledTimes(2);
   });
 
   it('should emit a postupdate event', () => {
-    let fired = false;
-    engine.on('postupdate', () => (fired = true));
+    const fired = jasmine.createSpy('fired');
+    engine.on('postupdate', fired);
 
-    loop.advance(100);
+    expect(fired).not.toHaveBeenCalled();
+    const clock = engine.clock as ex.TestClock;
+    clock.step(1);
+    clock.step(1);
+    expect(fired).toHaveBeenCalledTimes(2);
+  });
 
-    expect(fired).toBe(true);
+  it('will update keyboard & gamepad events after postupdate', () => {
+    const postupdate = jasmine.createSpy('postupdate');
+    spyOn(engine.input.keyboard, 'update').and.callThrough();
+    spyOn(engine.input.gamepads, 'update').and.callThrough();
+    engine.on('postupdate', postupdate);
+
+    const clock = engine.clock as ex.TestClock;
+
+    clock.step(1);
+
+    expect(postupdate).toHaveBeenCalledBefore(engine.input.keyboard.update);
+    expect(postupdate).toHaveBeenCalledBefore(engine.input.gamepads.update);
+  });
+
+  it('will fire wasPressed in onPostUpdate handler', (done) => {
+    engine.input.keyboard.triggerEvent('down', ex.Input.Keys.Enter);
+    engine.on('postupdate', () => {
+      if (engine.input.keyboard.wasPressed(ex.Input.Keys.Enter)) {
+        done();
+      }
+    });
+
+    const clock = engine.clock as ex.TestClock;
+    clock.step(1);
+  });
+
+  it('will fire wasReleased in onPostUpdate handler', (done) => {
+    engine.input.keyboard.triggerEvent('up', ex.Input.Keys.Enter);
+    engine.on('postupdate', () => {
+      if (engine.input.keyboard.wasReleased(ex.Input.Keys.Enter)) {
+        done();
+      }
+    });
+
+    const clock = engine.clock as ex.TestClock;
+    clock.step(1);
+  });
+
+  it('will fire isHeld in onPostUpdate handler', () => {
+    engine.input.keyboard.triggerEvent('down', ex.Input.Keys.Enter);
+    const held = jasmine.createSpy('held');
+    engine.on('postupdate', () => {
+      if (engine.input.keyboard.isHeld(ex.Input.Keys.Enter)) {
+        held();
+      }
+    });
+
+    const clock = engine.clock as ex.TestClock;
+    clock.step(1);
+    clock.step(1);
+    clock.step(1);
+
+    expect(held).toHaveBeenCalledTimes(3);
   });
 
   it('should emit a predraw event', () => {
-    let fired = false;
-    engine.on('predraw', () => (fired = true));
+    const fired = jasmine.createSpy('fired');
+    engine.on('predraw', fired);
 
-    loop.advance(100);
-
-    expect(fired).toBe(true);
+    expect(fired).not.toHaveBeenCalled();
+    const clock = engine.clock as ex.TestClock;
+    clock.step(1);
+    clock.step(1);
+    expect(fired).toHaveBeenCalledTimes(2);
   });
 
   it('should emit a postdraw event', () => {
-    let fired = false;
-    engine.on('postdraw', () => (fired = true));
+    const fired = jasmine.createSpy('fired');
+    engine.on('postdraw', fired);
 
-    loop.advance(100);
+    expect(fired).not.toHaveBeenCalled();
+    const clock = engine.clock as ex.TestClock;
+    clock.step(1);
+    clock.step(1);
+    expect(fired).toHaveBeenCalledTimes(2);
+  });
 
-    expect(fired).toBe(true);
+  it('should emit a visible event', () => {
+    const fired = jasmine.createSpy('fired');
+    engine.on('visible', fired);
+
+    spyOnProperty(window.document, 'visibilityState').and.returnValue('visible');
+    window.document.dispatchEvent(new CustomEvent('visibilitychange'));
+
+    expect(fired).toHaveBeenCalled();
+  });
+
+  it('should emit a hidden event', () => {
+    const fired = jasmine.createSpy('fired');
+    engine.on('hidden', fired);
+
+    spyOnProperty(window.document, 'visibilityState').and.returnValue('hidden');
+    window.document.dispatchEvent(new CustomEvent('visibilitychange'));
+
+    expect(fired).toHaveBeenCalled();
   });
 
   it('should tell engine is running', () => {
-    const status = engine.isPaused();
-    expect(status).toBe(false);
+    const status = engine.isRunning();
+    expect(status).toBe(true);
   });
 
   it('should tell engine is paused', () => {
     engine.stop();
-    const status = engine.isPaused();
-    expect(status).toBe(true);
+    const status = engine.isRunning();
+    expect(status).toBe(false);
   });
 
   it('should again tell engine is running', () => {
     engine.start();
-    const status = engine.isPaused();
-    expect(status).toBe(false);
+    const status = engine.isRunning();
+    expect(status).toBe(true);
   });
 
   it('should tell debug drawing is disabled', () => {
@@ -192,6 +464,8 @@ describe('The engine', () => {
 
   it('should return correct screen dimensions if zoomed in', () => {
     engine.start();
+    const clock = engine.clock as ex.TestClock;
+    clock.step(1);
     engine.currentScene.camera.zoom = 2;
 
     expect(engine.drawHeight).toBe(250);
@@ -208,35 +482,6 @@ describe('The engine', () => {
   it('should return if fullscreen', () => {
     engine.start();
     expect(engine.isFullscreen).toBe(false);
-  });
-
-  it('should accept a displayMode of Position', () => {
-    engine = TestUtils.engine({
-      displayMode: ex.DisplayMode.Position,
-      position: 'top'
-    });
-    expect(engine.displayMode).toEqual(ex.DisplayMode.Position);
-  });
-
-  it('should accept strings to position the window', () => {
-    engine = TestUtils.engine({
-      displayMode: ex.DisplayMode.Position,
-      position: 'top'
-    });
-    expect(engine.canvas.style.top).toEqual('0px');
-  });
-
-  it('should accept AbsolutePosition Interfaces to position the window', () => {
-    const game = new ex.Engine({
-      height: 600,
-      width: 800,
-      suppressConsoleBootMessage: true,
-      suppressMinimumBrowserFeatureDetection: true,
-      displayMode: ex.DisplayMode.Position,
-      position: { top: 1, left: '5em' }
-    });
-
-    expect(game.canvas.style.top).toEqual('1px');
   });
 
   it('should accept backgroundColor', () => {
@@ -391,6 +636,121 @@ describe('The engine', () => {
     expect(ex.Logger.getInstance().error).toHaveBeenCalledWith('Scene', 'madeUp', 'does not exist!');
   });
 
+  it('will add actors to the correct scene when initialized after a deferred goTo', () => {
+    const engine = TestUtils.engine();
+    const scene1 = new ex.Scene();
+    const scene2 = new ex.Scene();
+    engine.add('scene1', scene1);
+    engine.add('scene2', scene2);
+
+    scene1.onInitialize = () => {
+      engine.goToScene('scene2');
+    };
+    scene2.onInitialize = () => {
+      engine.add(new ex.Actor());
+    };
+
+    spyOn(scene1, 'onInitialize').and.callThrough();
+    spyOn(scene2, 'onInitialize').and.callThrough();
+
+
+    engine.goToScene('scene1');
+
+    TestUtils.runToReady(engine);
+
+    expect(engine.currentScene).toBe(scene2);
+    expect(scene1.actors.length).toBe(0);
+    expect(scene2.actors.length).toBe(1);
+  });
+
+  it('can screen shot the game (in WebGL)', (done) => {
+
+    const engine = TestUtils.engine({}, []);
+    const clock = engine.clock as ex.TestClock;
+
+    engine.add(new ex.Actor({
+      x: 50,
+      y: 50,
+      width: 100,
+      height: 100,
+      color: ex.Color.Red
+    }));
+    TestUtils.runToReady(engine);
+
+    clock.step(1);
+
+    engine.screenshot().then((image) => {
+      return expectAsync(image).toEqualImage(flushWebGLCanvasTo2D(engine.canvas)).then(() => {
+        done();
+      });
+    });
+
+    clock.step(1);
+  });
+
+  it('can screen shot the game HiDPI (in WebGL)', async () => {
+
+    const engine = TestUtils.engine({}, []);
+    const clock = engine.clock as ex.TestClock;
+    (engine.screen as any)._pixelRatioOverride = 2;
+    engine.screen.applyResolutionAndViewport();
+
+    engine.add(new ex.Actor({
+      x: 50,
+      y: 50,
+      width: 100,
+      height: 100,
+      color: ex.Color.Red
+    }));
+    TestUtils.runToReady(engine);
+
+    clock.step(1);
+    const screenShotPromise = engine.screenshot();
+    clock.step(1);
+    const hidpiImagePromise = engine.screenshot(true);
+    clock.step(1);
+
+    const image = await screenShotPromise;
+    const hidpiImage = await hidpiImagePromise;
+
+    expect(image.width).toBe(500);
+    expect(image.height).toBe(500);
+
+    expect(hidpiImage.width).toBe(1000);
+    expect(hidpiImage.height).toBe(1000);
+    await expectAsync(hidpiImage).toEqualImage(flushWebGLCanvasTo2D(engine.canvas));
+  });
+
+  it('can screen shot and match the anti-aliasing with a half pixel when pixelRatio != 1.0', async () => {
+    const engine = TestUtils.engine({
+      width: 200,
+      height: 200,
+      pixelRatio: 1.2,
+      suppressHiDPIScaling: false,
+      antialiasing: false,
+      snapToPixel: false
+    }, []);
+    const clock = engine.clock as ex.TestClock;
+    const img = new ex.ImageSource('src/spec/images/EngineSpec/sprite.png');
+    await img.load();
+    const actor = new ex.Actor({
+      x: 40.5,
+      y: 40.0,
+      scale: ex.vec(2, 2)
+    });
+    actor.graphics.use(img.toSprite());
+    engine.add(actor);
+    TestUtils.runToReady(engine);
+
+    clock.step(1);
+    const screenShotPromise = engine.screenshot();
+    clock.step(1);
+
+    const image = await screenShotPromise;
+
+    await expectAsync(image).toEqualImage('src/spec/images/EngineSpec/screenshot.png', 1.0);
+  });
+
   describe('lifecycle overrides', () => {
     let engine: ex.Engine;
     beforeEach(() => {
@@ -402,8 +762,9 @@ describe('The engine', () => {
       engine = null;
     });
 
-    it('can have onInitialize overridden safely', () => {
+    it('can have onInitialize overridden safely', async () => {
       let initCalled = false;
+
       engine.onInitialize = (engine) => {
         expect(engine).not.toBe(null);
       };
@@ -414,13 +775,19 @@ describe('The engine', () => {
 
       spyOn(engine, 'onInitialize').and.callThrough();
 
-      (<any>engine)._update(100);
+      await TestUtils.runToReady(engine);
+      const clock = engine.clock as ex.TestClock;
+      clock.step(1);
 
       expect(initCalled).toBe(true);
       expect(engine.onInitialize).toHaveBeenCalledTimes(1);
     });
 
     it('can have onPostUpdate overridden safely', () => {
+      engine.start();
+      const clock = engine.clock as ex.TestClock;
+      expect(engine.clock.isRunning()).toBe(true);
+
       engine.onPostUpdate = (engine, delta) => {
         expect(engine).not.toBe(null);
         expect(delta).toBe(100);
@@ -429,14 +796,18 @@ describe('The engine', () => {
       spyOn(engine, 'onPostUpdate').and.callThrough();
       spyOn(engine, '_postupdate').and.callThrough();
 
-      (<any>engine)._update(100);
-      (<any>engine)._update(100);
+      clock.step(100);
+      clock.step(100);
 
       expect(engine._postupdate).toHaveBeenCalledTimes(2);
       expect(engine.onPostUpdate).toHaveBeenCalledTimes(2);
     });
 
     it('can have onPreUpdate overridden safely', () => {
+      engine.start();
+      const clock = engine.clock as ex.TestClock;
+      expect(engine.clock.isRunning()).toBe(true);
+
       engine.onPreUpdate = (engine, delta) => {
         expect(engine).not.toBe(null);
         expect(delta).toBe(100);
@@ -445,14 +816,18 @@ describe('The engine', () => {
       spyOn(engine, 'onPreUpdate').and.callThrough();
       spyOn(engine, '_preupdate').and.callThrough();
 
-      (<any>engine)._update(100);
-      (<any>engine)._update(100);
+      clock.step(100);
+      clock.step(100);
 
       expect(engine._preupdate).toHaveBeenCalledTimes(2);
       expect(engine.onPreUpdate).toHaveBeenCalledTimes(2);
     });
 
     it('can have onPreDraw overridden safely', () => {
+      engine.start();
+      const clock = engine.clock as ex.TestClock;
+      expect(engine.clock.isRunning()).toBe(true);
+
       engine.currentScene._initialize(engine);
       engine.onPreDraw = (ctx, delta) => {
         expect(<any>ctx).not.toBe(null);
@@ -461,14 +836,18 @@ describe('The engine', () => {
       spyOn(engine, 'onPreDraw').and.callThrough();
       spyOn(engine, '_predraw').and.callThrough();
 
-      (<any>engine)._draw(100);
-      (<any>engine)._draw(100);
+      clock.step(100);
+      clock.step(100);
 
       expect(engine._predraw).toHaveBeenCalledTimes(2);
       expect(engine.onPreDraw).toHaveBeenCalledTimes(2);
     });
 
     it('can have onPostDraw overridden safely', () => {
+      engine.start();
+      const clock = engine.clock as ex.TestClock;
+      expect(engine.clock.isRunning()).toBe(true);
+
       engine.currentScene._initialize(engine);
       engine.onPostDraw = (ctx, delta) => {
         expect(<any>ctx).not.toBe(null);
@@ -478,8 +857,8 @@ describe('The engine', () => {
       spyOn(engine, 'onPostDraw').and.callThrough();
       spyOn(engine, '_postdraw').and.callThrough();
 
-      (<any>engine)._draw(100);
-      (<any>engine)._draw(100);
+      clock.step(100);
+      clock.step(100);
 
       expect(engine._postdraw).toHaveBeenCalledTimes(2);
       expect(engine.onPostDraw).toHaveBeenCalledTimes(2);

@@ -1,4 +1,4 @@
-import { Vector, vec } from './Math/vector';
+import { vec, Vector } from './Math/vector';
 import { Logger } from './Util/Log';
 import { Camera } from './Camera';
 import { BrowserEvents } from './Util/Browser';
@@ -6,6 +6,7 @@ import { BoundingBox } from './Collision/Index';
 import { ExcaliburGraphicsContext } from './Graphics/Context/ExcaliburGraphicsContext';
 import { getPosition } from './Util/Util';
 import { ExcaliburGraphicsContextWebGL } from './Graphics/Context/ExcaliburGraphicsContextWebGL';
+import { ExcaliburGraphicsContext2DCanvas } from './Graphics/Context/ExcaliburGraphicsContext2DCanvas';
 
 /**
  * Enum representing the different display modes available to Excalibur.
@@ -15,6 +16,38 @@ export enum DisplayMode {
    * Default, use a specified resolution for the game. Like 800x600 pixels for example.
    */
   Fixed = 'Fixed',
+
+  /**
+   * Fit the aspect ratio given by the game resolution within the container at all times will fill any gaps with canvas.
+   * The displayed area outside the aspect ratio is not guaranteed to be on the screen, only the [[Screen.contentArea]]
+   * is guaranteed to be on screen.
+   */
+  FitContainerAndFill = 'FitContainerAndFill',
+
+  /**
+   * Fit the aspect ratio given by the game resolution the screen at all times will fill the screen.
+   * This displayed area outside the aspect ratio is not guaranteed to be on the screen, only the [[Screen.contentArea]]
+   * is guaranteed to be on screen.
+   */
+  FitScreenAndFill = 'FitScreenAndFill',
+
+  /**
+   * Fit the viewport to the parent element maintaining aspect ratio given by the game resolution, but zooms in to avoid the black bars
+   * (letterbox) that would otherwise be present in [[FitContainer]].
+   *
+   * **warning** This will clip some drawable area from the user because of the zoom,
+   * use [[Screen.contentArea]] to know the safe to draw area.
+   */
+  FitContainerAndZoom = 'FitContainerAndZoom',
+
+  /**
+   * Fit the viewport to the device screen maintaining aspect ratio given by the game resolution, but zooms in to avoid the black bars
+   * (letterbox) that would otherwise be present in [[FitScreen]].
+   *
+   * **warning** This will clip some drawable area from the user because of the zoom,
+   * use [[Screen.contentArea]] to know the safe to draw area.
+   */
+  FitScreenAndZoom = 'FitScreenAndZoom',
 
   /**
    * Fit to screen using as much space as possible while maintaining aspect ratio and resolution.
@@ -40,7 +73,6 @@ export enum DisplayMode {
    *   width: 100%;
    * }
    * ```
-   *
    */
   FitScreen = 'FitScreen',
 
@@ -58,13 +90,7 @@ export enum DisplayMode {
   /**
    * Use the parent DOM container's css width/height for the game resolution dynamically
    */
-  FillContainer = 'FillContainer',
-
-  /**
-   * Allow the game to be positioned with the [[EngineOptions.position]] option
-   * @deprecated Use CSS to position the game canvas, will be removed in v0.26.0
-   */
-  Position = 'Position'
+  FillContainer = 'FillContainer'
 }
 
 /**
@@ -113,20 +139,6 @@ export class Resolution {
   }
 }
 
-/**
- * Interface describing the absolute CSS position of the game window. For use when [[DisplayMode.Position]]
- * is specified and when the user wants to define exact pixel spacing of the window.
- * When a number is given, the value is interpreted as pixels
- */
-export interface AbsolutePosition {
-  top?: number | string;
-  left?: number | string;
-  right?: number | string;
-  bottom?: number | string;
-}
-
-export type CanvasPosition = string | AbsolutePosition;
-
 export interface ScreenDimension {
   width: number;
   height: number;
@@ -137,6 +149,7 @@ export interface ScreenOptions {
    * Canvas element to build a screen on
    */
   canvas: HTMLCanvasElement;
+
   /**
    * Graphics context for the screen
    */
@@ -168,24 +181,16 @@ export interface ScreenOptions {
    * Set the display mode of the screen, by default DisplayMode.Fixed.
    */
   displayMode?: DisplayMode;
-  /**
-   * Specify how the game window is to be positioned when the [[DisplayMode.Position]] is chosen. This option MUST be specified
-   * if the DisplayMode is set as [[DisplayMode.Position]]. The position can be either a string or an [[AbsolutePosition]].
-   * String must be in the format of css style background-position. The vertical position must precede the horizontal position in strings.
-   *
-   * Valid String examples: "top left", "top", "bottom", "middle", "middle center", "bottom right"
-   * Valid [[AbsolutePosition]] examples: `{top: 5, right: 10%}`, `{bottom: 49em, left: 10px}`, `{left: 10, bottom: 40}`
-   */
-  position?: CanvasPosition;
 }
 
 /**
  * The Screen handles all aspects of interacting with the screen for Excalibur.
  */
 export class Screen {
+  public graphicsContext: ExcaliburGraphicsContext;
   private _canvas: HTMLCanvasElement;
-  private _ctx: ExcaliburGraphicsContext;
   private _antialiasing: boolean = true;
+  private _contentResolution: ScreenDimension;
   private _browser: BrowserEvents;
   private _camera: Camera;
   private _resolution: ScreenDimension;
@@ -193,7 +198,6 @@ export class Screen {
   private _viewport: ScreenDimension;
   private _viewportStack: ScreenDimension[] = [];
   private _pixelRatioOverride: number | null = null;
-  private _position: CanvasPosition;
   private _displayMode: DisplayMode;
   private _isFullScreen = false;
   private _mediaQueryList: MediaQueryList;
@@ -204,26 +208,35 @@ export class Screen {
   constructor(options: ScreenOptions) {
     this.viewport = options.viewport;
     this.resolution = options.resolution ?? { ...this.viewport };
+    this._contentResolution = this.resolution;
     this._displayMode = options.displayMode ?? DisplayMode.Fixed;
     this._canvas = options.canvas;
-    this._ctx = options.context;
+    this.graphicsContext = options.context;
     this._antialiasing = options.antialiasing ?? this._antialiasing;
     this._browser = options.browser;
-    this._position = options.position;
     this._pixelRatioOverride = options.pixelRatio;
+
     this._applyDisplayMode();
 
+    this._listenForPixelRatio();
+
+    this._canvas.addEventListener('fullscreenchange', this._fullscreenChangeHandler);
+    this.applyResolutionAndViewport();
+  }
+
+  private _listenForPixelRatio() {
+    if (this._mediaQueryList && !this._mediaQueryList.addEventListener) {
+      // Safari <=13.1 workaround, remove any existing handlers
+      this._mediaQueryList.removeListener(this._pixelRatioChangeHandler);
+    }
     this._mediaQueryList = this._browser.window.nativeComponent.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
 
     // Safari <=13.1 workaround
     if (this._mediaQueryList.addEventListener) {
-      this._mediaQueryList.addEventListener('change', this._pixelRatioChangeHandler);
+      this._mediaQueryList.addEventListener('change', this._pixelRatioChangeHandler, { once: true });
     } else {
       this._mediaQueryList.addListener(this._pixelRatioChangeHandler);
     }
-
-    this._canvas.addEventListener('fullscreenchange', this._fullscreenChangeHandler);
-    this.applyResolutionAndViewport();
   }
 
   public dispose(): void {
@@ -252,6 +265,7 @@ export class Screen {
 
   private _pixelRatioChangeHandler = () => {
     this._logger.debug('Pixel Ratio Change', window.devicePixelRatio);
+    this._listenForPixelRatio();
     this._devicePixelRatio = this._calculateDevicePixelRatio();
     this.applyResolutionAndViewport();
   };
@@ -297,11 +311,15 @@ export class Screen {
   }
 
   public get parent(): HTMLElement | Window {
-    return <HTMLElement | Window>(
-      (this.displayMode === DisplayMode.FillContainer || this.displayMode === DisplayMode.FitContainer
-        ? this.canvas.parentElement || document.body
-        : window)
-    );
+    switch (this.displayMode) {
+      case DisplayMode.FillContainer:
+      case DisplayMode.FitContainer:
+      case DisplayMode.FitContainerAndFill:
+      case DisplayMode.FitContainerAndZoom:
+        return this.canvas.parentElement || document.body;
+      default:
+        return window;
+    }
   }
 
   public get resolution(): ScreenDimension {
@@ -365,16 +383,16 @@ export class Screen {
     this._canvas.width = this.scaledWidth;
     this._canvas.height = this.scaledHeight;
 
-    if (this._ctx instanceof ExcaliburGraphicsContextWebGL) {
-      const supported = this._ctx.checkIfResolutionSupported({
+    if (this.graphicsContext instanceof ExcaliburGraphicsContextWebGL) {
+      const supported = this.graphicsContext.checkIfResolutionSupported({
         width: this.scaledWidth,
         height: this.scaledHeight
       });
       if (!supported && !this._alreadyWarned) {
         this._alreadyWarned = true; // warn once
         this._logger.warn(
-          `The currently configured resolution (${this.resolution.width}x${this.resolution.height})` +
-          ' is too large for the platform WebGL implementation, this may work but cause WebGL rendering to behave oddly.' +
+          `The currently configured resolution (${this.resolution.width}x${this.resolution.height}) and pixel ratio (${this.pixelRatio})` +
+          ' are too large for the platform WebGL implementation, this may work but cause WebGL rendering to behave oddly.' +
           ' Try reducing the resolution or disabling Hi DPI scaling to avoid this' +
           ' (read more here https://excaliburjs.com/docs/screens#understanding-viewport--resolution).');
       }
@@ -394,10 +412,12 @@ export class Screen {
     this._canvas.style.height = this.viewport.height + 'px';
 
     // After messing with the canvas width/height the graphics context is invalidated and needs to have some properties reset
-    this._ctx.updateViewport();
-    this._ctx.resetTransform();
-    this._ctx.scale(this.pixelRatio, this.pixelRatio);
-    this._ctx.smoothing = this._antialiasing;
+    this.graphicsContext.updateViewport(this.resolution);
+    this.graphicsContext.resetTransform();
+    this.graphicsContext.smoothing = this._antialiasing;
+    if (this.graphicsContext instanceof ExcaliburGraphicsContext2DCanvas) {
+      this.graphicsContext.scale(this.pixelRatio, this.pixelRatio);
+    }
   }
 
   public get antialiasing() {
@@ -406,11 +426,11 @@ export class Screen {
 
   public set antialiasing(isSmooth: boolean) {
     this._antialiasing = isSmooth;
-    this._ctx.smoothing = this._antialiasing;
+    this.graphicsContext.smoothing = this._antialiasing;
   }
 
   /**
-   * Returns true if excalibur is fullscreened using the browser fullscreen api
+   * Returns true if excalibur is fullscreen using the browser fullscreen api
    */
   public get isFullScreen() {
     return this._isFullScreen;
@@ -419,8 +439,17 @@ export class Screen {
   /**
    * Requests to go fullscreen using the browser fullscreen api, requires user interaction to be successful.
    * For example, wire this to a user click handler.
+   *
+   * Optionally specify a target element id to go fullscreen, by default the game canvas is used
+   * @param elementId
    */
-  public goFullScreen(): Promise<void> {
+  public goFullScreen(elementId?: string): Promise<void> {
+    if (elementId) {
+      const maybeElement = document.getElementById(elementId);
+      if (maybeElement) {
+        return maybeElement.requestFullscreen();
+      }
+    }
     return this._canvas.requestFullscreen();
   }
 
@@ -515,22 +544,11 @@ export class Screen {
    * @param point  Screen coordinate to convert
    */
   public screenToWorldCoordinates(point: Vector): Vector {
-    let newX = point.x;
-    let newY = point.y;
-
-    // transform back to world space
-    newX = (newX / this.resolution.width) * this.drawWidth;
-    newY = (newY / this.resolution.height) * this.drawHeight;
-
-    // transform based on zoom
-    newX = newX - this.halfDrawWidth;
-    newY = newY - this.halfDrawHeight;
-
-    // shift by camera focus
-    newX += this._camera?.x ?? 0;
-    newY += this._camera?.y ?? 0;
-
-    return new Vector(newX, newY);
+    // the only difference between screen & world is the camera transform
+    if (this._camera) {
+      return this._camera.inverse.multiply(point);
+    }
+    return point.sub(vec(this.resolution.width / 2, this.resolution.height / 2));
   }
 
   /**
@@ -540,22 +558,10 @@ export class Screen {
    * @param point  World coordinate to convert
    */
   public worldToScreenCoordinates(point: Vector): Vector {
-    let screenX = point.x;
-    let screenY = point.y;
-
-    // shift by camera focus
-    screenX -= this._camera?.x ?? 0;
-    screenY -= this._camera?.y ?? 0;
-
-    // transform back on zoom
-    screenX = screenX + this.halfDrawWidth;
-    screenY = screenY + this.halfDrawHeight;
-
-    // transform back to screen space
-    screenX = (screenX / this.drawWidth) * this.resolution.width;
-    screenY = (screenY / this.drawHeight) * this.resolution.height;
-
-    return new Vector(screenX, screenY);
+    if (this._camera) {
+      return this._camera.transform.multiply(point);
+    }
+    return point.add(vec(this.resolution.width / 2, this.resolution.height / 2));
   }
 
   public pageToWorldCoordinates(point: Vector): Vector {
@@ -575,12 +581,14 @@ export class Screen {
    * World bounds are in world coordinates, useful for culling objects offscreen
    */
   public getWorldBounds(): BoundingBox {
-    const left = this.screenToWorldCoordinates(Vector.Zero).x;
-    const top = this.screenToWorldCoordinates(Vector.Zero).y;
-    const right = left + this.drawWidth;
-    const bottom = top + this.drawHeight;
-
-    return new BoundingBox(left, top, right, bottom);
+    const bounds = BoundingBox.fromDimension(
+      this.resolution.width,
+      this.resolution.height,
+      Vector.Half)
+      .scale(vec(1/this._camera.zoom, 1/this._camera.zoom))
+      .rotate(this._camera.rotation)
+      .translate(this._camera.pos);
+    return bounds;
   }
 
   /**
@@ -654,6 +662,13 @@ export class Screen {
     return vec(this.halfDrawWidth, this.halfDrawHeight);
   }
 
+  /**
+   * Returns the content area in screen space where it is safe to place content
+   */
+  public get contentArea(): BoundingBox {
+    return this._contentArea;
+  }
+
   private _computeFit() {
     document.body.style.margin = '0px';
     document.body.style.overflow = 'hidden';
@@ -672,6 +687,144 @@ export class Screen {
       width: adjustedWidth,
       height: adjustedHeight
     };
+    this._contentArea = BoundingBox.fromDimension(this.resolution.width, this.resolution.height, Vector.Zero);
+  }
+
+  private _contentArea: BoundingBox = new BoundingBox();
+  private _computeFitScreenAndFill() {
+    document.body.style.margin = '0px';
+    document.body.style.overflow = 'hidden';
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    this._computeFitAndFill(vw, vh);
+  }
+
+
+
+  private _computeFitContainerAndFill() {
+    document.body.style.margin = '0px';
+    document.body.style.overflow = 'hidden';
+    const parent = this.canvas.parentElement;
+    const vw = parent.clientWidth;
+    const vh = parent.clientHeight;
+    this._computeFitAndFill(vw, vh);
+  }
+
+  private _computeFitAndFill(vw: number, vh: number) {
+    this.viewport = {
+      width: vw,
+      height: vh
+    };
+    // if the current screen aspectRatio is less than the original aspectRatio
+    if (vw / vh <= this._contentResolution.width / this._contentResolution.height) {
+      // compute new resolution to match the original aspect ratio
+      this.resolution = {
+        width:  vw * this._contentResolution.width / vw,
+        height: vw * this._contentResolution.width / vw * vh / vw
+      };
+      const clip = (this.resolution.height - this._contentResolution.height) / 2;
+      this._contentArea = new BoundingBox({
+        top: clip,
+        left: 0,
+        right: this._contentResolution.width,
+        bottom: this.resolution.height - clip
+      });
+    } else {
+      this.resolution = {
+        width: vh *  this._contentResolution.height / vh * vw / vh,
+        height: vh *  this._contentResolution.height / vh
+      };
+      const clip = (this.resolution.width - this._contentResolution.width) / 2;
+      this._contentArea = new BoundingBox({
+        top: 0,
+        left: clip,
+        right: this.resolution.width - clip,
+        bottom: this._contentResolution.height
+      });
+    }
+  }
+
+  private _computeFitScreenAndZoom() {
+    document.body.style.margin = '0px';
+    document.body.style.overflow = 'hidden';
+    this.canvas.style.position = 'absolute';
+
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    this._computeFitAndZoom(vw, vh);
+  }
+
+  private _computeFitContainerAndZoom() {
+    document.body.style.margin = '0px';
+    document.body.style.overflow = 'hidden';
+    this.canvas.style.position = 'absolute';
+    const parent = this.canvas.parentElement;
+    parent.style.position = 'relative';
+    parent.style.overflow = 'hidden';
+
+    const vw = parent.clientWidth;
+    const vh = parent.clientHeight;
+
+    this._computeFitAndZoom(vw, vh);
+  }
+
+  private _computeFitAndZoom(vw: number, vh: number) {
+    const aspect = this.aspectRatio;
+    let adjustedWidth = 0;
+    let adjustedHeight = 0;
+    if (vw / aspect < vh) {
+      adjustedWidth = vw;
+      adjustedHeight = vw / aspect;
+    } else {
+      adjustedWidth = vh * aspect;
+      adjustedHeight = vh;
+    }
+
+    const scaleX = vw / adjustedWidth;
+    const scaleY = vh / adjustedHeight;
+
+    const maxScaleFactor = Math.max(scaleX, scaleY);
+
+    const zoomedWidth = adjustedWidth * maxScaleFactor;
+    const zoomedHeight = adjustedHeight * maxScaleFactor;
+
+    // Center zoomed dimension if bigger than the screen
+    if (zoomedWidth > vw) {
+      this.canvas.style.left = -(zoomedWidth - vw) / 2 + 'px';
+    } else {
+      this.canvas.style.left = '';
+    }
+
+    if (zoomedHeight > vh) {
+      this.canvas.style.top = -(zoomedHeight - vh) / 2 + 'px';
+    } else {
+      this.canvas.style.top = '';
+    }
+
+    this.viewport = {
+      width: zoomedWidth,
+      height: zoomedHeight
+    };
+
+    const bounds = BoundingBox.fromDimension(this.viewport.width, this.viewport.height, Vector.Zero);
+    // return safe area
+    if (this.viewport.width > vw) {
+      const clip = (this.viewport.width - vw)/this.viewport.width * this.resolution.width;
+      bounds.top = 0;
+      bounds.left = clip / 2;
+      bounds.right = this.resolution.width - clip / 2;
+      bounds.bottom = this.resolution.height;
+    }
+
+    if (this.viewport.height > vh) {
+      const clip = (this.viewport.height - vh)/this.viewport.height * this.resolution.height;
+      bounds.top = clip / 2;
+      bounds.left = 0;
+      bounds.bottom = this.resolution.height - clip / 2;
+      bounds.right = this.resolution.width;
+    }
+    this._contentArea = bounds;
   }
 
   private _computeFitContainer() {
@@ -691,35 +844,32 @@ export class Screen {
       width: adjustedWidth,
       height: adjustedHeight
     };
+    this._contentArea = BoundingBox.fromDimension(this.resolution.width, this.resolution.height, Vector.Zero);
   }
 
   private _applyDisplayMode() {
-    if (this.displayMode === DisplayMode.Position) {
-      this._initializeDisplayModePosition(this._position);
-    } else {
-      this._setResolutionAndViewportByDisplayMode(this.parent);
+    this._setResolutionAndViewportByDisplayMode(this.parent);
 
-      // watch resizing
-      if (this.parent instanceof Window) {
-        this._browser.window.on('resize', this._resizeHandler);
-      } else {
-        this._resizeObserver = new ResizeObserver(() => {
-          this._resizeHandler();
-        });
-        this._resizeObserver.observe(this.parent);
-      }
-      this.parent.addEventListener('resize', this._resizeHandler);
+    // watch resizing
+    if (this.parent instanceof Window) {
+      this._browser.window.on('resize', this._resizeHandler);
+    } else {
+      this._resizeObserver = new ResizeObserver(() => {
+        this._resizeHandler();
+      });
+      this._resizeObserver.observe(this.parent);
     }
+    this.parent.addEventListener('resize', this._resizeHandler);
   }
 
   /**
-   * Sets the resoultion and viewport based on the selected display mode.
+   * Sets the resolution and viewport based on the selected display mode.
    */
   private _setResolutionAndViewportByDisplayMode(parent: HTMLElement | Window) {
     if (this.displayMode === DisplayMode.FillContainer) {
       this.resolution = {
-        width: (<HTMLElement>parent).clientWidth,
-        height: (<HTMLElement>parent).clientHeight
+        width: (<HTMLElement> parent).clientWidth,
+        height: (<HTMLElement> parent).clientHeight
       };
 
       this.viewport = this.resolution;
@@ -729,12 +879,14 @@ export class Screen {
       document.body.style.margin = '0px';
       document.body.style.overflow = 'hidden';
       this.resolution = {
-        width: (<Window>parent).innerWidth,
-        height: (<Window>parent).innerHeight
+        width: (<Window> parent).innerWidth,
+        height: (<Window> parent).innerHeight
       };
 
       this.viewport = this.resolution;
     }
+
+    this._contentArea = BoundingBox.fromDimension(this.resolution.width, this.resolution.height, Vector.Zero);
 
     if (this.displayMode === DisplayMode.FitScreen) {
       this._computeFit();
@@ -743,73 +895,21 @@ export class Screen {
     if (this.displayMode === DisplayMode.FitContainer) {
       this._computeFitContainer();
     }
-  }
 
-  private _initializeDisplayModePosition(position: CanvasPosition) {
-    if (!position) {
-      throw new Error('DisplayMode of Position was selected but no position option was given');
-    } else {
-      this.canvas.style.display = 'block';
-      this.canvas.style.position = 'absolute';
+    if (this.displayMode === DisplayMode.FitScreenAndFill) {
+      this._computeFitScreenAndFill();
+    }
 
-      if (typeof position === 'string') {
-        const specifiedPosition = position.split(' ');
+    if (this.displayMode === DisplayMode.FitContainerAndFill){
+      this._computeFitContainerAndFill();
+    }
 
-        switch (specifiedPosition[0]) {
-          case 'top':
-            this.canvas.style.top = '0px';
-            break;
-          case 'bottom':
-            this.canvas.style.bottom = '0px';
-            break;
-          case 'middle':
-            this.canvas.style.top = '50%';
-            const offsetY = -this.halfDrawHeight;
-            this.canvas.style.marginTop = offsetY.toString();
-            break;
-          default:
-            throw new Error('Invalid Position Given');
-        }
+    if (this.displayMode === DisplayMode.FitScreenAndZoom) {
+      this._computeFitScreenAndZoom();
+    }
 
-        if (specifiedPosition[1]) {
-          switch (specifiedPosition[1]) {
-            case 'left':
-              this.canvas.style.left = '0px';
-              break;
-            case 'right':
-              this.canvas.style.right = '0px';
-              break;
-            case 'center':
-              this.canvas.style.left = '50%';
-              const offsetX = -this.halfDrawWidth;
-              this.canvas.style.marginLeft = offsetX.toString();
-              break;
-            default:
-              throw new Error('Invalid Position Given');
-          }
-        }
-      } else {
-        if (position.top) {
-          typeof position.top === 'number'
-            ? (this.canvas.style.top = position.top.toString() + 'px')
-            : (this.canvas.style.top = position.top);
-        }
-        if (position.right) {
-          typeof position.right === 'number'
-            ? (this.canvas.style.right = position.right.toString() + 'px')
-            : (this.canvas.style.right = position.right);
-        }
-        if (position.bottom) {
-          typeof position.bottom === 'number'
-            ? (this.canvas.style.bottom = position.bottom.toString() + 'px')
-            : (this.canvas.style.bottom = position.bottom);
-        }
-        if (position.left) {
-          typeof position.left === 'number'
-            ? (this.canvas.style.left = position.left.toString() + 'px')
-            : (this.canvas.style.left = position.left);
-        }
-      }
+    if (this.displayMode === DisplayMode.FitContainerAndZoom){
+      this._computeFitContainerAndZoom();
     }
   }
 }

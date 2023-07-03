@@ -34,114 +34,87 @@
  * Excalibur.js team
  */
 
-declare class Stats {
-  constructor();
-  dom: HTMLElement;
-  showPanel(option: number);
-  begin(): void;
-  end(): void;
-}
-declare module dat {
-  class GUI {
-    constructor(options: { name: string });
-    addFolder(name: string): GUI;
-    add<T>(object: T, prop: keyof T, min?: number, max?: number, step?: number): any;
-    addColor(object: any, prop: any): any;
-  }
-}
-
-var gui = new dat.GUI({name: 'Excalibur'});
-
-
-var stats = new Stats();
-stats.showPanel(0);
-document.body.appendChild(stats.dom);
-
-var bootstrap = (game: ex.Engine) => {
-  gui.add({toggleDebug: false}, 'toggleDebug').onChange(() => game.toggleDebug());
-  var supportedKeys = ['filter', 'entity', 'transform', 'motion', 'body', 'collider', 'physics', 'graphics', 'camera'];
-  for (let key of supportedKeys) {
-    let folder = gui.addFolder(key);
-    if (game.debug[key]) {
-      for (let option in game.debug[key]) {
-        if (option) {
-          if (option.toLocaleLowerCase().includes('color')) {
-            folder.addColor(game.debug[key], option);
-          } else {
-            if (Array.isArray(game.debug[key][option])) {
-              continue;
-            }
-            folder.add(game.debug[key], option);
-          }
-        }
-      }
-    }
-  }
-
-  var physics = gui.addFolder('Physics Flags');
-  physics.add(ex.Physics, 'enabled')
-  physics.add(ex.Physics, "positionIterations", 1, 15, 1);
-  physics.add(ex.Physics, "velocityIterations", 1, 15, 1);
-
-  game.on("preframe", () => {
-      stats.begin();
-  });
-  game.on('postframe', () =>{
-      stats.end();
-  });
-
-  // game.currentScene.on('entityadded', (e: any) => {
-  //   var entity: ex.Entity = e.target;
-  //   var obj = {id: entity.id, name: entity.constructor.name, types: entity.types};
-
-  //   var pos = entities.addFolder(`${obj.id}:${obj.name}`)
-  //   pos.add({pos: entity.get(ex.TransformComponent).pos.toString()}, 'pos');
-  //   pos.add({types: obj.types.join(', ')}, 'types');
-  // });
-
-  return { stats, gui }
-}
 var logger = ex.Logger.getInstance();
 logger.defaultLevel = ex.LogLevel.Debug;
 
 var fullscreenButton = document.getElementById('fullscreen') as HTMLButtonElement;
 
 // Create an the game container
-ex.Flags.enable(ex.Experiments.WebGL);
 var game = new ex.Engine({
   width: 800 / 2,
   height: 600 / 2,
   viewport: { width: 800, height: 600 },
   canvasElementId: 'game',
-  suppressHiDPIScaling: false,
+  pixelRatio: 1,
   suppressPlayButton: true,
   pointerScope: ex.Input.PointerScope.Canvas,
+  displayMode: ex.DisplayMode.FitScreenAndFill,
   antialiasing: false,
-  snapToPixel: true
+  snapToPixel: false,
+  maxFps: 60,
+  configurePerformanceCanvas2DFallback: {
+    allow: true,
+    showPlayerMessage: true,
+    threshold: { fps: 20, numberOfFrames: 100 }
+  }
 });
+game.currentScene.onPreDraw = (ctx: ex.ExcaliburGraphicsContext) => {
+  ctx.save();
+  ctx.z = 99;
+  const red = ex.Color.fromHex('#F84541');
+  const green = ex.Color.fromHex('#3CCC2E');
+  const blue = ex.Color.fromHex('#3DDCFC');
+  const yellow = ex.Color.fromHex('#FDCF45');
+
+  const bb = game.screen.contentArea.clone();
+  bb.top++
+  bb.left++
+  bb.bottom--
+  bb.right--;
+  bb.draw(ctx, ex.Color.Yellow);
+
+  ctx.drawCircle(ex.vec(bb.left + 6, bb.top + 6), 10, green);
+  ctx.drawCircle(ex.vec(bb.right - 6, bb.top + 6), 10, blue);
+  ctx.drawCircle(ex.vec(bb.left + 6, bb.bottom - 6), 10, yellow);
+  ctx.drawCircle(ex.vec(bb.right - 6, bb.bottom - 6), 10, red);
+  ctx.restore();
+}
+
+game.on('fallbackgraphicscontext', (ctx) => {
+  console.log('fallback triggered', ctx);
+});
+//@ts-ignore For some reason ts doesn't like the /// slash import
+// const devtool = new ex.DevTools.DevTool(game);
+
+
+// var colorblind = new ex.ColorBlindnessPostProcessor(ex.ColorBlindnessMode.Deuteranope);
+// game.graphicsContext.addPostProcessor(colorblind);
 
 fullscreenButton.addEventListener('click', () => {
   if (game.screen.isFullScreen) {
     game.screen.exitFullScreen();
   } else {
-    game.screen.goFullScreen();
+    game.screen.goFullScreen('container');
   }
 });
 game.showDebug(true);
-bootstrap(game);
-
 
 
 var heartTex = new ex.ImageSource('../images/heart.png');
 var heartImageSource = new ex.ImageSource('../images/heart.png');
-var imageRun = new ex.ImageSource('../images/PlayerRun.png');
+var imageRun = new ex.ImageSource('../images/PlayerRun.png', false, ex.ImageFiltering.Blended);
 var imageJump = new ex.ImageSource('../images/PlayerJump.png');
 var imageRun2 = new ex.ImageSource('../images/PlayerRun.png');
-var imageBlocks = new ex.ImageSource('../images/BlockA0.png');
-var imageBlocksLegacy = new ex.LegacyDrawing.Texture('../images/BlockA0.png');
+var imageBlocks = new ex.ImageSource('../images/BlockA0.png', false, ex.ImageFiltering.Blended);
 var spriteFontImage = new ex.ImageSource('../images/SpriteFont.png');
 var jump = new ex.Sound('../sounds/jump.wav', '../sounds/jump.mp3');
 var cards = new ex.ImageSource('../images/kenny-cards.png');
+var cloud = new ex.ImageSource('../images/background_cloudA.png', false, ex.ImageFiltering.Blended);
+
+// Log one warning
+var cards2 = new ex.ImageSource('../images/kenny-cards.png').toSprite();
+cards2.draw(game.graphicsContext, 0, 0);
+cards2.draw(game.graphicsContext, 0, 0);
 
 jump.volume = 0.3;
 
@@ -151,9 +124,9 @@ loader.addResource(heartTex);
 loader.addResource(imageRun);
 loader.addResource(imageJump);
 loader.addResource(imageBlocks);
-loader.addResource(imageBlocksLegacy);
 loader.addResource(spriteFontImage);
 loader.addResource(cards);
+loader.addResource(cloud);
 loader.addResource(jump);
 
 // Set background color
@@ -176,7 +149,8 @@ newSprite.scale = ex.vec(2, 2);
 
 var circle = new ex.Circle({
   radius: 10,
-  color: ex.Color.Red
+  color: ex.Color.Red,
+  filtering: ex.ImageFiltering.Blended
 });
 
 var rect = new ex.Rectangle({
@@ -234,7 +208,37 @@ var cardSpriteSheet = ex.SpriteSheet.fromImageSource({
 
 cardSpriteSheet.sprites.forEach(s => s.scale = ex.vec(2, 2));
 
-var cardAnimation = ex.Animation.fromSpriteSheet(cardSpriteSheet, ex.Util.range(0, 14 * 4), 200);
+var cardAnimation = ex.Animation.fromSpriteSheet(cardSpriteSheet, ex.range(0, 14 * 4), 200);
+
+var multiCardSheet = ex.SpriteSheet.fromImageSourceWithSourceViews({
+  image: cards,
+  sourceViews: [
+    { x: 11, y: 2, width: 42*2 + 23, height: 60*2 + 5 }
+  ]
+});
+
+var multiCardActor = new ex.Actor({
+  pos: ex.vec(400, 100),
+});
+
+multiCardActor.graphics.use(multiCardSheet.sprites[0]);
+game.add(multiCardActor);
+
+var rand = new ex.Random(1337);
+var cloudSprite = cloud.toSprite();
+for (var i = 0; i < 100; i++) {
+  var clouds = new ex.Actor({
+    name: 'cloud',
+    pos: ex.vec(400 + i * rand.floating(100, 300), -rand.floating(0, 300)),
+    z: -10
+  });
+  clouds.graphics.use(cloudSprite);
+  var parallax = new ex.ParallaxComponent(ex.vec(rand.floating(.5, .9), .5));
+  clouds.addComponent(parallax);
+
+  clouds.vel.x = -10;
+  game.add(clouds);
+}
 
 var spriteFontSheet = ex.SpriteSheet.fromImageSource({
   image: spriteFontImage,
@@ -253,7 +257,7 @@ var spriteFont = new ex.SpriteFont({
 });
 
 var spriteText = new ex.Text({
-  text: 'Sprite Text ❤️',
+  text: 'Sprite Text 💖',
   font: spriteFont
 });
 
@@ -324,14 +328,13 @@ var group = new ex.GraphicsGroup({
 
 heart.graphics.add(group);
 heart.pos = ex.vec(10, 10);
-heart.onPostDraw = (ctx) => {
-  ctx.fillStyle = ex.Color.Violet.toRGBA();
-  ctx.fillRect(0, 0, 100, 100);
-}
 game.add(heart);
 
 var label = new ex.Label({text: 'Test Label', x: 200, y: 200});
 game.add(label);
+
+var testSpriteLabel = new ex.Label({text: 'Test Sprite Label', x: 200, y: 100, spriteFont: spriteFont});
+game.add(testSpriteLabel);
 
 
 var pointer = new ex.Actor({
@@ -348,22 +351,21 @@ var otherPointer = new ex.ScreenElement({
 var pagePointer = document.getElementById('page') as HTMLDivElement;
 otherPointer.anchor.setTo(.5, .5);
 game.add(otherPointer);
-game.input.pointers.primary.on('move', (ev) => {
-   pointer.pos = ev.worldPos;
-   otherPointer.pos = game.screen.worldToScreenCoordinates(ev.worldPos);
-   let pagePos = game.screen.screenToPageCoordinates(otherPointer.pos);
-   pagePointer.style.left = pagePos.x + 'px';
-   pagePointer.style.top = pagePos.y + 'px';
-});
+// game.input.pointers.primary.on('move', (ev) => {
+//    pointer.pos = ev.worldPos;
+//    otherPointer.pos = game.screen.worldToScreenCoordinates(ev.worldPos);
+//    let pagePos = game.screen.screenToPageCoordinates(otherPointer.pos);
+//    pagePointer.style.left = pagePos.x + 'px';
+//    pagePointer.style.top = pagePos.y + 'px';
+// });
 
 game.input.pointers.primary.on('wheel', (ev) => {
   pointer.pos.setTo(ev.x, ev.y);
   game.currentScene.camera.zoom += (ev.deltaY / 1000);
-  game.currentScene.camera.zoom = ex.Util.clamp(game.currentScene.camera.zoom, .05, 100);
+  game.currentScene.camera.zoom = ex.clamp(game.currentScene.camera.zoom, .05, 100);
 })
 // Turn on debug diagnostics
 game.showDebug(false);
-var blockSpriteLegacy = new ex.LegacyDrawing.Sprite(imageBlocksLegacy, 0, 0, 65, 49);
 var blockSprite = new ex.Sprite({
   image: imageBlocks,
   destSize: {
@@ -371,6 +373,9 @@ var blockSprite = new ex.Sprite({
     height: 49
   }
 });
+blockSprite.tint = ex.Color.Blue;
+otherPointer.get(ex.TransformComponent).z = 100;
+otherPointer.graphics.use(blockSprite);
 // Create spritesheet
 //var spriteSheetRun = new ex.SpriteSheet(imageRun, 21, 1, 96, 96);
 var spriteSheetRun = ex.SpriteSheet.fromImageSource({
@@ -396,9 +401,11 @@ var tileBlockWidth = 64,
   tileBlockHeight = 48,
   spriteTiles = new ex.SpriteSheet({sprites: [ex.Sprite.from(imageBlocks)] });
 
+var blockGroup = ex.CollisionGroupManager.create('ground');
 // create a collision map
 // var tileMap = new ex.TileMap(100, 300, tileBlockWidth, tileBlockHeight, 4, 500);
-var tileMap = new ex.TileMap({ x: 100, y: 300, cellWidth: tileBlockWidth, cellHeight: tileBlockHeight, rows: 4, cols: 500 });
+var tileMap = new ex.TileMap({name: 'tilemap', pos: ex.vec(100, 300), tileWidth: tileBlockWidth, tileHeight: tileBlockHeight, rows: 4, columns: 500 });
+tileMap.get(ex.BodyComponent).group = blockGroup;
 var blocks = ex.Sprite.from(imageBlocks);
 // var flipped = spriteTiles.sprites[0].clone();
 // flipped.flipVertical = true;
@@ -408,7 +415,7 @@ var blocks = ex.Sprite.from(imageBlocks);
 //     { graphic: flipped, duration: 200 }
 //   ]
 // })
-tileMap.data.forEach(function(cell: ex.Cell) {
+tileMap.tiles.forEach(function(cell: ex.Tile) {
   cell.solid = true;
   cell.addGraphic(spriteTiles.sprites[0]);
 });
@@ -448,7 +455,6 @@ enum Animations {
 }
 
 var currentX = 0;
-var blockGroup = ex.CollisionGroupManager.create('ground');
 var color = new ex.Color(Math.random() * 255, Math.random() * 255, Math.random() * 255);
 // Create the level
 for (var i = 0; i < 36; i++) {
@@ -464,7 +470,7 @@ for (var i = 0; i < 36; i++) {
   //var block = new ex.Actor(currentX, 350 + Math.random() * 100, tileBlockWidth, tileBlockHeight, color);
   //block.collisionType = ex.CollisionType.Fixed;
   block.body.group = blockGroup;
-  block.graphics.add(blockAnimation);
+  block.graphics.add(blockSprite);
 
   game.add(block);
 }
@@ -472,24 +478,28 @@ for (var i = 0; i < 36; i++) {
 var platform = new ex.Actor({x: 400, y: 300, width: 200, height: 50, color: new ex.Color(0, 200, 0)});
 platform.graphics.add(new ex.Rectangle({ color: new ex.Color(0, 200, 0), width: 200, height: 50 }));
 platform.body.collisionType = ex.CollisionType.Fixed;
+platform.body.group = blockGroup;
 platform.actions.repeatForever(ctx => ctx.moveTo(200, 300, 100).moveTo(600, 300, 100).moveTo(400, 300, 100));
 game.add(platform);
 
 var platform2 = new ex.Actor({x: 800, y: 300, width: 200, height: 20, color: new ex.Color(0, 0, 140)});
 platform2.graphics.add(new ex.Rectangle({ color: new ex.Color(0, 0, 140), width: 200, height: 20 }));
 platform2.body.collisionType = ex.CollisionType.Fixed;
+platform2.body.group = blockGroup;
 platform2.actions.repeatForever(ctx => ctx.moveTo(2000, 300, 100).moveTo(2000, 100, 100).moveTo(800, 100, 100).moveTo(800, 300, 100));
 game.add(platform2);
 
 var platform3 = new ex.Actor({x: -200, y: 400, width: 200, height: 20, color: new ex.Color(50, 0, 100)});
 platform3.graphics.add(new ex.Rectangle({ color: new ex.Color(50, 0, 100), width: 200, height: 20 }));
 platform3.body.collisionType = ex.CollisionType.Fixed;
+platform3.body.group = blockGroup;
 platform3.actions.repeatForever(ctx => ctx.moveTo(-200, 800, 300).moveTo(-200, 400, 50).delay(3000).moveTo(-200, 300, 800).moveTo(-200, 400, 800));
 game.add(platform3);
 
 var platform4 = new ex.Actor({x: 75, y: 300, width: 100, height: 50, color: ex.Color.Azure});
 platform4.graphics.add(new ex.Rectangle({ color: ex.Color.Azure, width: 100, height: 50 }));
 platform4.body.collisionType = ex.CollisionType.Fixed;
+platform4.body.group = blockGroup;
 game.add(platform4);
 
 // Test follow api
@@ -505,6 +515,17 @@ var player = new ex.Actor({
   collider: ex.Shape.Capsule(32, 96),
   collisionType: ex.CollisionType.Active
 });
+player.onPostUpdate = (engine) => {
+  var hits = engine.currentScene.physics.rayCast(new ex.Ray(player.pos, ex.Vector.Down), {
+    maxDistance: 100,
+    collisionGroup: blockGroup,
+    searchAllColliders: false
+  });
+  // console.log(hits);
+}
+player.graphics.onPostDraw = (ctx) => {
+  ctx.drawLine(ex.Vector.Zero, ex.Vector.Down.scale(100), ex.Color.Red, 2);
+}
 player.body.canSleep = false;
 player.graphics.copyGraphics = false;
 follower.actions
@@ -517,6 +538,13 @@ follower.actions
 // follow player
 
 player.rotation = 0;
+player.on('collisionstart', () => {
+  console.log('collision start');
+});
+
+player.on('collisionend', () => {
+  console.log('collision end');
+});
 
 // Health bar example
 var healthbar = new ex.Actor({
@@ -531,10 +559,10 @@ player.addChild(healthbar);
 //   ctx.fillStyle = 'red';
 //   ctx.fillRect(0, 0, 100, 100);
 // };
-player.graphics.onPostDraw = (ctx: ex.ExcaliburGraphicsContext) => {
-  // ctx.debug.drawLine(ex.vec(0, 0), ex.vec(200, 0));
-  // ctx.debug.drawPoint(ex.vec(0, 0), { size: 20, color: ex.Color.Black });
-};
+// player.graphics.onPostDraw = (ctx: ex.ExcaliburGraphicsContext) => {
+//   // ctx.debug.drawLine(ex.vec(0, 0), ex.vec(200, 0));
+//   // ctx.debug.drawPoint(ex.vec(0, 0), { size: 20, color: ex.Color.Black });
+// };
 
 var healthbar2 = new ex.Rectangle({
   width: 140,
@@ -559,7 +587,7 @@ var playerText = new ex.Text({
 backroundLayer.show(playerText, { offset: ex.vec(0, -70) });
 
 // Retrieve animations for player from sprite sheet
-var left = ex.Animation.fromSpriteSheet(spriteSheetRun, ex.Util.range(1, 10), 50);
+var left = ex.Animation.fromSpriteSheet(spriteSheetRun, ex.range(1, 10), 50);
 // var left = new ex.Animation(game, left_sprites, 50);
 var right = left.clone(); // spriteSheetRun.getAnimationBetween(game, 1, 11, 50);
 right.flipHorizontal = true;
@@ -567,11 +595,11 @@ var idle = ex.Animation.fromSpriteSheet(spriteSheetRun, [0], 200); // spriteShee
 //idle.anchor.setTo(.5, .5);
 var jumpLeft = ex.Animation.fromSpriteSheet(
   spriteSheetJump,
-  ex.Util.range(0, 10).reverse(),
+  ex.range(0, 10).reverse(),
   100,
   ex.AnimationStrategy.Freeze
 ); // spriteSheetJump.getAnimationBetween(game, 0, 11, 100);
-var jumpRight = ex.Animation.fromSpriteSheet(spriteSheetJump, ex.Util.range(11, 21), 100, ex.AnimationStrategy.Freeze); // spriteSheetJump.getAnimationBetween(game, 11, 22, 100);
+var jumpRight = ex.Animation.fromSpriteSheet(spriteSheetJump, ex.range(11, 21), 100, ex.AnimationStrategy.Freeze); // spriteSheetJump.getAnimationBetween(game, 11, 22, 100);
 // left.loop = true;
 // right.loop = true;
 // idle.loop = true;
@@ -704,7 +732,7 @@ game.input.keyboard.on('down', (keyDown?: ex.Input.KeyEvent) => {
 });
 
 var isColliding = false;
-player.on('precollision', (data?: ex.PreCollisionEvent) => {
+player.on('postcollision', (data: ex.PostCollisionEvent) => {
   if (data.side === ex.Side.Bottom) {
     isColliding = true;
 
@@ -839,7 +867,7 @@ var trigger = new ex.Trigger({
 game.add(trigger);
 
 game.input.pointers.primary.on('down', (evt: ex.Input.PointerEvent) => {
-  var c = tileMap.getCellByPoint(evt.worldPos.x, evt.worldPos.y);
+  var c = tileMap.getTileByPoint(evt.worldPos);
   if (c) {
     if (c.solid) {
       c.solid = false;

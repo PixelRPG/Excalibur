@@ -1,12 +1,11 @@
 import * as ex from '@excalibur';
-import { Scene } from '@excalibur';
-import { Mocks } from './util/Mocks';
 import { TestUtils } from './util/TestUtils';
 
 describe('A scene', () => {
   let actor: ex.Actor;
   let engine: ex.Engine;
   let scene: ex.Scene;
+  let clock: ex.TestClock;
 
   beforeEach(() => {
     actor = new ex.Actor();
@@ -14,11 +13,13 @@ describe('A scene', () => {
     scene = new ex.Scene();
 
     spyOn(scene, 'draw').and.callThrough();
-    spyOn(actor, 'draw');
     engine.removeScene('root');
     engine.addScene('root', scene);
     engine.goToScene('root');
     engine.start();
+
+    clock = engine.clock as ex.TestClock;
+    clock.step(100);
   });
 
   afterEach(() => {
@@ -46,8 +47,32 @@ describe('A scene', () => {
     expect(scene.actors.length).toBe(1);
   });
 
+  it('can clear all entities and timers', () => {
+    const actor1 = new ex.Actor();
+    const actor2 = new ex.Actor();
+    const actor3 = new ex.Actor();
+    const timer = new ex.Timer({
+      interval: 300
+    });
+    scene.add(actor1);
+    scene.add(actor2);
+    scene.add(actor3);
+    scene.add(timer);
+
+    expect(scene.entities.length).toBe(3);
+    expect(scene.timers.length).toBe(1);
+    scene.clear();
+
+    expect(scene.entities.length).withContext('deferred entity removal means entities cleared at end of update').toBe(3);
+    expect(scene.timers.length).withContext('timers dont have deferred removal').toBe(0);
+
+    scene.update(engine, 100);
+    expect(scene.entities.length).toBe(0);
+    expect(scene.timers.length).toBe(0);
+  });
+
   it('cannot have the same TileMap added to it more than once', () => {
-    const tileMap = new ex.TileMap(1, 1, 1, 1, 1, 1);
+    const tileMap = new ex.TileMap({ pos: ex.vec(1, 1), tileWidth: 1, tileHeight: 1, columns: 1, rows: 1});
     scene.add(tileMap);
     expect(scene.tileMaps.length).toBe(1);
     scene.add(tileMap);
@@ -58,179 +83,171 @@ describe('A scene', () => {
     engine.goToScene('root');
     const actor = new ex.Actor({
       width: 10,
-      height: 10
+      height: 10,
+      color: ex.Color.Red
     });
-    spyOn(actor, 'draw');
-    actor.traits.length = 0;
-    actor.traits.push(new ex.Traits.OffscreenCulling());
+    actor.graphics.onPostDraw = jasmine.createSpy('draw');
     actor.pos.x = 0;
     actor.pos.y = 0;
 
     scene.add(actor);
     scene.update(engine, 100);
-    scene.draw(engine.ctx, 100);
+    scene.draw(engine.graphicsContext, 100);
 
-    expect(actor.isOffScreen).toBeFalsy();
-    expect(actor.draw).toHaveBeenCalled();
+    expect(actor.isOffScreen).toBe(false);
+    expect(actor.graphics.onPostDraw).toHaveBeenCalled();
   });
 
   it('draws onscreen Actors left', () => {
     engine.goToScene('root');
     const actor = new ex.Actor({
+      name: 'Left',
       width: 10,
-      height: 10
+      height: 10,
+      color: ex.Color.Red
     });
-    spyOn(actor, 'draw');
-    actor.traits.length = 0;
-    actor.traits.push(new ex.Traits.OffscreenCulling());
+    actor.graphics.onPostDraw = jasmine.createSpy('draw');
     actor.pos.x = -4;
     actor.pos.y = 0;
 
     scene.add(actor);
     scene.update(engine, 100);
-    scene.draw(engine.ctx, 100);
+    scene.draw(engine.graphicsContext, 100);
 
-    expect(actor.isOffScreen).toBe(false, 'Actor should be onscreen');
-    expect(actor.draw).toHaveBeenCalled();
+    expect(actor.isOffScreen).withContext('Actor should be onscreen').toBe(false);
+    expect(actor.graphics.onPostDraw).toHaveBeenCalled();
   });
   it('does not draw offscreen Actors left', () => {
     engine.goToScene('root');
     const actor = new ex.Actor({
       width: 10,
-      height: 10
+      height: 10,
+      color: ex.Color.Red
     });
-    spyOn(actor, 'draw');
-    actor.traits.length = 0;
-    actor.traits.push(new ex.Traits.OffscreenCulling());
+    actor.graphics.onPostDraw = jasmine.createSpy('draw');
     actor.pos.x = -6;
     actor.pos.y = 0;
 
     scene.add(actor);
     scene.update(engine, 100);
-    scene.draw(engine.ctx, 100);
+    scene.draw(engine.graphicsContext, 100);
 
-    expect(actor.isOffScreen).toBe(true, 'Actor should be offscreen');
-    expect(actor.draw).not.toHaveBeenCalled();
+    expect(actor.isOffScreen).withContext('Actor should be offscreen').toBe(true);
+    expect(actor.graphics.onPostDraw).not.toHaveBeenCalled();
   });
 
   it('draws onscreen Actors top', () => {
     engine.goToScene('root');
     const actor = new ex.Actor({
       width: 10,
-      height: 10
+      height: 10,
+      color: ex.Color.Red
     });
-    spyOn(actor, 'draw');
-    actor.traits.length = 0;
-    actor.traits.push(new ex.Traits.OffscreenCulling());
+    actor.graphics.onPostDraw = jasmine.createSpy('draw');
     actor.pos.x = 0;
     actor.pos.y = -4;
 
     scene.add(actor);
     scene.update(engine, 100);
-    scene.draw(engine.ctx, 100);
+    scene.draw(engine.graphicsContext, 100);
 
-    expect(actor.isOffScreen).toBe(false, 'Actor should be onscreen');
-    expect(actor.draw).toHaveBeenCalled();
+    expect(actor.isOffScreen).withContext('Actor should be onscreen').toBe(false);
+    expect(actor.graphics.onPostDraw).toHaveBeenCalled();
   });
 
   it('does not draw offscreen Actors top', () => {
     engine.goToScene('root');
     const actor = new ex.Actor({
       width: 10,
-      height: 10
+      height: 10,
+      color: ex.Color.Red
     });
-    spyOn(actor, 'draw');
-    actor.traits.length = 0;
-    actor.traits.push(new ex.Traits.OffscreenCulling());
+    actor.graphics.onPostDraw = jasmine.createSpy('draw');
     actor.pos.x = 0;
     actor.pos.y = -6;
 
     scene.add(actor);
     scene.update(engine, 100);
-    scene.draw(engine.ctx, 100);
+    scene.draw(engine.graphicsContext, 100);
 
-    expect(actor.isOffScreen).toBe(true, 'Actor should be offscreen');
-    expect(actor.draw).not.toHaveBeenCalled();
+    expect(actor.isOffScreen).withContext('Actor should be offscreen').toBe(true);
+    expect(actor.graphics.onPostDraw).not.toHaveBeenCalled();
   });
 
   it('draws onscreen Actors right', () => {
     engine.goToScene('root');
     const actor = new ex.Actor({
       width: 10,
-      height: 10
+      height: 10,
+      color: ex.Color.Red
     });
-    spyOn(actor, 'draw');
-    actor.traits.length = 0;
-    actor.traits.push(new ex.Traits.OffscreenCulling());
+    actor.graphics.onPostDraw = jasmine.createSpy('draw');
     actor.pos.x = 104;
     actor.pos.y = 0;
 
     scene.add(actor);
     scene.update(engine, 100);
-    scene.draw(engine.ctx, 100);
+    scene.draw(engine.graphicsContext, 100);
 
-    expect(actor.isOffScreen).toBe(false, 'Actor should be onscreen');
-    expect(actor.draw).toHaveBeenCalled();
+    expect(actor.isOffScreen).withContext('Actor should be onscreen').toBe(false);
+    expect(actor.graphics.onPostDraw).toHaveBeenCalled();
   });
 
   it('does not draw offscreen Actors right', () => {
     engine.goToScene('root');
     const actor = new ex.Actor({
       width: 10,
-      height: 10
+      height: 10,
+      color: ex.Color.Red
     });
-    spyOn(actor, 'draw');
-    actor.traits.length = 0;
-    actor.traits.push(new ex.Traits.OffscreenCulling());
+    actor.graphics.onPostDraw = jasmine.createSpy('draw');
     actor.pos.x = 106;
     actor.pos.y = 0;
 
     scene.add(actor);
     scene.update(engine, 100);
-    scene.draw(engine.ctx, 100);
+    scene.draw(engine.graphicsContext, 100);
 
-    expect(actor.isOffScreen).toBe(true, 'Actor should be offscreen');
-    expect(actor.draw).not.toHaveBeenCalled();
+    expect(actor.isOffScreen).withContext('Actor should be offscreen').toBe(true);
+    expect(actor.graphics.onPostDraw).not.toHaveBeenCalled();
   });
 
   it('draws onscreen Actors bottom', () => {
     engine.goToScene('root');
     const actor = new ex.Actor({
       width: 10,
-      height: 10
+      height: 10,
+      color: ex.Color.Red
     });
-    spyOn(actor, 'draw');
-    actor.traits.length = 0;
-    actor.traits.push(new ex.Traits.OffscreenCulling());
+    actor.graphics.onPostDraw = jasmine.createSpy('draw');
     actor.pos.x = 0;
     actor.pos.y = 104;
 
     scene.add(actor);
     scene.update(engine, 100);
-    scene.draw(engine.ctx, 100);
+    scene.draw(engine.graphicsContext, 100);
 
-    expect(actor.isOffScreen).toBe(false, 'Actor should be onscreen');
-    expect(actor.draw).toHaveBeenCalled();
+    expect(actor.isOffScreen).withContext('Actor should be onscreen').toBe(false);
+    expect(actor.graphics.onPostDraw).toHaveBeenCalled();
   });
 
   it('does not draw offscreen Actors bottom', () => {
     engine.goToScene('root');
     const actor = new ex.Actor({
       width: 10,
-      height: 10
+      height: 10,
+      color: ex.Color.Red
     });
-    spyOn(actor, 'draw');
-    actor.traits.length = 0;
-    actor.traits.push(new ex.Traits.OffscreenCulling());
+    actor.graphics.onPostDraw = jasmine.createSpy('draw');
     actor.pos.x = 0;
     actor.pos.y = 106;
 
     scene.add(actor);
     scene.update(engine, 100);
-    scene.draw(engine.ctx, 100);
+    scene.draw(engine.graphicsContext, 100);
 
-    expect(actor.isOffScreen).toBe(true, 'Actor should be offscreen');
-    expect(actor.draw).not.toHaveBeenCalled();
+    expect(actor.isOffScreen).withContext('Actor should be offscreen').toBe(true);
+    expect(actor.graphics.onPostDraw).not.toHaveBeenCalled();
   });
 
   it('does not draw offscreen Actors', () => {
@@ -239,7 +256,6 @@ describe('A scene', () => {
       width: 5,
       height: 5
     });
-    spyOn(actor, 'draw');
     actor.pos.x = 1000;
     actor.pos.y = 1000;
     scene.update(engine, 100);
@@ -250,7 +266,7 @@ describe('A scene', () => {
 
     scene.add(actor);
     scene.update(engine, 100);
-    scene.draw(engine.ctx, 100);
+    scene.draw(engine.graphicsContext, 100);
 
     expect(scene.camera.getFocus().x).toBe(50);
     expect(scene.camera.getFocus().y).toBe(50);
@@ -260,31 +276,31 @@ describe('A scene', () => {
     expect(engine.drawHeight).toBe(100);
 
     expect(actor.isOffScreen).toBeTruthy();
-    expect(actor.draw).not.toHaveBeenCalled();
   });
 
   it('draws visible Actors', () => {
     engine.goToScene('root');
-    actor.visible = true;
+    actor.graphics.visible = true;
+    actor.graphics.onPostDraw = jasmine.createSpy('draw');
 
     scene.add(actor);
-    scene.draw(engine.ctx, 100);
+    scene.draw(engine.graphicsContext, 100);
 
-    expect(actor.draw).toHaveBeenCalled();
+    expect(actor.graphics.onPostDraw).toHaveBeenCalled();
   });
 
   it('does not draw invisible actors', () => {
     engine.goToScene('root');
-    actor.visible = false;
+    actor.graphics.visible = false;
+    actor.graphics.onPostDraw = jasmine.createSpy('draw');
 
     scene.add(actor);
-    scene.draw(engine.ctx, 100);
+    scene.draw(engine.graphicsContext, 100);
 
-    expect(actor.draw).not.toHaveBeenCalled();
+    expect(actor.graphics.onPostDraw).not.toHaveBeenCalled();
   });
 
   it('initializes after start or play in first update', () => {
-    const mock = new Mocks.Mocker();
     const scene = new ex.Scene();
     spyOn(scene, 'onInitialize');
 
@@ -292,16 +308,14 @@ describe('A scene', () => {
     engine.addScene('root', scene);
     expect(scene.onInitialize).toHaveBeenCalledTimes(0);
 
-    const loop = mock.loop(engine);
     engine.goToScene('root');
     engine.start();
-    loop.advance(100);
+    clock.step(100);
 
     expect(scene.onInitialize).toHaveBeenCalledTimes(1);
   });
 
   it('calls onActivate and onDeactivate with the correct args', () => {
-    const mock = new Mocks.Mocker();
     const sceneA = new ex.Scene();
     sceneA.onDeactivate = jasmine.createSpy('onDeactivate()');
     const sceneB = new ex.Scene();
@@ -311,18 +325,26 @@ describe('A scene', () => {
     engine.addScene('root', sceneA);
     engine.addScene('sceneB', sceneB);
 
-    const loop = mock.loop(engine);
     engine.goToScene('root');
     engine.start();
-    loop.advance(100);
-    loop.advance(100);
+    clock.step(100);
+    clock.step(100);
 
-    engine.goToScene('sceneB');
-    loop.advance(100);
-    loop.advance(100);
+    engine.goToScene('sceneB', { foo: 'bar' });
+    clock.step(100);
+    clock.step(100);
 
-    expect(sceneA.onDeactivate).toHaveBeenCalledWith(sceneA, sceneB);
-    expect(sceneB.onActivate).toHaveBeenCalledWith(sceneA, sceneB);
+    expect(sceneA.onDeactivate).toHaveBeenCalledWith({
+      engine,
+      previousScene: sceneA,
+      nextScene: sceneB
+    });
+    expect(sceneB.onActivate).toHaveBeenCalledWith({
+      engine,
+      previousScene: sceneA,
+      nextScene: sceneB,
+      data: { foo: 'bar'}
+    });
   });
 
   it('fires initialize before activate', (done) => {
@@ -343,6 +365,8 @@ describe('A scene', () => {
 
     engine.goToScene('root');
     engine.start();
+    const clock = engine.clock as ex.TestClock;
+    clock.step(100);
   });
 
   it('fires initialize before actor initialize before activate', (done) => {
@@ -372,10 +396,13 @@ describe('A scene', () => {
     scene.add(actor);
     engine.goToScene('root');
     engine.start();
+    const clock = engine.clock as ex.TestClock;
+    clock.step(100);
   });
 
   it('can only be initialized once', () => {
     engine = TestUtils.engine({ width: 100, height: 100 });
+    const clock = engine.clock as ex.TestClock;
     scene = new ex.Scene();
 
     engine.removeScene('root');
@@ -388,6 +415,7 @@ describe('A scene', () => {
 
     engine.goToScene('root');
     engine.start();
+    clock.step(1);
     scene.update(engine, 100);
     scene.update(engine, 100);
     scene._initialize(engine);
@@ -399,6 +427,7 @@ describe('A scene', () => {
 
   it('should initialize before actors in the scene', () => {
     engine = TestUtils.engine({ width: 100, height: 100 });
+    const clock = engine.clock as ex.TestClock;
     scene = new ex.Scene();
 
     engine.removeScene('root');
@@ -416,6 +445,7 @@ describe('A scene', () => {
 
     engine.goToScene('root');
     engine.start();
+    clock.step(1);
     scene.update(engine, 100);
   });
 
@@ -494,6 +524,20 @@ describe('A scene', () => {
     expect(scene.actors.length).toBe(1);
   });
 
+  it('can have timers added and retrieved', () => {
+    const timer = new ex.Timer({
+      repeats: true,
+      interval: 1000
+    });
+    const timer2 = new ex.Timer({
+      repeats: true,
+      interval: 1000
+    });
+    scene.add(timer);
+    scene.add(timer2);
+    expect(scene.timers).toEqual([timer, timer2]);
+  });
+
   it('will update Actors that were added in a Timer callback', () => {
     let updated = false;
     let initialized = false;
@@ -523,7 +567,7 @@ describe('A scene', () => {
     scene.add(timer);
     timer.start();
     scene.update(engine, 11);
-    scene.draw(engine.ctx, 11);
+    scene.draw(engine.graphicsContext, 11);
 
     expect(scene.actors.indexOf(actor)).toBeGreaterThan(-1, 'Actor was not added to scene');
     expect(initialized).toBe(true, 'Actor was not initialized after timer callback');
@@ -559,7 +603,7 @@ describe('A scene', () => {
     scene.add(timer);
     timer.start();
     scene.update(engine, 11);
-    scene.draw(engine.ctx, 11);
+    scene.draw(engine.graphicsContext, 11);
 
     expect(scene.actors.indexOf(actor)).toBeGreaterThan(-1, 'ScreenElement was not added to scene');
     expect(initialized).toBe(true, 'ScreenElement was not initialized after timer callback');
@@ -599,7 +643,7 @@ describe('A scene', () => {
 
   it('will update TileMaps that were added in a Timer callback', () => {
     let updated = false;
-    const tilemap = new ex.TileMap(0, 0, 1, 1, 1, 1);
+    const tilemap = new ex.TileMap({ pos: ex.vec(0, 0), tileWidth: 1, tileHeight: 1, columns: 1, rows: 1});
     tilemap.on('postupdate', () => {
       updated = true;
     });
@@ -619,7 +663,7 @@ describe('A scene', () => {
     scene.add(timer);
     timer.start();
     scene.update(engine, 11);
-    scene.draw(engine.ctx, 11);
+    scene.draw(engine.graphicsContext, 11);
 
     expect(scene.tileMaps.indexOf(tilemap)).toBeGreaterThan(-1, 'TileMap was not added to scene');
     expect(updated).toBe(true, 'TileMap was not updated after timer callback');
@@ -662,6 +706,7 @@ describe('A scene', () => {
     });
 
     it('can have onInitialize overridden safely', () => {
+      const clock = engine.clock as ex.TestClock;
       let initCalled = false;
       scene.onInitialize = (engine) => {
         expect(engine).not.toBe(null);
@@ -673,8 +718,9 @@ describe('A scene', () => {
 
       spyOn(scene, 'onInitialize').and.callThrough();
 
+      TestUtils.runToReady(engine);
       engine.goToScene('root');
-      (<any>engine)._update(100);
+      clock.step(100);
 
       expect(initCalled).toBe(true);
       expect(scene.onInitialize).toHaveBeenCalledTimes(1);
@@ -716,6 +762,7 @@ describe('A scene', () => {
 
     it('can have onPreDraw overridden safely', () => {
       scene._initialize(engine);
+      engine.screen.setCurrentCamera(engine.currentScene.camera);
       scene.onPreDraw = (ctx, delta) => {
         expect(<any>ctx).not.toBe(null);
         expect(delta).toBe(100);
@@ -724,8 +771,8 @@ describe('A scene', () => {
       spyOn(scene, 'onPreDraw').and.callThrough();
       spyOn(scene, '_predraw').and.callThrough();
 
-      scene.draw(engine.ctx, 100);
-      scene.draw(engine.ctx, 100);
+      scene.draw(engine.graphicsContext, 100);
+      scene.draw(engine.graphicsContext, 100);
 
       expect(scene._predraw).toHaveBeenCalledTimes(2);
       expect(scene.onPreDraw).toHaveBeenCalledTimes(2);
@@ -733,6 +780,7 @@ describe('A scene', () => {
 
     it('can have onPostDraw overridden safely', () => {
       scene._initialize(engine);
+      engine.screen.setCurrentCamera(engine.currentScene.camera);
       scene.onPostDraw = (ctx, delta) => {
         expect(<any>ctx).not.toBe(null);
         expect(delta).toBe(100);
@@ -741,8 +789,8 @@ describe('A scene', () => {
       spyOn(scene, 'onPostDraw').and.callThrough();
       spyOn(scene, '_postdraw').and.callThrough();
 
-      scene.draw(engine.ctx, 100);
-      scene.draw(engine.ctx, 100);
+      scene.draw(engine.graphicsContext, 100);
+      scene.draw(engine.graphicsContext, 100);
 
       expect(scene._postdraw).toHaveBeenCalledTimes(2);
       expect(scene.onPostDraw).toHaveBeenCalledTimes(2);

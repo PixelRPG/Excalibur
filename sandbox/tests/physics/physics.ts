@@ -2,7 +2,8 @@
 
 var game = new ex.Engine({
   width: 600,
-  height: 400
+  height: 400,
+  fixedUpdateFps: 60
 });
 game.backgroundColor = ex.Color.Black;
 
@@ -19,37 +20,11 @@ ex.Physics.bodiesCanSleepByDefault = true;
 ex.Physics.gravity = ex.vec(0, 100);
 
 
-var gui = new dat.GUI({name: 'Excalibur'});
-var folder = gui.addFolder('Physics Flags');
-folder.add(ex.Physics, 'enabled')
-folder.add(ex.Physics, 'bodiesCanSleepByDefault')
-folder.add(ex.Physics, 'warmStart')
-folder.add(ex.Physics, 'sleepEpsilon', 0.01, 2, .05);
-folder.add(ex.Physics, 'wakeThreshold', 0.01, 2, .05);
-folder.add(ex.Physics, 'positionIterations', 0, 30, 1);
-folder.add(ex.Physics, 'velocityIterations', 0, 30, 1);
-
-var stats = new Stats();
-stats.showPanel(0);
-document.body.appendChild(stats.dom);
-
-var bootstrap = (game: ex.Engine) => {
-  gui.add({toggleDebug: game.isDebug}, 'toggleDebug').onChange(() => game.toggleDebug());
-  game.on("preframe", () =>  {
-      stats.begin();
-  });
-  game.on('postframe', () =>{
-      stats.end();
-  });
-
-  return { stats, gui }
-}
-
 
 var globalRotation = 0;
 function spawnBlock(x: number, y: number) {
-  var width = ex.Util.randomInRange(20, 100);
-  var color = new ex.Color(ex.Util.randomIntInRange(0, 255), ex.Util.randomIntInRange(0, 255), 255);
+  var width = ex.randomInRange(20, 100);
+  var color = new ex.Color(ex.randomIntInRange(0, 255), ex.randomIntInRange(0, 255), 255);
   var block = new ex.Actor({
     pos: ex.vec(x, y),
     color,
@@ -58,6 +33,8 @@ function spawnBlock(x: number, y: number) {
     height: width + 100
   });
   block.rotation = globalRotation;
+  block.body.bounciness = 0;
+  // block.body.limitDegreeOfFreedom.push(ex.DegreeOfFreedom.Rotation);
   // block.body.addBoxCollider(width + 200, width / 2);
   // block.collider.useBoxCollider(width / 2, width + 100);
   block.body.events.on('contactstart', (e) => {
@@ -78,16 +55,18 @@ function spawnBlock(x: number, y: number) {
 }
 
 function spawnCircle(x: number, y: number) {
-  var width = ex.Util.randomInRange(20, 100);
-  var color = new ex.Color(255, ex.Util.randomIntInRange(0, 255), ex.Util.randomIntInRange(0, 255));
+  var width = ex.randomInRange(20, 100);
+  var color = new ex.Color(255, ex.randomIntInRange(0, 255), ex.randomIntInRange(0, 255));
   var circle = new ex.Actor({x: x, y: y, radius: width / 2, color: color});
   // circle.rx = ex.Util.randomInRange(-0.5, 0.5);
-  circle.angularVelocity = 1;
-  circle.vel.setTo(0, 300);
+  // circle.angularVelocity = 1;
+  // circle.vel.setTo(0, 300);
   // circle.collider.useCircleCollider(width / 2);
   circle.body.collisionType = ex.CollisionType.Active;
-  circle.draw = (ctx: CanvasRenderingContext2D) => {
-    ex.Util.DrawUtil.circle(ctx, 0, 0, width / 2, color, color);
+  circle.body.bounciness = 1.0;
+  circle.graphics.onPostDraw = (ctx: ex.ExcaliburGraphicsContext) => {
+    ctx.drawCircle(ex.vec(0, 0), width / 2, color);
+    // ex.Util.DrawUtil.circle(ctx, 0, 0, width / 2, color, color);
   };
   circle.body.events.on('contactstart', (e) => {
     // console.count('contactstart');
@@ -98,11 +77,17 @@ function spawnCircle(x: number, y: number) {
   game.add(circle);
 }
 
-// var edge = new ex.Actor(200, 300, 5, 5, ex.Color.Blue.clone());
-// edge.body.collisionType = ex.CollisionType.Fixed;
-// edge.collider.useEdgeCollider(new ex.Vector(0, 0), new ex.Vector(200, 0));
+var edge = new ex.Actor({
+  x: 200,
+  y:300,
+  width: 5,
+  height: 5, 
+  color: ex.Color.Blue.clone()
+});
+edge.body.collisionType = ex.CollisionType.Fixed;
+edge.collider.useEdgeCollider(new ex.Vector(0, 0), new ex.Vector(200, 0));
 // // edge.rx = .4;
-// game.add(edge);
+game.add(edge);
 
 
 // var solid = new ex.Actor(300, 380, 100, 100, ex.Color.Azure.clone());
@@ -114,6 +99,7 @@ function spawnCircle(x: number, y: number) {
 
 var ground = new ex.Actor({x: 300, y: 380, width: 600, height: 10, color: ex.Color.Azure.clone()});
 ground.body.collisionType = ex.CollisionType.Fixed;
+ground.body.bounciness = 0.0;
 ground.collider.useBoxCollider(600, 10); // optional
 game.add(ground);
 
@@ -142,8 +128,10 @@ game.input.keyboard.on('down', (evt: ex.Input.KeyEvent) => {
 });
 
 game.input.pointers.primary.on('down', (evt: ex.Input.PointerEvent) => {
-  spawnBlock(evt.worldPos.x, evt.worldPos.y);
+  // spawnBlock(evt.worldPos.x, evt.worldPos.y);
+  spawnCircle(evt.worldPos.x, evt.worldPos.y);
 });
 
 game.start();
-bootstrap(game);
+//@ts-ignore
+// const dev = new ex.DevTools.DevTool(game);

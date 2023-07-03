@@ -12,21 +12,87 @@ import { Collider } from '../Colliders/Collider';
 import { CollisionContact } from '../Detection/CollisionContact';
 import { BodyComponent } from '../BodyComponent';
 import { CompositeCollider } from '../Colliders/CompositeCollider';
-import { ExcaliburGraphicsContext } from '../..';
+import { CollisionGroup } from '../Group/CollisionGroup';
+import { ExcaliburGraphicsContext } from '../../Graphics/Context/ExcaliburGraphicsContext';
+
+export interface RayCastHit {
+  /**
+   * The distance along the ray cast in pixels that a hit was detected
+   */
+  distance: number;
+  /**
+   * Reference to the collider that was hit
+   */
+  collider: Collider;
+  /**
+   * Reference to the body that was hit
+   */
+  body: BodyComponent;
+  /**
+   * World space point of the hit
+   */
+  point: Vector;
+}
+
+export interface RayCastOptions {
+  /**
+   * Optionally specify the maximum distance in pixels to ray cast, default is Infinity
+   */
+  maxDistance?: number;
+  /**
+   * Optionally specify a collision group to consider in the ray cast, default is All
+   */
+  collisionGroup?: CollisionGroup;
+  /**
+   * Optionally specify to search for all colliders that intersect the ray cast, not just the first which is the default
+   */
+  searchAllColliders?: boolean;
+}
 
 /**
- * Responsible for performing the collision broadphase (locating potential colllisions) and
+ * Responsible for performing the collision broadphase (locating potential collisions) and
  * the narrowphase (actual collision contacts)
  */
 export class DynamicTreeCollisionProcessor implements CollisionProcessor {
   private _dynamicCollisionTree = new DynamicTree<Collider>();
-  private _collisions = new Set<string>();
+  private _pairs = new Set<string>();
 
   private _collisionPairCache: Pair[] = [];
   private _colliders: Collider[] = [];
 
   public getColliders(): readonly Collider[] {
     return this._colliders;
+  }
+
+  public rayCast(ray: Ray, options?: RayCastOptions): RayCastHit[] {
+    const results: RayCastHit[] = [];
+    const maxDistance = options?.maxDistance ?? Infinity;
+    const collisionGroup = options?.collisionGroup ?? CollisionGroup.All;
+    const searchAllColliders = options?.searchAllColliders ?? false;
+    this._dynamicCollisionTree.rayCastQuery(ray, maxDistance, (collider) => {
+      const owner = collider.owner;
+      const maybeBody = owner.get(BodyComponent);
+      // Early exit if not the right group
+      if (collisionGroup.mask !== CollisionGroup.All.mask && maybeBody?.group?.mask !== collisionGroup.mask) {
+        return false;
+      }
+
+      const hit = collider.rayCast(ray, maxDistance);
+      if (hit) {
+        results.push({
+          distance: hit.sub(ray.pos).distance(),
+          point: hit,
+          collider: collider,
+          body: maybeBody
+        });
+        if (!searchAllColliders) {
+          // returning true exits the search
+          return true;
+        }
+      }
+      return false;
+    });
+    return results;
   }
 
   /**
@@ -77,35 +143,14 @@ export class DynamicTreeCollisionProcessor implements CollisionProcessor {
     }
   }
 
-  private _shouldGenerateCollisionPair(colliderA: Collider, colliderB: Collider) {
-    // if the collision pair must be 2 separate colliders
-    // Also separate owners for composite colliders
-    if (
-      (colliderA.id !== null &&
-      colliderB.id !== null &&
-      colliderA.id === colliderB.id) ||
-      (colliderA.owner !== null &&
-       colliderB.owner !== null &&
-       colliderA.owner === colliderB.owner)) {
-      return false;
-    }
-
+  private _pairExists(colliderA: Collider, colliderB: Collider) {
     // if the collision pair has been calculated already short circuit
     const hash = Pair.calculatePairHash(colliderA.id, colliderB.id);
-    if (this._collisions.has(hash)) {
-      return false; // pair exists easy exit return false
-    }
-
-    // if the pair has a member with zero dimension
-    if (colliderA.localBounds.hasZeroDimensions() || colliderB.localBounds.hasZeroDimensions()) {
-      return false;
-    }
-
-    return Pair.canCollide(colliderA, colliderB);
+    return this._pairs.has(hash);
   }
 
   /**
-   * Detects potential collision pairs in a broadphase approach with the dynamic aabb tree strategy
+   * Detects potential collision pairs in a broadphase approach with the dynamic AABB tree strategy
    */
   public broadphase(targets: Collider[], delta: number, stats?: FrameStats): Pair[] {
     const seconds = delta / 1000;
@@ -118,7 +163,7 @@ export class DynamicTreeCollisionProcessor implements CollisionProcessor {
 
     // clear old list of collision pairs
     this._collisionPairCache = [];
-    this._collisions.clear();
+    this._pairs.clear();
 
     // check for normal collision pairs
     let collider: Collider;
@@ -126,9 +171,9 @@ export class DynamicTreeCollisionProcessor implements CollisionProcessor {
       collider = potentialColliders[j];
       // Query the collision tree for potential colliders
       this._dynamicCollisionTree.query(collider, (other: Collider) => {
-        if (this._shouldGenerateCollisionPair(collider, other)) {
+        if (!this._pairExists(collider, other) && Pair.canCollide(collider, other)) {
           const pair = new Pair(collider, other);
-          this._collisions.add(pair.id);
+          this._pairs.add(pair.id);
           this._collisionPairCache.push(pair);
         }
         // Always return false, to query whole tree. Returning true in the query method stops searching
@@ -163,7 +208,7 @@ export class DynamicTreeCollisionProcessor implements CollisionProcessor {
 
           // start with the oldPos because the integration for actors has already happened
           // objects resting on a surface may be slightly penetrating in the current position
-          const updateVec = body.pos.sub(body.oldPos);
+          const updateVec = body.globalPos.sub(body.oldPos);
           const centerPoint = collider.center;
           const furthestPoint = collider.getFurthestPoint(body.vel);
           const origin: Vector = furthestPoint.sub(updateVec);
@@ -175,7 +220,7 @@ export class DynamicTreeCollisionProcessor implements CollisionProcessor {
           let minCollider: Collider;
           let minTranslate: Vector = new Vector(Infinity, Infinity);
           this._dynamicCollisionTree.rayCastQuery(ray, updateDistance + Physics.surfaceEpsilon * 2, (other: Collider) => {
-            if (collider !== other && Pair.canCollide(collider, other)) {
+            if (!this._pairExists(collider, other) && Pair.canCollide(collider, other)) {
               const hitPoint = other.rayCast(ray, updateDistance + Physics.surfaceEpsilon * 10);
               if (hitPoint) {
                 const translate = hitPoint.sub(origin);
@@ -190,18 +235,18 @@ export class DynamicTreeCollisionProcessor implements CollisionProcessor {
 
           if (minCollider && Vector.isValid(minTranslate)) {
             const pair = new Pair(collider, minCollider);
-            if (!this._collisions.has(pair.id)) {
-              this._collisions.add(pair.id);
+            if (!this._pairs.has(pair.id)) {
+              this._pairs.add(pair.id);
               this._collisionPairCache.push(pair);
             }
             // move the fast moving object to the other body
             // need to push into the surface by ex.Physics.surfaceEpsilon
             const shift = centerPoint.sub(furthestPoint);
-            body.pos = origin
+            body.globalPos = origin
               .add(shift)
               .add(minTranslate)
               .add(ray.dir.scale(10 * Physics.surfaceEpsilon)); // needed to push the shape slightly into contact
-            collider.update(body.transform);
+            collider.update(body.transform.get());
 
             if (stats) {
               stats.physics.fastBodyCollisions++;

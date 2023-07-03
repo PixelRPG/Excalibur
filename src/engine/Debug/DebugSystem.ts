@@ -3,11 +3,14 @@ import { Scene } from '../Scene';
 import { Camera } from '../Camera';
 import { MotionComponent } from '../EntityComponentSystem/Components/MotionComponent';
 import { ColliderComponent } from '../Collision/ColliderComponent';
-import { CoordPlane, Entity, TransformComponent } from '../EntityComponentSystem';
+import { Entity, TransformComponent } from '../EntityComponentSystem';
 import { System, SystemType } from '../EntityComponentSystem/System';
 import { ExcaliburGraphicsContext } from '../Graphics/Context/ExcaliburGraphicsContext';
 import { vec, Vector } from '../Math/vector';
-import { BodyComponent, CollisionSystem, CompositeCollider, GraphicsComponent, Particle, Util } from '..';
+import { toDegrees } from '../Math/util';
+import { BodyComponent, CollisionSystem, CompositeCollider, GraphicsComponent, Particle } from '..';
+import { DebugGraphicsComponent } from '../Graphics/DebugGraphicsComponent';
+import { CoordPlane } from '../Math/coord-plane';
 
 export class DebugSystem extends System<TransformComponent> {
   public readonly types = ['ex.transform'] as const;
@@ -50,6 +53,8 @@ export class DebugSystem extends System<TransformComponent> {
     let graphics: GraphicsComponent;
     const graphicsSettings = this._engine.debug.graphics;
 
+    let debugDraw: DebugGraphicsComponent;
+
     let body: BodyComponent;
     const bodySettings = this._engine.debug.body;
 
@@ -90,13 +95,19 @@ export class DebugSystem extends System<TransformComponent> {
       this._applyTransform(entity);
       if (tx) {
         if (txSettings.showAll || txSettings.showPosition) {
-          this._graphicsContext.debug.drawPoint(Vector.Zero, { size: 2, color: txSettings.positionColor });
+          this._graphicsContext.debug.drawPoint(Vector.Zero, { size: 4, color: txSettings.positionColor });
+        }
+        if (txSettings.showAll || txSettings.showPositionLabel) {
           this._graphicsContext.debug.drawText(`pos${tx.pos.toString(2)}`, cursor);
+          cursor = cursor.add(lineHeight);
+        }
+        if (txSettings.showAll || txSettings.showZIndex) {
+          this._graphicsContext.debug.drawText(`z(${tx.z.toFixed(1)})`, cursor);
           cursor = cursor.add(lineHeight);
         }
 
         if (entitySettings.showAll || entitySettings.showId) {
-          this._graphicsContext.debug.drawText(`id(${id}) ${tx.parent ? 'child of id(' + tx.parent?.owner?.id + ')' : ''}`, cursor);
+          this._graphicsContext.debug.drawText(`id(${id}) ${entity.parent ? 'child of id(' + entity.parent?.id + ')' : ''}`, cursor);
           cursor = cursor.add(lineHeight);
         }
 
@@ -112,7 +123,7 @@ export class DebugSystem extends System<TransformComponent> {
             txSettings.rotationColor,
             2
           );
-          this._graphicsContext.debug.drawText(`rot deg(${Util.toDegrees(tx.rotation).toFixed(2)})`, cursor);
+          this._graphicsContext.debug.drawText(`rot deg(${toDegrees(tx.rotation).toFixed(2)})`, cursor);
           cursor = cursor.add(lineHeight);
         }
 
@@ -126,6 +137,18 @@ export class DebugSystem extends System<TransformComponent> {
         if (graphicsSettings.showAll || graphicsSettings.showBounds) {
           const bounds = graphics.localBounds;
           bounds.draw(this._graphicsContext, graphicsSettings.boundsColor);
+        }
+      }
+
+      debugDraw = entity.get(DebugGraphicsComponent);
+      if (debugDraw) {
+        if (!debugDraw.useTransform) {
+          this._graphicsContext.restore();
+        }
+        debugDraw.draw(this._graphicsContext);
+        if (!debugDraw.useTransform) {
+          this._graphicsContext.save();
+          this._applyTransform(entity);
         }
       }
 

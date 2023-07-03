@@ -1,9 +1,7 @@
 import { Graphic, GraphicOptions } from './Graphic';
 import { ImageSource } from './ImageSource';
 import { ExcaliburGraphicsContext } from './Context/ExcaliburGraphicsContext';
-
-import { Sprite as LegacySprite } from '../Drawing/Sprite';
-import { Texture } from '../Drawing/Texture';
+import { Logger } from '../Util/Log';
 
 export type SourceView = { x: number; y: number; width: number; height: number };
 export type DestinationSize = { width: number; height: number };
@@ -24,9 +22,11 @@ export interface SpriteOptions {
 }
 
 export class Sprite extends Graphic {
+  private _logger = Logger.getInstance();
   public image: ImageSource;
   public sourceView: SourceView;
   public destSize: DestinationSize;
+  private _dirty = true;
 
   public static from(image: ImageSource): Sprite {
     return new Sprite({
@@ -46,20 +46,22 @@ export class Sprite extends Graphic {
     });
   }
 
-  public get width(): number {
-    return this.destSize.width;
+  public override get width(): number {
+    return Math.abs(this.destSize.width * this.scale.x);
   }
 
-  public get height(): number {
-    return this.destSize.height;
+  public override get height(): number {
+    return Math.abs(this.destSize.height * this.scale.y);
   }
 
-  public set width(newWidth: number) {
+  public override set width(newWidth: number) {
+    newWidth /= Math.abs(this.scale.x);
     this.destSize.width = newWidth;
     super.width = Math.ceil(this.destSize.width);
   }
 
-  public set height(newHeight: number) {
+  public override set height(newHeight: number) {
+    newHeight /= Math.abs(this.scale.y);
     this.destSize.height = newHeight;
     super.height = Math.ceil(this.destSize.height);
   }
@@ -75,20 +77,21 @@ export class Sprite extends Graphic {
     this.destSize.width = this.destSize?.width || this.sourceView?.width || nativeWidth;
     this.destSize.height = this.destSize?.height || this.sourceView?.height || nativeHeight;
 
-    this.width = Math.ceil(this.destSize.width);
-    this.height = Math.ceil(this.destSize.height);
+    this.width = Math.ceil(this.destSize.width) * this.scale.x;
+    this.height = Math.ceil(this.destSize.height) * this.scale.y;
   }
 
   protected _preDraw(ex: ExcaliburGraphicsContext, x: number, y: number): void {
-    if (this.image.isLoaded()) {
+    if (this.image.isLoaded() && this._dirty) {
+      this._dirty = false;
       this._updateSpriteDimensions();
     }
     super._preDraw(ex, x, y);
   }
 
+  private _logNotLoadedWarning = false;
   public _drawImage(ex: ExcaliburGraphicsContext, x: number, y: number): void {
     if (this.image.isLoaded()) {
-      this._updateSpriteDimensions();
       ex.drawImage(
         this.image.image,
         this.sourceView.x,
@@ -100,39 +103,16 @@ export class Sprite extends Graphic {
         this.destSize.width,
         this.destSize.height
       );
-    }
-  }
-
-  /**
-   * Create a ImageSource from legacy texture
-   * @param sprite
-   */
-  public static fromLegacySprite(sprite: LegacySprite): Sprite {
-    const tex = sprite.texture;
-    const image = ImageSource.fromLegacyTexture(tex);
-    return new Sprite({
-      image,
-      sourceView: {
-        x: sprite.x,
-        y: sprite.y,
-        width: sprite.width,
-        height: sprite.height
+    } else {
+      if (!this._logNotLoadedWarning) {
+        this._logger.warn(
+          `ImageSource ${this.image.path}` +
+          ` is not yet loaded and won't be drawn. Please call .load() or include in a Loader.\n\n` +
+          `Read https://excaliburjs.com/docs/imagesource for more information.`
+        );
       }
-    });
-  }
-
-  /**
-   * Converts a sprite to a Legacy sprite
-   * @deprecated
-   * @param sprite
-   * @returns LegacyDrawing.Sprite
-   */
-  public static toLegacySprite(sprite: Sprite): LegacySprite {
-    const image = sprite.image;
-    const tex = new Texture(image.path);
-    tex.data = image.image;
-
-    return new LegacySprite(tex, sprite.sourceView.x, sprite.sourceView.y, sprite.sourceView.width, sprite.sourceView.height);
+      this._logNotLoadedWarning = true;
+    }
   }
 
   public clone(): Sprite {

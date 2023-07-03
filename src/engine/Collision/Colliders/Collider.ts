@@ -2,14 +2,15 @@ import { Color } from '../../Color';
 import { CollisionContact } from '../Detection/CollisionContact';
 import { BoundingBox } from '../BoundingBox';
 import { Projection } from '../../Math/projection';
-import { Line } from '../../Math/line';
+import { LineSegment } from '../../Math/line-segment';
 import { Vector } from '../../Math/vector';
 import { Ray } from '../../Math/ray';
 import { Clonable } from '../../Interfaces/Clonable';
-import { Entity, Transform } from '../../EntityComponentSystem';
+import { Entity } from '../../EntityComponentSystem';
 import { createId, Id } from '../../Id';
 import { EventDispatcher } from '../../EventDispatcher';
 import { ExcaliburGraphicsContext } from '../../Graphics/Context/ExcaliburGraphicsContext';
+import { Transform } from '../../Math/transform';
 
 /**
  * A collision collider specifies the geometry that can detect when other collision colliders intersect
@@ -18,6 +19,12 @@ import { ExcaliburGraphicsContext } from '../../Graphics/Context/ExcaliburGraphi
 export abstract class Collider implements Clonable<Collider> {
   private static _ID = 0;
   public readonly id: Id<'collider'> = createId('collider', Collider._ID++);
+  /**
+   * Excalibur uses this to signal to the [[CollisionSystem]] this is part of a composite collider
+   * @internal
+   * @hidden
+   */
+  public __compositeColliderId: Id<'collider'> | null = null;
   public events: EventDispatcher<Collider> = new EventDispatcher<Collider>();
 
   /**
@@ -83,7 +90,7 @@ export abstract class Collider implements Clonable<Collider> {
    * Returns the closest line between the surfaces this collider and another
    * @param collider
    */
-  abstract getClosestLineBetween(collider: Collider): Line;
+  abstract getClosestLineBetween(collider: Collider): LineSegment;
 
   /**
    * Return wether the collider contains a point inclusive to it's border
@@ -105,20 +112,8 @@ export abstract class Collider implements Clonable<Collider> {
    */
   abstract update(transform: Transform): void;
 
-  /**
-   * Draw the collider
-   * @deprecated Will be removed in 0.26.0
-   * @param ctx
-   * @param color
-   */
-  abstract draw(ctx: CanvasRenderingContext2D, color?: Color, pos?: Vector): void;
 
   abstract debug(ex: ExcaliburGraphicsContext, color: Color): void;
-  /**
-   * Draw any debug information
-   * @deprecated Will be removed in 0.26.0
-   */
-  abstract debugDraw(ctx: CanvasRenderingContext2D, color: Color): void;
 
   abstract clone(): Collider;
 }

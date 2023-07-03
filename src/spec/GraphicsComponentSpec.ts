@@ -22,6 +22,61 @@ describe('A Graphics ECS Component', () => {
     expect(sut.graphics).toEqual({});
   });
 
+  it('can be cloned', () => {
+    const graphics = new ex.GraphicsComponent();
+    const owner = new ex.Entity([graphics]);
+    const rect = new ex.Rectangle({
+      width: 40,
+      height: 40,
+      color: ex.Color.Red
+    });
+    const rect2 = new ex.Rectangle({
+      width: 40,
+      height: 40,
+      color: ex.Color.Blue
+    });
+    graphics.anchor = ex.vec(0, 0);
+    graphics.offset = ex.vec(1, 1);
+    graphics.opacity = .2;
+    graphics.visible = false;
+    graphics.copyGraphics = true;
+    graphics.onPreDraw = () => { /* do nothing */ };
+    graphics.onPostDraw = () => { /* do nothing */};
+    graphics.use(rect);
+    graphics.layers.create({name: 'background', order: -1}).use(rect2);
+
+    const clone = owner.clone();
+
+    const sut = clone.get(ex.GraphicsComponent);
+
+    // Should be same value
+    expect(sut.anchor).toBeVector(graphics.anchor);
+    expect(sut.offset).toBeVector(graphics.offset);
+    expect(sut.opacity).toEqual(graphics.opacity);
+    expect(sut.visible).toEqual(graphics.visible);
+    expect(sut.copyGraphics).toEqual(graphics.copyGraphics);
+    expect(sut.onPreDraw).toBe(sut.onPreDraw);
+    expect(sut.onPostDraw).toBe(sut.onPostDraw);
+    expect(sut.layers.get().length).toEqual(graphics.layers.get().length);
+    expect((sut.layers.get('background').graphics[0].graphic as ex.Rectangle).color)
+      .toEqual((graphics.layers.get('background').graphics[0].graphic as ex.Rectangle).color);
+    expect((sut.layers.get('background').graphics[0].graphic as ex.Rectangle).width)
+      .toEqual((graphics.layers.get('background').graphics[0].graphic as ex.Rectangle).width);
+    expect((sut.layers.get('background').graphics[0].graphic as ex.Rectangle).height)
+      .toEqual((graphics.layers.get('background').graphics[0].graphic as ex.Rectangle).height);
+    expect(sut.layers.get('background').graphics[0].options).toEqual(graphics.layers.get('background').graphics[0].options);
+
+    // Should be new refs
+    expect(sut).not.toBe(graphics);
+    expect(sut.offset).not.toBe(graphics.offset);
+    expect(sut.anchor).not.toBe(graphics.anchor);
+    expect(sut.layers.get()).not.toBe(graphics.layers.get());
+    expect(sut.layers.get('background').graphics).not.toBe(graphics.layers.get('background').graphics);
+
+    // Should have a new owner
+    expect(sut.owner).toBe(clone);
+  });
+
   it('can be constructed with optional params', () => {
     const rect = new ex.Rectangle({
       width: 40,
@@ -254,5 +309,129 @@ describe('A Graphics ECS Component', () => {
     const layers = sut.layers.currentKeys();
     expect(typeof layers).toBe('object');
     expect(layers.length).toBe(2);
+  });
+
+  it('correctly calculates graphics bounds (rasters)', () => {
+    const sut = new ex.GraphicsComponent();
+    const rec = new ex.Rectangle({
+      width: 40,
+      height: 40
+    });
+    rec.scale = ex.vec(3, 3);
+    sut.add(rec);
+
+    const rec2 = new ex.Rectangle({
+      width: 200,
+      height: 10
+    });
+    rec2.scale = ex.vec(2, 2);
+    sut.add(rec2);
+
+    expect(sut.localBounds).toEqual(new ex.BoundingBox({
+      left: -200,
+      right: 200,
+      top: -60,
+      bottom: 60
+    }));
+  });
+
+  it('correctly calculates graphics bounds (rasters + offset)', () => {
+    const sut = new ex.GraphicsComponent();
+    const rec = new ex.Rectangle({
+      width: 40,
+      height: 40
+    });
+    rec.scale = ex.vec(3, 3);
+    sut.add(rec);
+
+    const rec2 = new ex.Rectangle({
+      width: 200,
+      height: 10
+    });
+    rec2.scale = ex.vec(2, 2);
+    sut.show(rec2, { offset: ex.vec(100, 0)});
+
+    expect(sut.localBounds).toEqual(new ex.BoundingBox({
+      left: -100,
+      right: 300,
+      top: -60,
+      bottom: 60
+    }));
+  });
+
+  it('correctly calculates graphics bounds (rasters + anchor)', () => {
+    const sut = new ex.GraphicsComponent();
+    const rec = new ex.Rectangle({
+      width: 40,
+      height: 40
+    });
+    rec.scale = ex.vec(3, 3);
+    sut.add(rec);
+
+    const rec2 = new ex.Rectangle({
+      width: 200,
+      height: 10
+    });
+    rec2.scale = ex.vec(2, 2);
+    sut.show(rec2, { anchor: ex.vec(1, 1)});
+
+    expect(sut.localBounds).toEqual(new ex.BoundingBox({
+      left: -400,
+      right: 60,
+      top: -60,
+      bottom: 60
+    }));
+  });
+
+  it('correctly calculates graphics bounds (sprite)', () => {
+    const sut = new ex.GraphicsComponent();
+    const image = new ex.ImageSource('src/spec/images/GraphicsTextSpec/spritefont.png');
+    const sprite = new ex.Sprite({
+      image,
+      sourceView: {
+        x: 0,
+        y: 0,
+        width: 16,
+        height: 16
+      },
+      destSize: {
+        width: 100,
+        height: 100
+      }
+    });
+    sprite.scale = ex.vec(4, 4);
+    sut.add(sprite);
+
+    expect(sut.localBounds).toEqual(new ex.BoundingBox({
+      left: -200,
+      right: 200,
+      top: -200,
+      bottom: 200
+    }));
+  });
+
+  it('correctly calculates graphics bounds (animation)', () => {
+    const sut = new ex.GraphicsComponent();
+    const sourceImage = new ex.ImageSource('some/image.png');
+    const ss = ex.SpriteSheet.fromImageSource({
+      image: sourceImage,
+      grid: {
+        spriteWidth: 10,
+        spriteHeight: 10,
+        rows: 10,
+        columns: 10
+      }
+    });
+    const anim = ex.Animation.fromSpriteSheet(ss, [0, 1, 2, 3], 100, ex.AnimationStrategy.Freeze);
+
+    anim.scale = ex.vec(4, 4);
+    sut.add(anim);
+
+    expect(sut.localBounds).toEqual(new ex.BoundingBox({
+      left: -20,
+      right: 20,
+      top: -20,
+      bottom: 20
+    }));
   });
 });

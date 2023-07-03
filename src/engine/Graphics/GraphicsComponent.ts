@@ -99,6 +99,7 @@ export class GraphicsLayer {
         gfx = this._graphics.getGraphic(nameOrGraphic);
       }
       this.graphics = this.graphics.filter((g) => g.graphic !== gfx);
+      this._graphics.recalculateBounds();
     }
   }
 
@@ -125,6 +126,7 @@ export class GraphicsLayer {
     }
     if (gfx) {
       this.graphics.push({ graphic: gfx, options });
+      this._graphics.recalculateBounds();
       return gfx as T;
     } else {
       return null;
@@ -173,6 +175,12 @@ export class GraphicsLayer {
 
   public get currentKeys(): string {
     return this.name ?? 'anonymous';
+  }
+
+  public clone(graphicsComponent: GraphicsComponent): GraphicsLayer {
+    const layer = new GraphicsLayer({...this._options}, graphicsComponent);
+    layer.graphics = [...this.graphics.map(g => ({graphic: g.graphic.clone(), options: {...g.options}}))];
+    return layer;
   }
 }
 
@@ -230,6 +238,18 @@ export class GraphicsLayers {
 
   private _getLayer(name: string): GraphicsLayer | undefined {
     return this._layerMap[name];
+  }
+
+  public clone(graphicsComponent: GraphicsComponent): GraphicsLayers {
+    const layers = new GraphicsLayers(graphicsComponent);
+    layers._layerMap = {};
+    layers._layers = [];
+    layers.default = this.default.clone(graphicsComponent);
+    layers._maybeAddLayer(layers.default);
+    // Remove the default layer out of the clone
+    const clonedLayers = this._layers.filter(l => l.name !== 'default').map(l => l.clone(graphicsComponent));
+    clonedLayers.forEach(layer => layers._maybeAddLayer(layer));
+    return layers;
   }
 }
 
@@ -356,7 +376,9 @@ export class GraphicsComponent extends Component<'ex.graphics'> {
    * Show a graphic by name on the **default** layer, returns the new [[Graphic]]
    */
   public show<T extends Graphic = Graphic>(nameOrGraphic: string | T, options?: GraphicsShowOptions): T {
-    return this.layers.default.show<T>(nameOrGraphic, options);
+    const result = this.layers.default.show<T>(nameOrGraphic, options);
+    this.recalculateBounds();
+    return result;
   }
 
   /**
@@ -365,7 +387,9 @@ export class GraphicsComponent extends Component<'ex.graphics'> {
    * @param options
    */
   public use<T extends Graphic = Graphic>(nameOrGraphic: string | T, options?: GraphicsShowOptions): T {
-    return this.layers.default.use<T>(nameOrGraphic, options);
+    const result = this.layers.default.use<T>(nameOrGraphic, options);
+    this.recalculateBounds();
+    return result;
   }
 
   /**
@@ -380,15 +404,12 @@ export class GraphicsComponent extends Component<'ex.graphics'> {
     this.layers.default.hide(nameOrGraphic);
   }
 
-  private _bounds: BoundingBox = null;
+  private _localBounds: BoundingBox = null;
   public set localBounds(bounds: BoundingBox) {
-    this._bounds = bounds;
+    this._localBounds = bounds;
   }
 
-  public get localBounds(): BoundingBox {
-    if (this._bounds) {
-      return this._bounds;
-    }
+  public recalculateBounds() {
     let bb = new BoundingBox();
     for (const layer of this.layers.get()) {
       for (const { graphic, options } of layer.graphics) {
@@ -401,12 +422,19 @@ export class GraphicsComponent extends Component<'ex.graphics'> {
           offset = options.offset;
         }
         const bounds = graphic.localBounds;
-        const offsetX = -bounds.width * graphic.scale.x * anchor.x + offset.x;
-        const offsetY = -bounds.height * graphic.scale.y * anchor.y + offset.y;
+        const offsetX = -bounds.width *  anchor.x + offset.x;
+        const offsetY = -bounds.height *  anchor.y + offset.y;
         bb = graphic?.localBounds.translate(vec(offsetX + layer.offset.x, offsetY + layer.offset.y)).combine(bb);
       }
     }
-    return bb;
+    this._localBounds = bb;
+  }
+
+  public get localBounds(): BoundingBox {
+    if (!this._localBounds || this._localBounds.hasZeroDimensions()) {
+      this.recalculateBounds();
+    }
+    return this._localBounds;
   }
 
   /**
@@ -422,5 +450,20 @@ export class GraphicsComponent extends Component<'ex.graphics'> {
         }
       }
     }
+  }
+
+  public clone(): GraphicsComponent {
+    const graphics = new GraphicsComponent();
+    graphics._graphics = { ...this._graphics };
+    graphics.offset = this.offset.clone();
+    graphics.opacity = this.opacity;
+    graphics.anchor = this.anchor.clone();
+    graphics.copyGraphics = this.copyGraphics;
+    graphics.onPreDraw = this.onPreDraw;
+    graphics.onPostDraw = this.onPostDraw;
+    graphics.visible = this.visible;
+    graphics.layers = this.layers.clone(graphics);
+
+    return graphics;
   }
 }

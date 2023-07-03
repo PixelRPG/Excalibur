@@ -1,16 +1,18 @@
 import { ExcaliburGraphicsContext } from './Context/ExcaliburGraphicsContext';
 import { Scene } from '../Scene';
 import { GraphicsComponent } from './GraphicsComponent';
-import { vec } from '../Math/vector';
-import { CoordPlane, TransformComponent } from '../EntityComponentSystem/Components/TransformComponent';
+import { vec, Vector } from '../Math/vector';
+import { TransformComponent } from '../EntityComponentSystem/Components/TransformComponent';
 import { Entity } from '../EntityComponentSystem/Entity';
 import { Camera } from '../Camera';
-import { System, SystemType, TagComponent } from '../EntityComponentSystem';
+import { AddedEntity, isAddedSystemEntity, RemovedEntity, System, SystemType } from '../EntityComponentSystem';
 import { Engine } from '../Engine';
-import { GraphicsDiagnostics } from './GraphicsDiagnostics';
-import { EnterViewPortEvent, ExitViewPortEvent } from '../Events';
 import { GraphicsGroup } from '.';
 import { Particle } from '../Particles';
+import { ParallaxComponent } from './ParallaxComponent';
+import { CoordPlane } from '../Math/coord-plane';
+import { BodyComponent } from '../Collision/BodyComponent';
+import { FontCache } from './FontCache';
 
 export class GraphicsSystem extends System<TransformComponent | GraphicsComponent> {
   public readonly types = ['ex.transform', 'ex.graphics'] as const;
@@ -21,51 +23,98 @@ export class GraphicsSystem extends System<TransformComponent | GraphicsComponen
   private _camera: Camera;
   private _engine: Engine;
 
+  private _sortedTransforms: TransformComponent[] = [];
+  public get sortedTransforms() {
+    return this._sortedTransforms;
+  }
+
   public initialize(scene: Scene): void {
-    this._graphicsContext = scene.engine.graphicsContext;
     this._camera = scene.camera;
     this._engine = scene.engine;
   }
 
-  public sort(a: Entity, b: Entity) {
-    return a.get(TransformComponent).z - b.get(TransformComponent).z;
+  private _zHasChanged = false;
+  private _zIndexUpdate = () => {
+    this._zHasChanged = true;
+  };
+
+  public preupdate(): void {
+    // Graphics context could be switched to fallback in a new frame
+    this._graphicsContext = this._engine.graphicsContext;
+    if (this._zHasChanged) {
+      this._sortedTransforms.sort((a, b) => {
+        return a.z - b.z;
+      });
+      this._zHasChanged = false;
+    }
   }
 
-  public update(entities: Entity[], delta: number): void {
-    this._clearScreen();
+  public notify(entityAddedOrRemoved: AddedEntity | RemovedEntity): void {
+    if (isAddedSystemEntity(entityAddedOrRemoved)) {
+      const tx = entityAddedOrRemoved.data.get(TransformComponent);
+      this._sortedTransforms.push(tx);
+      tx.zIndexChanged$.subscribe(this._zIndexUpdate);
+      this._zHasChanged = true;
+    } else {
+      const tx = entityAddedOrRemoved.data.get(TransformComponent);
+      tx.zIndexChanged$.unsubscribe(this._zIndexUpdate);
+      const index = this._sortedTransforms.indexOf(tx);
+      if (index > -1) {
+        this._sortedTransforms.splice(index, 1);
+      }
+    }
+  }
+
+  public update(_entities: Entity[], delta: number): void {
     this._token++;
-    let transform: TransformComponent;
     let graphics: GraphicsComponent;
+    FontCache.checkAndClearCache();
 
-    for (const entity of entities) {
-      transform = entity.get(TransformComponent);
+    // This is a performance enhancement, most things are in world space
+    // so if we can only do this once saves a ton of transform updates
+    this._graphicsContext.save();
+    if (this._camera) {
+      this._camera.draw(this._graphicsContext);
+    }
+    for (const transform of this._sortedTransforms) {
+      const entity = transform.owner as Entity;
+
+      // If the entity is offscreen skip
+      if (entity.hasTag('ex.offscreen')) {
+        continue;
+      }
+
       graphics = entity.get(GraphicsComponent);
-
-      // Figure out if entities are offscreen
-      const entityOffscreen = this._isOffscreen(transform, graphics);
-      if (entityOffscreen && !entity.hasTag('offscreen')) {
-        entity.eventDispatcher.emit('exitviewport', new ExitViewPortEvent(entity));
-        entity.addComponent(new TagComponent('offscreen'));
-      }
-
-      if (!entityOffscreen && entity.hasTag('offscreen')) {
-        entity.eventDispatcher.emit('enterviewport', new EnterViewPortEvent(entity));
-        entity.removeComponent('offscreen');
-      }
-      // Skip entities that have graphics offscreen
-      if (entityOffscreen) {
+      // Exit if graphics set to not visible
+      if (!graphics.visible) {
         continue;
       }
 
       // This optionally sets our camera based on the entity coord plan (world vs. screen)
-      this._pushCameraTransform(transform);
+      if (transform.coordPlane === CoordPlane.Screen) {
+        this._graphicsContext.restore();
+      }
 
       this._graphicsContext.save();
+      if (transform.coordPlane === CoordPlane.Screen) {
+        this._graphicsContext.translate(this._engine.screen.contentArea.left, this._engine.screen.contentArea.top);
+      }
 
       // Tick any graphics state (but only once) for animations and graphics groups
       graphics.update(delta, this._token);
 
-      // Position the entity
+      // Apply parallax
+      const parallax = entity.get(ParallaxComponent);
+      if (parallax) {
+        // We use the Tiled formula
+        // https://doc.mapeditor.org/en/latest/manual/layers/#parallax-scrolling-factor
+        // cameraPos * (1 - parallaxFactor)
+        const oneMinusFactor = Vector.One.sub(parallax.parallaxFactor);
+        const parallaxOffset = this._camera.pos.scale(oneMinusFactor);
+        this._graphicsContext.translate(parallaxOffset.x, parallaxOffset.y);
+      }
+
+      // Position the entity + estimate lag
       this._applyTransform(entity);
 
       // Optionally run the onPreDraw graphics lifecycle draw
@@ -75,7 +124,7 @@ export class GraphicsSystem extends System<TransformComponent | GraphicsComponen
 
       // TODO remove this hack on the particle redo
       const particleOpacity = (entity instanceof Particle) ? entity.opacity : 1;
-      this._graphicsContext.opacity = graphics.opacity * particleOpacity;
+      this._graphicsContext.opacity *= graphics.opacity * particleOpacity;
 
       // Draw the graphics component
       this._drawGraphicsComponent(graphics);
@@ -87,27 +136,15 @@ export class GraphicsSystem extends System<TransformComponent | GraphicsComponen
 
       this._graphicsContext.restore();
 
-      // Reset the transform back to the original
-      this._popCameraTransform(transform);
+      // Reset the transform back to the original world space
+      if (transform.coordPlane === CoordPlane.Screen) {
+        this._graphicsContext.save();
+        if (this._camera) {
+          this._camera.draw(this._graphicsContext);
+        }
+      }
     }
-
-    this._graphicsContext.flush();
-    this._engine.stats.currFrame.graphics.drawnImages = GraphicsDiagnostics.DrawnImagesCount;
-    this._engine.stats.currFrame.graphics.drawCalls = GraphicsDiagnostics.DrawCallCount;
-  }
-
-  private _clearScreen(): void {
-    this._graphicsContext.clear();
-  }
-
-  private _isOffscreen(transform: TransformComponent, graphics: GraphicsComponent) {
-    if (transform.coordPlane === CoordPlane.World) {
-      const graphicsOffscreen = !this._camera.viewport.intersect(graphics.localBounds.transform(transform.getGlobalMatrix()));
-      return graphicsOffscreen;
-    } else {
-      // TODO sceen coordinates
-      return false;
-    }
+    this._graphicsContext.restore();
   }
 
   private _drawGraphicsComponent(graphicsComponent: GraphicsComponent) {
@@ -153,36 +190,36 @@ export class GraphicsSystem extends System<TransformComponent | GraphicsComponen
     const ancestors = entity.getAncestors();
     for (const ancestor of ancestors) {
       const transform = ancestor?.get(TransformComponent);
+      const optionalBody = ancestor?.get(BodyComponent);
+      let interpolatedPos = transform.pos;
+      let interpolatedScale = transform.scale;
+      let interpolatedRotation = transform.rotation;
+      if (optionalBody) {
+        if (this._engine.fixedUpdateFps &&
+            optionalBody.__oldTransformCaptured &&
+            optionalBody.enableFixedUpdateInterpolate) {
+
+          // Interpolate graphics if needed
+          const blend = this._engine.currentFrameLagMs / (1000 / this._engine.fixedUpdateFps);
+          interpolatedPos = transform.pos.scale(blend).add(
+            optionalBody.oldPos.scale(1.0 - blend)
+          );
+          interpolatedScale = transform.scale.scale(blend).add(
+            optionalBody.oldScale.scale(1.0 - blend)
+          );
+          // Rotational lerp https://stackoverflow.com/a/30129248
+          const cosine = (1.0 - blend) * Math.cos(optionalBody.oldRotation) + blend * Math.cos(transform.rotation);
+          const sine = (1.0 - blend) * Math.sin(optionalBody.oldRotation) + blend * Math.sin(transform.rotation);
+          interpolatedRotation = Math.atan2(sine, cosine);
+        }
+      }
+
       if (transform) {
-        this._graphicsContext.translate(transform.pos.x, transform.pos.y);
-        this._graphicsContext.scale(transform.scale.x, transform.scale.y);
-        this._graphicsContext.rotate(transform.rotation);
+        this._graphicsContext.z = transform.z;
+        this._graphicsContext.translate(interpolatedPos.x, interpolatedPos.y);
+        this._graphicsContext.scale(interpolatedScale.x, interpolatedScale.y);
+        this._graphicsContext.rotate(interpolatedRotation);
       }
-    }
-  }
-
-  /**
-   * Applies the current camera transform if in world coordinates
-   * @param transform
-   */
-  private _pushCameraTransform(transform: TransformComponent) {
-    // Establish camera offset per entity
-    if (transform.coordPlane === CoordPlane.World) {
-      this._graphicsContext.save();
-      if (this._camera) {
-        this._camera.draw(this._graphicsContext);
-      }
-    }
-  }
-
-  /**
-   * Resets the current camera transform if in world coordinates
-   * @param transform
-   */
-  private _popCameraTransform(transform: TransformComponent) {
-    if (transform.coordPlane === CoordPlane.World) {
-      // Apply camera world offset
-      this._graphicsContext.restore();
     }
   }
 }

@@ -23,6 +23,8 @@ describe('Collision Shape', () => {
       engine.add('test', scene);
       engine.goToScene('test');
       engine.start();
+      const clock = engine.clock as ex.TestClock;
+      clock.step(1);
 
       actor = new ex.Actor({ x: 0, y: 0, width: 20, height: 20 });
       circle = actor.collider.useCircleCollider(10, ex.Vector.Zero);
@@ -59,9 +61,66 @@ describe('Collision Shape', () => {
 
     it('has a center', () => {
       actor.pos = ex.vec(170, 300);
+      actor.collider.update();
       const center = circle.center;
       expect(center.x).toBe(170);
       expect(center.y).toBe(300);
+    });
+
+    it('has a radius based on scale', () => {
+
+      const sut = circle.clone();
+      expect(sut.radius).toBe(10);
+
+      actor.transform.scale = ex.vec(2, 2);
+      sut.update(actor.transform.get());
+      expect(sut.radius).toBe(20);
+
+      sut.radius = 40;
+      expect(sut.radius).toBe(40);
+
+      sut.radius = 20;
+      actor.transform.scale = ex.vec(1, 3);
+      sut.update(actor.transform.get());
+      expect(sut.radius).withContext('Uneven scale take the smallest').toBe(10);
+    });
+
+    it('calculates correct bounds when transformed', () => {
+      const sut = circle.clone();
+
+      sut.offset = ex.vec(100, 0);
+      actor.transform.scale = ex.vec(2, 2);
+      actor.transform.rotation = Math.PI / 2;
+      sut.update(actor.transform.get());
+
+      const expected = new ex.BoundingBox({
+        left: -20,
+        top: 180,
+        right: 20,
+        bottom: 220
+      });
+
+      expect(sut.bounds.left).toBeCloseTo(expected.left);
+      expect(sut.bounds.right).toBeCloseTo(expected.right);
+      expect(sut.bounds.top).toBeCloseTo(expected.top);
+      expect(sut.bounds.bottom).toBeCloseTo(expected.bottom);
+
+      expect(sut.localBounds).toEqual(new ex.BoundingBox({
+        left: 90,
+        top: -10,
+        bottom: 10,
+        right: 110
+      }));
+    });
+
+    it('calculates correct center when transformed', () => {
+      const sut = circle.clone();
+
+      sut.offset = ex.vec(100, 0);
+      actor.transform.rotation = Math.PI / 2;
+      sut.update(actor.transform.get());
+
+      expect(sut.center).toBeVector(ex.vec(0, 100));
     });
 
     it('has bounds', () => {
@@ -165,7 +224,7 @@ describe('Collision Shape', () => {
       const actor2 = new ex.Actor({ x: 21, y: 0, width: 10, height: 10 });
       const circle2 = actor2.collider.useCircleCollider(10);
       actor2.collider.update();
-      circle2.update(actor2.transform);
+      circle2.update(actor2.transform.get());
 
       const contact = circle.collide(circle2);
 
@@ -177,7 +236,7 @@ describe('Collision Shape', () => {
       const actor2 = new ex.Actor({ x: 14.99, y: 0, width: 10, height: 10 }); // meh close enough
       const poly = actor2.collider.usePolygonCollider(actor2.collider.localBounds.getPoints());
       actor2.collider.update();
-      poly.update(actor2.transform);
+      poly.update(actor2.transform.get());
       const directionOfBodyB = poly.center.sub(circle.center);
       const contact = circle.collide(poly)[0];
 
@@ -198,7 +257,7 @@ describe('Collision Shape', () => {
       const actor2 = new ex.Actor({ x: 16, y: 0, width: 10, height: 10 });
       const poly = actor2.collider.usePolygonCollider(actor2.collider.localBounds.getPoints());
       actor2.collider.update();
-      poly.update(actor2.transform);
+      poly.update(actor2.transform.get());
       const contact = circle.collide(poly);
 
       // there should not be a collision contact formed
@@ -234,6 +293,7 @@ describe('Collision Shape', () => {
     it('should collide with other edges when touching the edge end', () => {
       // position the circle actor in the end of the edge
       actor.pos = ex.vec(10, -9);
+      actor.collider.update();
 
       const actor2 = new ex.Actor({ x: 0, y: 0, width: 10, height: 10 });
       const edge = actor2.collider.useEdgeCollider(new ex.Vector(0, 0), new ex.Vector(10, 0));
@@ -279,20 +339,6 @@ describe('Collision Shape', () => {
       expect(contact.points[0].y).toBe(0);
     });
 
-    it('can be drawn', (done) => {
-      const circle = new ex.CircleCollider({
-        offset: new ex.Vector(100, 100),
-        radius: 30
-      });
-
-      circle.draw(engine.ctx, ex.Color.Blue, new ex.Vector(50, 0));
-
-      ensureImagesLoaded(engine.canvas, 'src/spec/images/CollisionShapeSpec/circle.old.png').then(([canvas, image]) => {
-        expect(canvas).toEqualImage(image);
-        done();
-      });
-    });
-
     it('can be debug drawn', async () => {
       const canvasElement = document.createElement('canvas');
       canvasElement.width = 100;
@@ -305,6 +351,8 @@ describe('Collision Shape', () => {
       });
 
       ctx.clear();
+      actor.transform.scale = ex.vec(2, 2);
+      circle.update(actor.transform.get());
 
       circle.debug(ctx, ex.Color.Red);
 
@@ -313,16 +361,17 @@ describe('Collision Shape', () => {
       await expectAsync(canvasElement).toEqualImage('src/spec/images/CollisionShapeSpec/circle-debug.png');
     });
 
-    it('can be drawn with actor', async () => {
+    it('can be drawn with actor when in contructor', async () => {
       const circleActor = new ex.Actor({
         pos: new ex.Vector(100, 100),
-        color: ex.Color.Blue
+        color: ex.Color.Blue,
+        radius: 100
       });
-      circleActor.collider.useCircleCollider(100);
       scene.add(circleActor);
-      scene.draw(engine.ctx, 100);
+      scene.draw(engine.graphicsContext, 100);
+      engine.graphicsContext.flush();
 
-      await expectAsync(engine.canvas).toEqualImage('src/spec/images/CollisionShapeSpec/circle.png');
+      await expectAsync(TestUtils.flushWebGLCanvasTo2D(engine.canvas)).toEqualImage('src/spec/images/CollisionShapeSpec/circle.png');
     });
 
     it('can calculate the distance to another circle', () => {
@@ -381,6 +430,8 @@ describe('Collision Shape', () => {
       engine.addScene('test', scene);
       engine.goToScene('test');
       engine.start();
+      const clock = engine.clock as ex.TestClock;
+      clock.step(1);
     });
 
     afterEach(() => {
@@ -417,6 +468,53 @@ describe('Collision Shape', () => {
         points: [new ex.Vector(-10, -10), new ex.Vector(10, -10), new ex.Vector(10, 10), new ex.Vector(-10, 10)]
       });
       expect(poly).not.toBe(null);
+    });
+
+    it('will adjust winding to clockwise', () => {
+      const points = [ex.vec(0, 0), ex.vec(10, 10), ex.vec(10, 0)];
+      const winding = new ex.PolygonCollider({ points: [...points] });
+
+      expect(winding.points).toEqual([ex.vec(0, 0), ex.vec(10, 10), ex.vec(10, 0)].reverse());
+    });
+
+    it('can be checked for convexity', () => {
+      const convex = new ex.PolygonCollider({
+        points: [ex.vec(0, 0), ex.vec(10, 10), ex.vec(10, 0)]
+      });
+      expect(convex.isConvex()).withContext('Triangles are always convex').toBe(true);
+
+      const concave = new ex.PolygonCollider({
+        points: [ex.vec(0, 0), ex.vec(5, 5), ex.vec(0, 10), ex.vec(10, 10), ex.vec(10, 0)]
+      });
+
+      expect(concave.isConvex()).withContext('Should be concave').toBe(false);
+    });
+
+    it('can triangulate', () => {
+      const concave = new ex.PolygonCollider({
+        points: [ex.vec(0, 0), ex.vec(5, 5), ex.vec(0, 10), ex.vec(10, 10), ex.vec(10, 0)]
+      });
+
+      const composite = concave.triangulate();
+
+      const colliders = composite.getColliders() as ex.PolygonCollider[];
+      expect(colliders.length).toBe(3);
+      expect(colliders[0].points).toEqual([ex.vec(0, 0), ex.vec(10, 0), ex.vec(10, 10)]);
+      expect(colliders[1].points).toEqual([ex.vec(0, 0), ex.vec(10, 10), ex.vec(0, 10)]);
+      expect(colliders[2].points).toEqual([ex.vec(0, 0), ex.vec(5, 5), ex.vec(0, 10)]);
+
+      expect(concave.isConvex()).withContext('Should be concave').toBe(false);
+    });
+
+    it('can tesselate', () => {
+      const box = ex.Shape.Box(10, 10);
+
+      const composite = box.tessellate();
+
+      const colliders = composite.getColliders() as ex.PolygonCollider[];
+      expect(colliders.length).toBe(2);
+      expect(colliders[0].points).toEqual([ex.vec(-5, -5), ex.vec(5, 5), ex.vec(-5, 5)]);
+      expect(colliders[1].points).toEqual([ex.vec(-5, -5), ex.vec(5, -5), ex.vec(5, 5)]);
     });
 
     it('can have be constructed with position', () => {
@@ -644,35 +742,34 @@ describe('Collision Shape', () => {
       expect(tooFar).toBe(null, 'The polygon should be too far away for a hit');
     });
 
-    it('can be drawn', (done) => {
+    it('can be debug drawn', async () => {
       const polygon = new ex.PolygonCollider({
         offset: new ex.Vector(100, 100),
         points: [new ex.Vector(0, -100), new ex.Vector(-100, 50), new ex.Vector(100, 50)]
       });
 
       // Effective position is (150, 100)
-      polygon.draw(engine.ctx, ex.Color.Blue, new ex.Vector(50, 0));
+      engine.graphicsContext.save();
+      engine.graphicsContext.translate(50, 0);
+      polygon.debug(engine.graphicsContext, ex.Color.Blue);
+      engine.graphicsContext.restore();
+      engine.graphicsContext.flush();
 
-      ensureImagesLoaded(engine.canvas, 'src/spec/images/CollisionShapeSpec/triangle.png').then(([canvas, image]) => {
-        expect(canvas).toEqualImage(image);
-        done();
-      });
+      await expectAsync(TestUtils.flushWebGLCanvasTo2D(engine.canvas)).toEqualImage('src/spec/images/CollisionShapeSpec/triangle.png');
     });
 
-    it('can be drawn with actor', (done) => {
+    it('can be drawn with actor', async () => {
       const polygonActor = new ex.Actor({
         pos: new ex.Vector(150, 100),
-        color: ex.Color.Blue
+        color: ex.Color.Blue,
+        collider: ex.Shape.Polygon([new ex.Vector(0, -100), new ex.Vector(-100, 50), new ex.Vector(100, 50)])
       });
-      polygonActor.collider.usePolygonCollider([new ex.Vector(0, -100), new ex.Vector(-100, 50), new ex.Vector(100, 50)]);
 
       scene.add(polygonActor);
-      scene.draw(engine.ctx, 100);
+      scene.draw(engine.graphicsContext, 100);
+      engine.graphicsContext.flush();
 
-      ensureImagesLoaded(engine.canvas, 'src/spec/images/CollisionShapeSpec/triangle.png').then(([canvas, image]) => {
-        expect(canvas).toEqualImage(image);
-        done();
-      });
+      await expectAsync(TestUtils.flushWebGLCanvasTo2D(engine.canvas)).toEqualImage('src/spec/images/CollisionShapeSpec/triangle.png');
     });
 
     it('can calculate the distance to another circle', () => {
@@ -731,6 +828,8 @@ describe('Collision Shape', () => {
       engine.addScene('test', scene);
       engine.goToScene('test');
       engine.start();
+      const clock = engine.clock as ex.TestClock;
+      clock.step(1);
 
       actor = new ex.Actor({ x: 5, y: 0, width: 10, height: 10 });
       edge = actor.collider.useEdgeCollider(new ex.Vector(-5, 0), new ex.Vector(5, 0));
@@ -799,12 +898,59 @@ describe('Collision Shape', () => {
 
     it('has bounds', () => {
       actor.pos = ex.vec(400, 400);
+      actor.collider.update();
       const boundingBox = edge.bounds;
       const transformedBegin = new ex.Vector(395, 400);
       const transformedEnd = new ex.Vector(405, 400);
-
       expect(boundingBox.contains(transformedBegin)).toBe(true);
       expect(boundingBox.contains(transformedEnd)).toBe(true);
+    });
+
+    it('will calculate center', () => {
+      const transform = new ex.Transform();
+      const edge = new ex.EdgeCollider({
+        begin: ex.vec(0, 0),
+        end: ex.vec(0, 10),
+        offset: ex.vec(10, 10)
+      });
+
+      edge.update(transform);
+
+      expect(edge.center).toBeVector(ex.vec(10, 15));
+    });
+
+    it('will calculate world space by the transform', () => {
+      const transform = new ex.Transform();
+      const edge = new ex.EdgeCollider({
+        begin: ex.vec(0, 0),
+        end: ex.vec(0, 10),
+        offset: ex.vec(10, 10)
+      });
+
+      edge.update(transform);
+
+      expect(edge.bounds.left).toBe(0);
+      expect(edge.bounds.right).toBe(20);
+      expect(edge.bounds.top).toBe(0);
+      expect(edge.bounds.bottom).toBe(30);
+    });
+
+
+    it('can be rotated', () => {
+      const transform = new ex.Transform();
+      transform.rotation = Math.PI/2;
+      const edge = new ex.EdgeCollider({
+        begin: ex.vec(0, 0),
+        end: ex.vec(0, 10),
+        offset: ex.vec(10, 10)
+      });
+
+      edge.update(transform);
+
+      expect(edge.bounds.left).toBe(-30);
+      expect(edge.bounds.right).toBe(0);
+      expect(edge.bounds.top).toBe(0);
+      expect(edge.bounds.bottom).toBe(20);
     });
 
     it('has a moi', () => {
@@ -815,34 +961,33 @@ describe('Collision Shape', () => {
       expect(moi).toBeCloseTo(10 * length * length, 0.001);
     });
 
-    it('can be drawn', (done) => {
+    it('can be drawn', async () => {
       const edge = new ex.EdgeCollider({
         begin: new ex.Vector(100, 100),
         end: new ex.Vector(400, 400)
       });
 
-      edge.draw(engine.ctx, ex.Color.Blue, new ex.Vector(50, 0));
+      engine.graphicsContext.save();
+      engine.graphicsContext.translate(50, 0);
+      edge.debug(engine.graphicsContext, ex.Color.Blue);
+      engine.graphicsContext.restore();
+      engine.graphicsContext.flush();
 
-      ensureImagesLoaded(engine.canvas, 'src/spec/images/CollisionShapeSpec/edge.png').then(([canvas, image]) => {
-        expect(canvas).toEqualImage(image);
-        done();
-      });
+      await expectAsync(TestUtils.flushWebGLCanvasTo2D(engine.canvas)).toEqualImage('src/spec/images/CollisionShapeSpec/edge.png');
     });
 
-    it('can be drawn with actor', (done) => {
+    it('can be drawn with actor', async () => {
       const edgeActor = new ex.Actor({
         pos: new ex.Vector(150, 100),
-        color: ex.Color.Blue
+        color: ex.Color.Blue,
+        collider: ex.Shape.Edge(ex.Vector.Zero, new ex.Vector(300, 300))
       });
-      edgeActor.collider.useEdgeCollider(ex.Vector.Zero, new ex.Vector(300, 300));
 
       scene.add(edgeActor);
-      scene.draw(engine.ctx, 100);
+      scene.draw(engine.graphicsContext, 100);
+      engine.graphicsContext.flush();
 
-      ensureImagesLoaded(engine.canvas, 'src/spec/images/CollisionShapeSpec/edge.png').then(([canvas, image]) => {
-        expect(canvas).toEqualImage(image);
-        done();
-      });
+      await expectAsync(TestUtils.flushWebGLCanvasTo2D(engine.canvas)).toEqualImage('src/spec/images/CollisionShapeSpec/edge.png');
     });
 
     it('can calculate the distance to another circle', () => {
@@ -947,7 +1092,7 @@ describe('Collision Shape', () => {
       const contact = rect.collide(edge)[0];
       expect(contact.normal)
         .withContext('Rect/Edge normal point away from edge')
-        .toBeVector(ex.Vector.Up);
+        .toBeVector(ex.Vector.Down);
       expect(contact.points[0]).toBeVector(ex.vec(20, 10));
       expect(contact.points[1]).toBeVector(ex.vec(-20, 10));
 
@@ -961,7 +1106,7 @@ describe('Collision Shape', () => {
       const contact = rect.collide(edge)[0];
       expect(contact.normal)
         .withContext('Rect/Edge normal point away from edge')
-        .toBeVector(ex.Vector.Up);
+        .toBeVector(ex.Vector.Down);
       expect(contact.points[0]).toBeVector(ex.vec(20, 10));
       expect(contact.points[1]).toBeVector(ex.vec(10, 10));
 
@@ -975,7 +1120,7 @@ describe('Collision Shape', () => {
       const contact = rect.collide(edge)[0];
       expect(contact.normal)
         .withContext('Rect/Edge normal point away from edge')
-        .toBeVector(ex.Vector.Up);
+        .toBeVector(ex.Vector.Down);
       expect(contact.points[0]).toBeVector(ex.vec(-20, 10));
       expect(contact.points[1]).toBeVector(ex.vec(0, 10));
 

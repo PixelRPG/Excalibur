@@ -1,11 +1,9 @@
 import { Graphic, GraphicOptions } from './Graphic';
-import { clamp } from '../Util/Util';
 import { ExcaliburGraphicsContext } from './Context/ExcaliburGraphicsContext';
-import { EventDispatcher } from '../EventDispatcher';
 import { SpriteSheet } from './SpriteSheet';
 import { Logger } from '../Util/Log';
-import { Engine, LegacyDrawing } from '..';
-import { Sprite } from '.';
+import { clamp } from '../Math/util';
+import { EventEmitter } from '../EventEmitter';
 
 export interface HasTick {
   /**
@@ -22,7 +20,7 @@ export enum AnimationDirection {
    */
   Forward = 'forward',
   /**
-   * Animation is play backwards
+   * Animation is playing backwards
    */
   Backward = 'backward'
 }
@@ -55,9 +53,13 @@ export interface Frame {
    */
   graphic?: Graphic;
   /**
-   * Optionally specify the number of ms the frame should be visible, overrids the animation duration (default 100 ms)
+   * Optionally specify the number of ms the frame should be visible, overrides the animation duration (default 100 ms)
    */
   duration?: number;
+}
+
+export interface FrameEvent extends Frame {
+  frameIndex: number;
 }
 
 /**
@@ -86,12 +88,38 @@ export interface AnimationOptions {
   strategy?: AnimationStrategy;
 }
 
-// TODO wire up to new Emitter
 export type AnimationEvents = {
-  frame: Frame;
+  frame: FrameEvent;
   loop: Animation;
   ended: Animation;
 };
+
+export interface FromSpriteSheetOptions {
+  /**
+   * [[SpriteSheet]] to source the animation frames from
+   */
+  spriteSheet: SpriteSheet;
+  /**
+   * The list of (x, y) positions of sprites in the [[SpriteSheet]] of each frame, for example (0, 0)
+   * is the the top left sprite, (0, 1) is the sprite directly below that, and so on.
+   *
+   * You may optionally specify a duration for the frame in milliseconds as well, this will override
+   * the default duration.
+   */
+  frameCoordinates: {x: number, y: number, duration?: number}[];
+  /**
+   * Optionally specify a default duration for frames in milliseconds
+   */
+  durationPerFrameMs?: number;
+  /**
+   * Optionally specify the animation strategy for this animation, by default animations loop [[AnimationStrategy.Loop]]
+   */
+  strategy?: AnimationStrategy
+  /**
+   * Optionally specify the animation should be reversed
+   */
+  reverse?: boolean;
+}
 
 /**
  * Create an Animation given a list of [[Frame|frames]] in [[AnimationOptions]]
@@ -100,7 +128,7 @@ export type AnimationEvents = {
  */
 export class Animation extends Graphic implements HasTick {
   private static _LOGGER = Logger.getInstance();
-  public events = new EventDispatcher<any>(); // TODO replace with new Emitter
+  public events = new EventEmitter<AnimationEvents>();
   public frames: Frame[] = [];
   public strategy: AnimationStrategy = AnimationStrategy.Loop;
   public frameDuration: number = 100;
@@ -111,7 +139,7 @@ export class Animation extends Graphic implements HasTick {
   private _firstTick = true;
   private _currentFrame = 0;
   private _timeLeftInFrame = 0;
-  private _direction = 1; // TODO only used in ping-pong
+  private _pingPongDirection = 1;
   private _done = false;
   private _playing = true;
 
@@ -135,6 +163,23 @@ export class Animation extends Graphic implements HasTick {
       ...this.cloneGraphicOptions()
     });
   }
+
+  public override get width(): number {
+    const maybeFrame = this.currentFrame;
+    if (maybeFrame) {
+      return Math.abs(maybeFrame.graphic.width * this.scale.x);
+    }
+    return 0;
+  }
+
+  public override get height(): number {
+    const maybeFrame = this.currentFrame;
+    if (maybeFrame) {
+      return Math.abs(maybeFrame.graphic.height * this.scale.y);
+    }
+    return 0;
+  }
+
 
   /**
    * Create an Animation from a [[SpriteSheet]], a list of indices into the sprite sheet, a duration per frame
@@ -177,25 +222,58 @@ export class Animation extends Graphic implements HasTick {
   }
 
   /**
-   * Converts an animation to a legacy animation
-   * @deprecated
-   * @param engine
-   * @param animation
-   * @returns LegacyDrawing.Animation
+   * Create an [[Animation]] from a [[SpriteSheet]] given a list of coordinates
+   *
+   * Example:
+   * ```typescript
+   * const spriteSheet = SpriteSheet.fromImageSource({...});
+   *
+   * const anim = Animation.fromSpriteSheetCoordinates({
+   *  spriteSheet,
+   *  frameCoordinates: [
+   *    {x: 0, y: 5, duration: 100},
+   *    {x: 1, y: 5, duration: 200},
+   *    {x: 2, y: 5, duration: 100},
+   *    {x: 3, y: 5, duration: 500}
+   *  ],
+   *  strategy: AnimationStrategy.PingPong
+   * });
+   * ```
+   *
+   * @param options
+   * @returns Animation
    */
-  public static toLegacyAnimation(engine: Engine, animation: Animation): LegacyDrawing.Animation {
-    const legacySprites = animation.frames.map(f => Sprite.toLegacySprite(f.graphic as Sprite));
-    return new LegacyDrawing.Animation({
-      sprites: legacySprites,
-      loop: animation.strategy === AnimationStrategy.Loop,
-      freezeFrame: animation.strategy === AnimationStrategy.Freeze ? legacySprites.length - 1 : undefined,
-      speed: animation.frameDuration,
-      engine: engine
+  public static fromSpriteSheetCoordinates(options: FromSpriteSheetOptions): Animation {
+    const { spriteSheet, frameCoordinates, durationPerFrameMs, strategy, reverse } = options;
+    const defaultDuration = durationPerFrameMs ?? 100;
+    const frames: Frame[] = [];
+    for (const coord of frameCoordinates) {
+      const {x, y, duration} = coord;
+      const sprite = spriteSheet.getSprite(x, y);
+      if (sprite) {
+        frames.push({
+          graphic: sprite,
+          duration: duration ?? defaultDuration
+        });
+      } else {
+        Animation._LOGGER.warn(
+          `Skipping frame! SpriteSheet does not have coordinate (${x}, ${y}), please check your SpriteSheet to confirm that sprite exists`
+        );
+      }
+    }
+
+    return new Animation({
+      frames,
+      strategy,
+      reverse
     });
   }
 
   /**
    * Returns the current Frame of the animation
+   *
+   * Use [[Animation.currentFrameIndex]] to get the frame number and
+   * [[Animation.goToFrame]] to set the current frame index
    */
   public get currentFrame(): Frame | null {
     if (this._currentFrame >= 0 && this._currentFrame < this.frames.length) {
@@ -206,6 +284,8 @@ export class Animation extends Graphic implements HasTick {
 
   /**
    * Returns the current frame index of the animation
+   *
+   * Use [[Animation.currentFrame]] to grab the current [[Frame]] object
    */
   public get currentFrameIndex(): number {
     return this._currentFrame;
@@ -234,7 +314,7 @@ export class Animation extends Graphic implements HasTick {
   public get direction(): AnimationDirection {
     // Keep logically consistent with ping-pong direction
     // If ping-pong is forward = 1 and reversed is true then we are logically reversed
-    const reversed = (this._reversed && this._direction === 1) ? true : false;
+    const reversed = (this._reversed && this._pingPongDirection === 1) ? true : false;
     return reversed ? AnimationDirection.Backward : AnimationDirection.Forward;
   }
 
@@ -297,9 +377,7 @@ export class Animation extends Graphic implements HasTick {
     const maybeFrame = this.frames[this._currentFrame];
     if (maybeFrame && !this._done) {
       this._timeLeftInFrame = maybeFrame?.duration || this.frameDuration;
-      this.width = maybeFrame.graphic?.width;
-      this.height = maybeFrame.graphic?.height;
-      this.events.emit('frame', maybeFrame as any);
+      this.events.emit('frame', {...maybeFrame, frameIndex: this.currentFrameIndex });
     }
   }
 
@@ -314,7 +392,7 @@ export class Animation extends Graphic implements HasTick {
       case AnimationStrategy.Loop: {
         next = (currentFrame + 1) % this.frames.length;
         if (next === 0) {
-          this.events.emit('loop', this as any);
+          this.events.emit('loop', this);
         }
         break;
       }
@@ -323,7 +401,7 @@ export class Animation extends Graphic implements HasTick {
         if (next >= this.frames.length) {
           this._done = true;
           this._currentFrame = this.frames.length;
-          this.events.emit('end', this as any);
+          this.events.emit('end', this);
         }
         break;
       }
@@ -331,22 +409,22 @@ export class Animation extends Graphic implements HasTick {
         next = clamp(currentFrame + 1, 0, this.frames.length - 1);
         if (next >= this.frames.length - 1) {
           this._done = true;
-          this.events.emit('end', this as any);
+          this.events.emit('end', this);
         }
         break;
       }
       case AnimationStrategy.PingPong: {
-        if (currentFrame + this._direction >= this.frames.length) {
-          this._direction = -1;
-          this.events.emit('loop', this as any);
+        if (currentFrame + this._pingPongDirection >= this.frames.length) {
+          this._pingPongDirection = -1;
+          this.events.emit('loop', this);
         }
 
-        if (currentFrame + this._direction < 0) {
-          this._direction = 1;
-          this.events.emit('loop', this as any);
+        if (currentFrame + this._pingPongDirection < 0) {
+          this._pingPongDirection = 1;
+          this.events.emit('loop', this);
         }
 
-        next = currentFrame + (this._direction % this.frames.length);
+        next = currentFrame + (this._pingPongDirection % this.frames.length);
         break;
       }
     }
@@ -370,20 +448,12 @@ export class Animation extends Graphic implements HasTick {
     // if it's the first frame emit frame event
     if (this._firstTick) {
       this._firstTick = false;
-      this.events.emit('frame', this.currentFrame as any);
+      this.events.emit('frame', {...this.currentFrame, frameIndex: this.currentFrameIndex });
     }
 
     this._timeLeftInFrame -= elapsedMilliseconds * this.timeScale;
     if (this._timeLeftInFrame <= 0) {
       this.goToFrame(this._nextFrame());
-    }
-    this._updateDimensions();
-  }
-
-  private _updateDimensions() {
-    if (this.currentFrame) {
-      this.width = this.currentFrame.graphic?.width;
-      this.height = this.currentFrame.graphic?.height;
     }
   }
 

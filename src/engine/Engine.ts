@@ -1,16 +1,15 @@
 import { EX_VERSION } from './';
-import { Flags, Legacy } from './Flags';
+import { Flags } from './Flags';
 import { polyfill } from './Polyfill';
 polyfill();
 import { CanUpdate, CanDraw, CanInitialize } from './Interfaces/LifecycleEvents';
 import { Loadable } from './Interfaces/Loadable';
 import { Vector } from './Math/vector';
-import { Screen, DisplayMode, AbsolutePosition, ScreenDimension, Resolution } from './Screen';
+import { Screen, DisplayMode, ScreenDimension, Resolution } from './Screen';
 import { ScreenElement } from './ScreenElement';
 import { Actor } from './Actor';
 import { Timer } from './Timer';
 import { TileMap } from './TileMap';
-import { Animation } from './Drawing/Animation';
 import { Loader } from './Loader';
 import { Detector } from './Util/Detector';
 import {
@@ -33,15 +32,17 @@ import { Logger, LogLevel } from './Util/Log';
 import { Color } from './Color';
 import { Scene } from './Scene';
 import { Entity } from './EntityComponentSystem/Entity';
-import { PostProcessor } from './PostProcessing/PostProcessor';
 import { Debug, DebugStats } from './Debug/Debug';
 import { Class } from './Class';
 import * as Input from './Input/Index';
 import * as Events from './Events';
 import { BrowserEvents } from './Util/Browser';
-import { obsolete } from './Util/Decorators';
-import { ExcaliburGraphicsContext, ExcaliburGraphicsContext2DCanvas, ExcaliburGraphicsContextWebGL } from './Graphics';
+import { ExcaliburGraphicsContext, ExcaliburGraphicsContext2DCanvas, ExcaliburGraphicsContextWebGL, TextureLoader } from './Graphics';
 import { PointerEventReceiver } from './Input/PointerEventReceiver';
+import { Clock, StandardClock } from './Util/Clock';
+import { ImageFiltering } from './Graphics/Filtering';
+import { GraphicsDiagnostics } from './Graphics/GraphicsDiagnostics';
+import { Toaster } from './Util/Toaster';
 
 /**
  * Enum representing the different mousewheel event bubble prevention
@@ -89,8 +90,25 @@ export interface EngineOptions {
 
   /**
    * Optionally specify antialiasing (smoothing), by default true (smooth pixels)
+   *
+   *  * `true` - useful for high resolution art work you would like smoothed, this also hints excalibur to load images
+   * with [[ImageFiltering.Blended]]
+   *
+   *  * `false` - useful for pixel art style art work you would like sharp, this also hints excalibur to load images
+   * with [[ImageFiltering.Pixel]]
    */
   antialiasing?: boolean;
+
+  /**
+   * Optionally upscale the number of pixels in the canvas. Normally only useful if you need a smoother look to your assets, especially
+   * [[Text]].
+   *
+   * **WARNING** It is recommended you try using `antialiasing: true` before adjusting pixel ratio. Pixel ratio will consume more memory
+   * and on mobile may break if the internal size of the canvas exceeds 4k pixels in width or height.
+   *
+   * Default is based the display's pixel ratio, for example a HiDPI screen might have the value 2;
+   */
+  pixelRatio?: number;
 
   /**
    * Optionally configure the native canvas transparent backdrop
@@ -108,7 +126,7 @@ export interface EngineOptions {
   canvasElement?: HTMLCanvasElement;
 
   /**
-   * Optionally snap drawings to nearest pixel
+   * Optionally snap graphics to nearest pixel, default is false
    */
   snapToPixel?: boolean;
 
@@ -149,14 +167,13 @@ export interface EngineOptions {
   suppressPlayButton?: boolean;
 
   /**
-   * Specify how the game window is to be positioned when the [[DisplayMode.Position]] is chosen. This option MUST be specified
-   * if the DisplayMode is set as [[DisplayMode.Position]]. The position can be either a string or an [[AbsolutePosition]].
-   * String must be in the format of css style background-position. The vertical position must precede the horizontal position in strings.
+   * Sets the focus of the window, this is needed when hosting excalibur in a cross-origin iframe in order for certain events
+   * (like keyboard) to work.
+   * For example: itch.io or codesandbox.io
    *
-   * Valid String examples: "top left", "top", "bottom", "middle", "middle center", "bottom right"
-   * Valid [[AbsolutePosition]] examples: `{top: 5, right: 10%}`, `{bottom: 49em, left: 10px}`, `{left: 10, bottom: 40}`
+   * By default set to true,
    */
-  position?: string | AbsolutePosition;
+  grabWindowFocus?: boolean;
 
   /**
    * Scroll prevention method.
@@ -167,6 +184,59 @@ export interface EngineOptions {
    * Optionally set the background color
    */
   backgroundColor?: Color;
+
+  /**
+   * Optionally set the maximum fps if not set Excalibur will go as fast as the device allows.
+   *
+   * You may want to constrain max fps if your game cannot maintain fps consistently, it can look and feel better to have a 30fps game than
+   * one that bounces between 30fps and 60fps
+   */
+  maxFps?: number;
+
+  /**
+   * Optionally configure a fixed update fps, this can be desireable if you need the physics simulation to be very stable. When set
+   * the update step and physics will use the same elapsed time for each tick even if the graphical framerate drops. In order for the
+   * simulation to be correct, excalibur will run multiple updates in a row (at the configured update elapsed) to catch up, for example
+   * there could be X updates and 1 draw each clock step.
+   *
+   * **NOTE:** This does come at a potential perf cost because each catch-up update will need to be run if the fixed rate is greater than
+   * the current instantaneous framerate, or perf gain if the fixed rate is less than the current framerate.
+   *
+   * By default is unset and updates will use the current instantaneous framerate with 1 update and 1 draw each clock step.
+   */
+  fixedUpdateFps?: number
+
+  /**
+   * Default `true`, optionally configure excalibur to use optimal draw call sorting, to opt out set this to `false`.
+   *
+   * Excalibur will automatically sort draw calls by z and priority into renderer batches for maximal draw performance,
+   * this can disrupt a specific desired painter order.
+   */
+  useDrawSorting?: boolean;
+
+  /**
+   * Optionally configure how excalibur handles poor performance on a player's browser
+   */
+  configurePerformanceCanvas2DFallback?: {
+    /**
+     * By default `true`, this will switch the internal graphics context to Canvas2D which can improve performance on non hardware
+     * accelerated browsers.
+     */
+    allow: boolean;
+    /**
+     * By default `false`, if set to `true` a dialogue will be presented to the player about their browser and how to potentially
+     * address any issues.
+     */
+    showPlayerMessage?: boolean;
+    /**
+     * Default `{ numberOfFrames: 100, fps: 20 }`, optionally configure excalibur to fallback to the 2D Canvas renderer
+     * if bad performance is detected.
+     *
+     * In this example of the default if excalibur is running at 20fps or less for 100 frames it will trigger the fallback to the 2D
+     * Canvas renderer.
+     */
+    threshold?: { numberOfFrames: number, fps: number };
+  }
 }
 
 /**
@@ -178,7 +248,7 @@ export interface EngineOptions {
  */
 export class Engine extends Class implements CanInitialize, CanUpdate, CanDraw {
   /**
-   *
+   * Excalibur browser events abstraction used for wiring to native browser events safely
    */
   public browser: BrowserEvents;
 
@@ -193,16 +263,40 @@ export class Engine extends Class implements CanInitialize, CanUpdate, CanDraw {
   public canvas: HTMLCanvasElement;
 
   /**
-   * Direct access to the engine's 2D rendering context
+   * Direct access to the ExcaliburGraphicsContext used for drawing things to the screen
    */
-  public ctx: CanvasRenderingContext2D;
-
   public graphicsContext: ExcaliburGraphicsContext;
 
   /**
    * Direct access to the canvas element ID, if an ID exists
    */
   public canvasElementId: string;
+
+  /**
+   * Optionally set the maximum fps if not set Excalibur will go as fast as the device allows.
+   *
+   * You may want to constrain max fps if your game cannot maintain fps consistently, it can look and feel better to have a 30fps game than
+   * one that bounces between 30fps and 60fps
+   */
+  public maxFps: number = Number.POSITIVE_INFINITY;
+
+  /**
+   * Optionally configure a fixed update fps, this can be desireable if you need the physics simulation to be very stable. When set
+   * the update step and physics will use the same elapsed time for each tick even if the graphical framerate drops. In order for the
+   * simulation to be correct, excalibur will run multiple updates in a row (at the configured update elapsed) to catch up, for example
+   * there could be X updates and 1 draw each clock step.
+   *
+   * **NOTE:** This does come at a potential perf cost because each catch-up update will need to be run if the fixed rate is greater than
+   * the current instantaneous framerate, or perf gain if the fixed rate is less than the current framerate.
+   *
+   * By default is unset and updates will use the current instantaneous framerate with 1 update and 1 draw each clock step.
+   */
+  public fixedUpdateFps?: number;
+
+  /**
+   * Direct access to the excalibur clock
+   */
+  public clock: Clock;
 
   /**
    * The width of the game canvas in pixels (physical width component of the
@@ -274,10 +368,13 @@ export class Engine extends Class implements CanInitialize, CanUpdate, CanDraw {
    */
   public input: Input.EngineInput;
 
-  private _hasStarted: boolean = false;
-
   /**
    * Access Excalibur debugging functionality.
+   *
+   * Useful when you want to debug different aspects of built in engine features like
+   *   * Transform
+   *   * Graphics
+   *   * Colliders
    */
   public debug: Debug;
 
@@ -287,11 +384,6 @@ export class Engine extends Class implements CanInitialize, CanUpdate, CanDraw {
   public get stats(): DebugStats {
     return this.debug.stats;
   }
-
-  /**
-   * Gets or sets the list of post processors to apply at the end of drawing a frame (such as [[ColorBlindCorrector]])
-   */
-  public postProcessors: PostProcessor[] = [];
 
   /**
    * The current [[Scene]] being drawn and updated on screen
@@ -307,12 +399,6 @@ export class Engine extends Class implements CanInitialize, CanUpdate, CanDraw {
    * Contains all the scenes currently registered with Excalibur
    */
   public readonly scenes: { [key: string]: Scene } = {};
-
-  /**
-   * @hidden
-   * @deprecated
-   */
-  private _animations: AnimationNode[] = [];
 
   /**
    * Indicates whether the engine is set to fullscreen or not
@@ -337,10 +423,6 @@ export class Engine extends Class implements CanInitialize, CanUpdate, CanDraw {
   }
 
   /**
-   * Indicates the current position of the engine. Valid only when DisplayMode is DisplayMode.Position
-   */
-  public position: string | AbsolutePosition;
-  /**
    * Indicates whether audio should be paused when the game is no longer visible.
    */
   public pauseAudioWhenHidden: boolean = true;
@@ -352,7 +434,7 @@ export class Engine extends Class implements CanInitialize, CanUpdate, CanDraw {
   public get isDebug(): boolean {
     return this._isDebug;
   }
-  public debugColor: Color = new Color(255, 255, 255);
+
   /**
    * Sets the background color for the engine.
    */
@@ -362,6 +444,17 @@ export class Engine extends Class implements CanInitialize, CanUpdate, CanDraw {
    * Sets the Transparency for the engine.
    */
   public enableCanvasTransparency: boolean = true;
+
+  /**
+   * Hints the graphics context to truncate fractional world space coordinates
+   */
+  public get snapToPixel(): boolean {
+    return this.graphicsContext.snapToPixel;
+  };
+
+  public set snapToPixel(shouldSnapToPixel: boolean) {
+    this.graphicsContext.snapToPixel = shouldSnapToPixel;
+  };
 
   /**
    * The action to take when a fatal exception is thrown
@@ -377,8 +470,7 @@ export class Engine extends Class implements CanInitialize, CanUpdate, CanDraw {
 
   private _logger: Logger;
 
-  // this is a reference to the current requestAnimationFrame return value
-  private _requestId: number;
+  private _toaster: Toaster = new Toaster();
 
   // this determines whether excalibur is compatible with your browser
   private _compatible: boolean;
@@ -387,12 +479,12 @@ export class Engine extends Class implements CanInitialize, CanUpdate, CanDraw {
 
   // loading
   private _loader: Loader;
-  private _isLoading: boolean = false;
 
   private _isInitialized: boolean = false;
 
   private _deferredGoTo: string = null;
 
+  public on(eventName: 'fallbackgraphicscontext', handler: (event: ExcaliburGraphicsContext2DCanvas) => void): void;
   public on(eventName: Events.initialize, handler: (event: Events.InitializeEvent<Engine>) => void): void;
   public on(eventName: Events.visible, handler: (event: VisibleEvent) => void): void;
   public on(eventName: Events.hidden, handler: (event: HiddenEvent) => void): void;
@@ -409,6 +501,7 @@ export class Engine extends Class implements CanInitialize, CanUpdate, CanDraw {
     super.on(eventName, handler);
   }
 
+  public once(eventName: 'fallbackgraphicscontext', handler: (event: ExcaliburGraphicsContext2DCanvas) => void): void;
   public once(eventName: Events.initialize, handler: (event: Events.InitializeEvent<Engine>) => void): void;
   public once(eventName: Events.visible, handler: (event: VisibleEvent) => void): void;
   public once(eventName: Events.hidden, handler: (event: HiddenEvent) => void): void;
@@ -425,6 +518,7 @@ export class Engine extends Class implements CanInitialize, CanUpdate, CanDraw {
     super.once(eventName, handler);
   }
 
+  public off(eventName: 'fallbackgraphicscontext', handler?: (event: ExcaliburGraphicsContext2DCanvas) => void): void;
   public off(eventName: Events.initialize, handler?: (event: Events.InitializeEvent<Engine>) => void): void;
   public off(eventName: Events.visible, handler?: (event: VisibleEvent) => void): void;
   public off(eventName: Events.hidden, handler?: (event: HiddenEvent) => void): void;
@@ -448,6 +542,12 @@ export class Engine extends Class implements CanInitialize, CanUpdate, CanDraw {
     width: 0,
     height: 0,
     enableCanvasTransparency: true,
+    useDrawSorting: true,
+    configurePerformanceCanvas2DFallback: {
+      allow: true,
+      showPlayerMessage: false,
+      threshold: { fps: 20, numberOfFrames: 100 }
+    },
     canvasElementId: '',
     canvasElement: undefined,
     snapToPixel: false,
@@ -456,9 +556,13 @@ export class Engine extends Class implements CanInitialize, CanUpdate, CanDraw {
     suppressMinimumBrowserFeatureDetection: null,
     suppressHiDPIScaling: null,
     suppressPlayButton: null,
+    grabWindowFocus: true,
     scrollPreventionMode: ScrollPreventionMode.Canvas,
     backgroundColor: Color.fromHex('#2185d0') // Excalibur blue
   };
+
+  private _originalOptions: EngineOptions = {};
+  public readonly _originalDisplayMode: DisplayMode;
 
   /**
    * Creates a new game using the given [[EngineOptions]]. By default, if no options are provided,
@@ -488,6 +592,7 @@ export class Engine extends Class implements CanInitialize, CanUpdate, CanDraw {
     super();
 
     options = { ...Engine._DEFAULT_ENGINE_OPTIONS, ...options };
+    this._originalOptions = options;
 
     Flags.freeze();
 
@@ -574,26 +679,41 @@ O|===|* >________________>\n\
       displayMode = DisplayMode.FitScreen;
     }
 
-    if (Flags.isEnabled(Legacy.Canvas)) {
-      const ex2dCtx = new ExcaliburGraphicsContext2DCanvas({
+    this._originalDisplayMode = displayMode;
+
+    // Canvas 2D fallback can be flagged on
+    let useCanvasGraphicsContext = Flags.isEnabled('use-canvas-context');
+    if (!useCanvasGraphicsContext) {
+      // Attempt webgl first
+      try {
+        this.graphicsContext = new ExcaliburGraphicsContextWebGL({
+          canvasElement: this.canvas,
+          enableTransparency: this.enableCanvasTransparency,
+          smoothing: options.antialiasing,
+          backgroundColor: options.backgroundColor,
+          snapToPixel: options.snapToPixel,
+          useDrawSorting: options.useDrawSorting
+        });
+      } catch (e) {
+        this._logger.warn(
+          `Excalibur could not load webgl for some reason (${(e as Error).message}) and loaded a Canvas 2D fallback. ` +
+          `Some features of Excalibur will not work in this mode. \n\n` +
+          'Read more about this issue at https://excaliburjs.com/docs/webgl'
+        );
+        // fallback to canvas in case of failure
+        useCanvasGraphicsContext = true;
+      }
+    }
+
+    if (useCanvasGraphicsContext) {
+      this.graphicsContext = new ExcaliburGraphicsContext2DCanvas({
         canvasElement: this.canvas,
         enableTransparency: this.enableCanvasTransparency,
         smoothing: options.antialiasing,
         backgroundColor: options.backgroundColor,
-        snapToPixel: options.snapToPixel
+        snapToPixel: options.snapToPixel,
+        useDrawSorting: options.useDrawSorting
       });
-      this.graphicsContext = ex2dCtx;
-      this.ctx = ex2dCtx.__ctx;
-    } else {
-      const exWebglCtx = new ExcaliburGraphicsContextWebGL({
-        canvasElement: this.canvas,
-        enableTransparency: this.enableCanvasTransparency,
-        smoothing: options.antialiasing,
-        backgroundColor: options.backgroundColor,
-        snapToPixel: options.snapToPixel
-      });
-      this.graphicsContext = exWebglCtx;
-      this.ctx = exWebglCtx.__ctx;
     }
 
     this.screen = new Screen({
@@ -604,17 +724,29 @@ O|===|* >________________>\n\
       viewport: options.viewport ?? (options.width && options.height ? { width: options.width, height: options.height } : Resolution.SVGA),
       resolution: options.resolution,
       displayMode,
-      position: options.position,
-      pixelRatio: options.suppressHiDPIScaling ? 1 : null
+      pixelRatio: options.suppressHiDPIScaling ? 1 : (options.pixelRatio ?? null)
     });
+
+    // Set default filtering based on antialiasing
+    TextureLoader.filtering = options.antialiasing ? ImageFiltering.Blended : ImageFiltering.Pixel;
 
     if (options.backgroundColor) {
       this.backgroundColor = options.backgroundColor.clone();
     }
 
+    this.maxFps = options.maxFps ?? this.maxFps;
+    this.fixedUpdateFps = options.fixedUpdateFps ?? this.fixedUpdateFps;
+
+    this.clock = new StandardClock({
+      maxFps: this.maxFps,
+      tick: this._mainloop.bind(this),
+      onFatalException: (e) => this.onFatalException(e)
+    });
+
     this.enableCanvasTransparency = options.enableCanvasTransparency;
 
     this._loader = new Loader();
+    this._loader.wireEngine(this);
     this.debug = new Debug(this);
 
     this._initialize(options);
@@ -622,6 +754,108 @@ O|===|* >________________>\n\
     this.rootScene = this.currentScene = new Scene();
 
     this.addScene('root', this.rootScene);
+    (window as any).___EXCALIBUR_DEVTOOL = this;
+  }
+
+  private _performanceThresholdTriggered = false;
+  private _fpsSamples: number[] = [];
+  private _monitorPerformanceThresholdAndTriggerFallback() {
+    const { allow } = this._originalOptions.configurePerformanceCanvas2DFallback;
+    let { threshold, showPlayerMessage } = this._originalOptions.configurePerformanceCanvas2DFallback;
+    if (threshold === undefined) {
+      threshold = Engine._DEFAULT_ENGINE_OPTIONS.configurePerformanceCanvas2DFallback.threshold;
+    }
+    if (showPlayerMessage === undefined) {
+      showPlayerMessage = Engine._DEFAULT_ENGINE_OPTIONS.configurePerformanceCanvas2DFallback.showPlayerMessage;
+    }
+    if (!Flags.isEnabled('use-canvas-context') && allow && this.ready && !this._performanceThresholdTriggered) {
+      // Calculate Average fps for last X number of frames after start
+      if (this._fpsSamples.length === threshold.numberOfFrames) {
+        this._fpsSamples.splice(0, 1);
+      }
+      this._fpsSamples.push(this.clock.fpsSampler.fps);
+      let total = 0;
+      for (let i = 0; i < this._fpsSamples.length; i++) {
+        total += this._fpsSamples[i];
+      }
+      const average = total / this._fpsSamples.length;
+
+      if (this._fpsSamples.length === threshold.numberOfFrames) {
+        if (average <= threshold.fps) {
+          this._performanceThresholdTriggered = true;
+          this._logger.warn(
+            `Switching to browser 2D Canvas fallback due to performance. Some features of Excalibur will not work in this mode.\n` +
+            'this might mean your browser doesn\'t have webgl enabled or hardware acceleration is unavailable.\n\n' +
+            'If in Chrome:\n' +
+            '  * Visit Settings > Advanced > System, and ensure "Use Hardware Acceleration" is checked.\n'+
+            '  * Visit chrome://flags/#ignore-gpu-blocklist and ensure "Override software rendering list" is "enabled"\n' +
+            'If in Firefox, visit about:config\n' +
+            '  * Ensure webgl.disabled = false\n' +
+            '  * Ensure webgl.force-enabled = true\n' +
+            '  * Ensure layers.acceleration.force-enabled = true\n\n' +
+            'Read more about this issue at https://excaliburjs.com/docs/performance'
+          );
+
+          if (showPlayerMessage) {
+            this._toaster.toast(
+              'Excalibur is encountering performance issues. '+
+              'It\'s possible that your browser doesn\'t have hardware acceleration enabled. ' +
+              'Visit [LINK] for more information and potential solutions.',
+              'https://excaliburjs.com/docs/performance'
+            );
+          }
+          this.useCanvas2DFallback();
+          this.emit('fallbackgraphicscontext', this.graphicsContext);
+        }
+      }
+    }
+  }
+
+  /**
+   * Switches the engine's graphics context to the 2D Canvas.
+   * @warning Some features of Excalibur will not work in this mode.
+   */
+  public useCanvas2DFallback() {
+    // Swap out the canvas
+    const newCanvas = this.canvas.cloneNode(false) as HTMLCanvasElement;
+    this.canvas.parentNode.replaceChild(newCanvas, this.canvas);
+    this.canvas = newCanvas;
+
+    const options = this._originalOptions;
+    const displayMode = this._originalDisplayMode;
+
+    // New graphics context
+    this.graphicsContext = new ExcaliburGraphicsContext2DCanvas({
+      canvasElement: this.canvas,
+      enableTransparency: this.enableCanvasTransparency,
+      smoothing: options.antialiasing,
+      backgroundColor: options.backgroundColor,
+      snapToPixel: options.snapToPixel,
+      useDrawSorting: options.useDrawSorting
+    });
+
+    // Reset screen
+    if (this.screen) {
+      this.screen.dispose();
+    }
+
+    this.screen = new Screen({
+      canvas: this.canvas,
+      context: this.graphicsContext,
+      antialiasing: options.antialiasing ?? true,
+      browser: this.browser,
+      viewport: options.viewport ?? (options.width && options.height ? { width: options.width, height: options.height } : Resolution.SVGA),
+      resolution: options.resolution,
+      displayMode,
+      pixelRatio: options.suppressHiDPIScaling ? 1 : (options.pixelRatio ?? null)
+    });
+    this.screen.setCurrentCamera(this.currentScene.camera);
+
+    // Reset pointers
+    this.input.pointers.detach();
+    const pointerTarget = options && options.pointerScope === Input.PointerScope.Document ? document : this.canvas;
+    this.input.pointers = this.input.pointers.recreate(pointerTarget, this);
+    this.input.pointers.init();
   }
 
   /**
@@ -650,38 +884,6 @@ O|===|* >________________>\n\
     }
 
     this._timescale = value;
-  }
-
-  /**
-   * Plays a sprite animation on the screen at the specified `x` and `y`
-   * (in game coordinates, not screen pixels). These animations play
-   * independent of actors, and will be cleaned up internally as soon
-   * as they are complete. Note animations that loop will never be
-   * cleaned up.
-   *
-   * @param animation  Animation to play
-   * @param x          x game coordinate to play the animation
-   * @param y          y game coordinate to play the animation
-   * @deprecated
-   */
-  @obsolete({ message: 'Will be removed in excalibur v0.26.0', alternateMethod: 'Use Actor.graphics' })
-  public playAnimation(animation: Animation, x: number, y: number) {
-    this._animations.push(new AnimationNode(animation, x, y));
-  }
-
-  /**
-   * Adds a [[TileMap]] to the [[currentScene]], once this is done the TileMap
-   * will be drawn and updated.
-   */
-  public addTileMap(tileMap: TileMap) {
-    this.currentScene.addTileMap(tileMap);
-  }
-
-  /**
-   * Removes a [[TileMap]] from the [[currentScene]], it will no longer be drawn or updated.
-   */
-  public removeTileMap(tileMap: TileMap) {
-    this.currentScene.removeTileMap(tileMap);
   }
 
   /**
@@ -773,6 +975,8 @@ O|===|* >________________>\n\
    */
   public add(actor: Actor): void;
 
+  public add(entity: Entity): void;
+
   /**
    * Adds a [[ScreenElement]] to the [[currentScene]] of the game,
    * ScreenElements do not participate in collisions, instead the
@@ -842,8 +1046,9 @@ O|===|* >________________>\n\
    * Changes the currently updating and drawing scene to a different,
    * named scene. Calls the [[Scene]] lifecycle events.
    * @param key  The key of the scene to transition to.
+   * @param data Optional data to send to the scene's onActivate method
    */
-  public goToScene(key: string): void {
+  public goToScene<TData = undefined>(key: string, data?: TData): void {
     // if not yet initialized defer goToScene
     if (!this.isInitialized) {
       this._deferredGoTo = key;
@@ -851,26 +1056,28 @@ O|===|* >________________>\n\
     }
 
     if (this.scenes[key]) {
-      const oldScene = this.currentScene;
-      const newScene = this.scenes[key];
+      const previousScene = this.currentScene;
+      const nextScene = this.scenes[key];
 
       this._logger.debug('Going to scene:', key);
 
       // only deactivate when initialized
       if (this.currentScene.isInitialized) {
-        this.currentScene._deactivate.apply(this.currentScene, [oldScene, newScene]);
-        this.currentScene.eventDispatcher.emit('deactivate', new DeactivateEvent(newScene, this.currentScene));
+        const context = { engine: this, previousScene, nextScene };
+        this.currentScene._deactivate.apply(this.currentScene, [context, nextScene]);
+        this.currentScene.eventDispatcher.emit('deactivate', new DeactivateEvent(context, this.currentScene));
       }
 
       // set current scene to new one
-      this.currentScene = newScene;
-      this.screen.setCurrentCamera(newScene.camera);
+      this.currentScene = nextScene;
+      this.screen.setCurrentCamera(nextScene.camera);
 
       // initialize the current scene if has not been already
       this.currentScene._initialize(this);
 
-      this.currentScene._activate.apply(this.currentScene, [oldScene, newScene]);
-      this.currentScene.eventDispatcher.emit('activate', new ActivateEvent(oldScene, this.currentScene));
+      const context = { engine: this, previousScene, nextScene, data };
+      this.currentScene._activate.apply(this.currentScene, [context, nextScene]);
+      this.currentScene.eventDispatcher.emit('activate', new ActivateEvent(context, this.currentScene));
     } else {
       this._logger.error('Scene', key, 'does not exist!');
     }
@@ -905,31 +1112,22 @@ O|===|* >________________>\n\
       pointers: new PointerEventReceiver(pointerTarget, this),
       gamepads: new Input.Gamepads()
     };
-    this.input.keyboard.init();
-    this.input.pointers.init();
+    this.input.keyboard.init({
+      grabWindowFocus: this._originalOptions?.grabWindowFocus ?? true
+    });
+    this.input.pointers.init({
+      grabWindowFocus: this._originalOptions?.grabWindowFocus ?? true
+    });
     this.input.gamepads.init();
 
     // Issue #385 make use of the visibility api
     // https://developer.mozilla.org/en-US/docs/Web/Guide/User_experience/Using_the_Page_Visibility_API
 
-    let hidden: keyof HTMLDocument, visibilityChange: string;
-    if (typeof document.hidden !== 'undefined') {
-      // Opera 12.10 and Firefox 18 and later support
-      hidden = 'hidden';
-      visibilityChange = 'visibilitychange';
-    } else if ('msHidden' in document) {
-      hidden = <keyof HTMLDocument>'msHidden';
-      visibilityChange = 'msvisibilitychange';
-    } else if ('webkitHidden' in document) {
-      hidden = <keyof HTMLDocument>'webkitHidden';
-      visibilityChange = 'webkitvisibilitychange';
-    }
-
-    this.browser.document.on(visibilityChange, () => {
-      if (document[hidden]) {
+    this.browser.document.on('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') {
         this.eventDispatcher.emit('hidden', new HiddenEvent(this));
         this._logger.debug('Window hidden');
-      } else {
+      } else if (document.visibilityState === 'visible') {
         this.eventDispatcher.emit('visible', new VisibleEvent(this));
         this._logger.debug('Window visible');
       }
@@ -974,7 +1172,9 @@ O|===|* >________________>\n\
       super.emit('initialize', new InitializeEvent(engine, this));
       this._isInitialized = true;
       if (this._deferredGoTo) {
-        this.goToScene(this._deferredGoTo);
+        const deferredScene = this._deferredGoTo;
+        this._deferredGoTo = null;
+        this.goToScene(deferredScene);
       } else {
         this.goToScene('root');
       }
@@ -986,7 +1186,7 @@ O|===|* >________________>\n\
    * @param delta  Number of milliseconds elapsed since the last update.
    */
   private _update(delta: number) {
-    if (this._isLoading) {
+    if (!this.ready) {
       // suspend updates until loading is finished
       this._loader.update(this, delta);
       // Update input listeners
@@ -995,7 +1195,6 @@ O|===|* >________________>\n\
       return;
     }
 
-    this._overrideInitialize(this);
 
     // Publish preupdate events
     this._preupdate(delta);
@@ -1003,18 +1202,15 @@ O|===|* >________________>\n\
     // process engine level events
     this.currentScene.update(this, delta);
 
-    // update animations
-    // TODO remove
-    this._animations = this._animations.filter(function (a) {
-      return !a.animation.isDone();
-    });
+    // Update graphics postprocessors
+    this.graphicsContext.updatePostProcessors(delta);
+
+    // Publish update event
+    this._postupdate(delta);
 
     // Update input listeners
     this.input.keyboard.update();
     this.input.gamepads.update();
-
-    // Publish update event
-    this._postupdate(delta);
   }
 
   /**
@@ -1046,70 +1242,51 @@ O|===|* >________________>\n\
    * @param delta  Number of milliseconds elapsed since the last draw.
    */
   private _draw(delta: number) {
-    const ctx = this.ctx;
-    this._predraw(ctx, delta);
+    this.graphicsContext.beginDrawLifecycle();
+    this.graphicsContext.clear();
+    this._predraw(this.graphicsContext, delta);
 
-    if (this._isLoading) {
+    // Drawing nothing else while loading
+    if (!this._isReady) {
       this._loader.canvas.draw(this.graphicsContext, 0, 0);
       this.graphicsContext.flush();
-      // Drawing nothing else while loading
       return;
     }
 
-    // TODO move to graphics systems?
     this.graphicsContext.backgroundColor = this.backgroundColor;
 
-    this.currentScene.draw(this.ctx, delta);
+    this.currentScene.draw(this.graphicsContext, delta);
 
-    // todo needs to be a better way of doing this
-    let a = 0;
-    const len = this._animations.length;
-    for (a; a < len; a++) {
-      this._animations[a].animation.draw(ctx, this._animations[a].x, this._animations[a].y);
-    }
+    this._postdraw(this.graphicsContext, delta);
 
-    // Draw debug information
-    // TODO don't access ctx directly
-    if (this.isDebug) {
-      this.ctx.font = 'Consolas';
-      this.ctx.fillStyle = this.debugColor.toString();
-      const keys = this.input.keyboard.getKeys();
-      for (let j = 0; j < keys.length; j++) {
-        this.ctx.fillText(keys[j].toString() + ' : ' + (Input.Keys[keys[j]] ? Input.Keys[keys[j]] : 'Not Mapped'), 100, 10 * j + 10);
-      }
+    // Flush any pending drawings
+    this.graphicsContext.flush();
+    this.graphicsContext.endDrawLifecycle();
 
-      this.ctx.fillText('FPS:' + this.stats.currFrame.fps.toFixed(2).toString(), 10, 10);
-    }
-
-    // Post processing
-    for (let i = 0; i < this.postProcessors.length; i++) {
-      this.postProcessors[i].process(this.ctx.getImageData(0, 0, this.canvasWidth, this.canvasHeight), this.ctx);
-    }
-
-    this._postdraw(ctx, delta);
+    this._checkForScreenShots();
   }
 
   /**
    * @internal
    */
-  public _predraw(_ctx: CanvasRenderingContext2D, delta: number) {
+  public _predraw(_ctx: ExcaliburGraphicsContext, delta: number) {
     this.emit('predraw', new PreDrawEvent(_ctx, delta, this));
     this.onPreDraw(_ctx, delta);
   }
 
-  public onPreDraw(_ctx: CanvasRenderingContext2D, _delta: number) {
+  public onPreDraw(_ctx: ExcaliburGraphicsContext, _delta: number) {
     // Override me
   }
 
   /**
    * @internal
    */
-  public _postdraw(_ctx: CanvasRenderingContext2D, delta: number) {
+  public _postdraw(_ctx: ExcaliburGraphicsContext, delta: number) {
     this.emit('postdraw', new PostDrawEvent(_ctx, delta, this));
     this.onPostDraw(_ctx, delta);
   }
 
-  public onPostDraw(_ctx: CanvasRenderingContext2D, _delta: number) {
+  public onPostDraw(_ctx: ExcaliburGraphicsContext, _delta: number) {
     // Override me
   }
 
@@ -1130,138 +1307,187 @@ O|===|* >________________>\n\
   }
 
   private _loadingComplete: boolean = false;
+
   /**
    * Returns true when loading is totally complete and the player has clicked start
    */
   public get loadingComplete() {
     return this._loadingComplete;
   }
+
+  private _isReady = false;
+  public get ready() {
+    return this._isReady;
+  }
+  private _isReadyResolve: () => any;
+  private _isReadyPromise = new Promise<void>(resolve => {
+    this._isReadyResolve = resolve;
+  });
+  public isReady(): Promise<void> {
+    return this._isReadyPromise;
+  }
+
+
   /**
    * Starts the internal game loop for Excalibur after loading
    * any provided assets.
    * @param loader  Optional [[Loader]] to use to load resources. The default loader is [[Loader]], override to provide your own
    * custom loader.
+   *
+   * Note: start() only resolves AFTER the user has clicked the play button
    */
-  public start(loader?: Loader): Promise<void> {
+  public async start(loader?: Loader): Promise<void> {
     if (!this._compatible) {
-      return Promise.reject('Excalibur is incompatible with your browser');
+      throw new Error('Excalibur is incompatible with your browser');
     }
-    let loadingComplete: Promise<void>;
-    // Push the current user entered resolution/viewport
-    this.screen.pushResolutionAndViewport();
-    // Configure resolution for loader
-    this.screen.resolution = this.screen.viewport;
-    this.screen.applyResolutionAndViewport();
-    this.graphicsContext.updateViewport();
+
+    // Wire loader if we have it
     if (loader) {
+      // Push the current user entered resolution/viewport
+      this.screen.pushResolutionAndViewport();
+
+      // Configure resolution for loader, it expects resolution === viewport
+      this.screen.resolution = this.screen.viewport;
+      this.screen.applyResolutionAndViewport();
       this._loader = loader;
       this._loader.suppressPlayButton = this._suppressPlayButton || this._loader.suppressPlayButton;
       this._loader.wireEngine(this);
-      loadingComplete = this.load(this._loader);
-    } else {
-      loadingComplete = Promise.resolve();
     }
 
-    loadingComplete.then(() => {
+    // Start the excalibur clock which drives the mainloop
+    // has started is a slight misnomer, it's really mainloop started
+    this._logger.debug('Starting game clock...');
+    this.browser.resume();
+    this.clock.start();
+    this._logger.debug('Game clock started');
+
+    if (loader) {
+      await this.load(this._loader);
+      this._loadingComplete = true;
+
+      // reset back to previous user resolution/viewport
       this.screen.popResolutionAndViewport();
       this.screen.applyResolutionAndViewport();
-      this.graphicsContext.updateViewport();
-      this.emit('start', new GameStartEvent(this));
-      this._loadingComplete = true;
-    });
-
-    if (!this._hasStarted) {
-      // has started is a slight misnomer, it's really mainloop started
-      this._hasStarted = true;
-      this._logger.debug('Starting game...');
-      this.browser.resume();
-      Engine.createMainLoop(this, window.requestAnimationFrame, Date.now)();
-      this._logger.debug('Game started');
-    } else {
-      // Game already started;
     }
-    return loadingComplete;
+
+    this._loadingComplete = true;
+
+    // Initialize before ready
+    this._overrideInitialize(this);
+
+    this._isReady = true;
+
+    this._isReadyResolve();
+    this.emit('start', new GameStartEvent(this));
+    return this._isReadyPromise;
   }
 
-  public static createMainLoop(game: Engine, raf: (func: Function) => number, nowFn: () => number) {
-    let lastTime = nowFn();
+  /**
+   * Returns the current frames elapsed milliseconds
+   */
+  public currentFrameElapsedMs = 0;
 
-    return function mainloop() {
-      if (!game._hasStarted) {
-        return;
+  /**
+   * Returns the current frame lag when in fixed update mode
+   */
+  public currentFrameLagMs = 0;
+
+  private _lagMs = 0;
+  private _mainloop(elapsed: number) {
+    this.emit('preframe', new PreFrameEvent(this, this.stats.prevFrame));
+    const delta = elapsed * this.timescale;
+    this.currentFrameElapsedMs = delta;
+
+    // reset frame stats (reuse existing instances)
+    const frameId = this.stats.prevFrame.id + 1;
+    this.stats.currFrame.reset();
+    this.stats.currFrame.id = frameId;
+    this.stats.currFrame.delta = delta;
+    this.stats.currFrame.fps = this.clock.fpsSampler.fps;
+    GraphicsDiagnostics.clear();
+
+    const beforeUpdate = this.clock.now();
+    const fixedTimestepMs = 1000 / this.fixedUpdateFps;
+    if (this.fixedUpdateFps) {
+      this._lagMs += delta;
+      while (this._lagMs >= fixedTimestepMs) {
+        this._update(fixedTimestepMs);
+        this._lagMs -= fixedTimestepMs;
       }
-      try {
-        game._requestId = raf(mainloop);
-        game.emit('preframe', new PreFrameEvent(game, game.stats.prevFrame));
+    } else {
+      this._update(delta);
+    }
+    const afterUpdate = this.clock.now();
+    this.currentFrameLagMs = this._lagMs;
+    this._draw(delta);
+    const afterDraw = this.clock.now();
 
-        // Get the time to calculate time-elapsed
-        const now = nowFn();
-        let elapsed = Math.floor(now - lastTime) || 1;
-        // Resolves issue #138 if the game has been paused, or blurred for
-        // more than a 200 milliseconds, reset elapsed time to 1. This improves reliability
-        // and provides more expected behavior when the engine comes back
-        // into focus
-        if (elapsed > 200) {
-          elapsed = 1;
-        }
-        const delta = elapsed * game.timescale;
+    this.stats.currFrame.duration.update = afterUpdate - beforeUpdate;
+    this.stats.currFrame.duration.draw = afterDraw - afterUpdate;
+    this.stats.currFrame.graphics.drawnImages = GraphicsDiagnostics.DrawnImagesCount;
+    this.stats.currFrame.graphics.drawCalls = GraphicsDiagnostics.DrawCallCount;
 
-        // reset frame stats (reuse existing instances)
-        const frameId = game.stats.prevFrame.id + 1;
-        game.stats.currFrame.reset();
-        game.stats.currFrame.id = frameId;
-        game.stats.currFrame.delta = delta;
-        game.stats.currFrame.fps = 1.0 / (delta / 1000);
+    this.emit('postframe', new PostFrameEvent(this, this.stats.currFrame));
+    this.stats.prevFrame.reset(this.stats.currFrame);
 
-        const beforeUpdate = nowFn();
-        game._update(delta);
-        const afterUpdate = nowFn();
-        game._draw(delta);
-        const afterDraw = nowFn();
-
-        game.stats.currFrame.duration.update = afterUpdate - beforeUpdate;
-        game.stats.currFrame.duration.draw = afterDraw - afterUpdate;
-
-        lastTime = now;
-
-        game.emit('postframe', new PostFrameEvent(game, game.stats.currFrame));
-        game.stats.prevFrame.reset(game.stats.currFrame);
-      } catch (e) {
-        window.cancelAnimationFrame(game._requestId);
-        game.stop();
-        game.onFatalException(e);
-      }
-    };
+    this._monitorPerformanceThresholdAndTriggerFallback();
   }
 
   /**
    * Stops Excalibur's main loop, useful for pausing the game.
    */
   public stop() {
-    if (this._hasStarted) {
+    if (this.clock.isRunning()) {
       this.emit('stop', new GameStopEvent(this));
       this.browser.pause();
-      this._hasStarted = false;
+      this.clock.stop();
       this._logger.debug('Game stopped');
     }
   }
 
   /**
-   * Returns the Engine's Running status, Useful for checking whether engine is running or paused.
+   * Returns the Engine's running status, Useful for checking whether engine is running or paused.
    */
-  public isPaused(): boolean {
-    return !this._hasStarted;
+  public isRunning() {
+    return this.clock.isRunning();
   }
 
+
+  private _screenShotRequests: { preserveHiDPIResolution: boolean, resolve: (image: HTMLImageElement) => void }[] = [];
   /**
    * Takes a screen shot of the current viewport and returns it as an
    * HTML Image Element.
+   * @param preserveHiDPIResolution in the case of HiDPI return the full scaled backing image, by default false
    */
-  public screenshot(): HTMLImageElement {
-    const result = new Image();
-    const raw = this.canvas.toDataURL('image/png');
-    result.src = raw;
-    return result;
+  public screenshot(preserveHiDPIResolution = false): Promise<HTMLImageElement> {
+    const screenShotPromise = new Promise<HTMLImageElement>((resolve) => {
+      this._screenShotRequests.push({preserveHiDPIResolution, resolve});
+    });
+    return screenShotPromise;
+  }
+
+  private _checkForScreenShots() {
+    // We must grab the draw buffer before we yield to the browser
+    // the draw buffer is cleared after compositing
+    // the reason for the asynchrony is setting `preserveDrawingBuffer: true`
+    // forces the browser to copy buffers which can have a mass perf impact on mobile
+    for (const request of this._screenShotRequests) {
+      const finalWidth = request.preserveHiDPIResolution ? this.canvas.width : this.screen.resolution.width;
+      const finalHeight = request.preserveHiDPIResolution ? this.canvas.height : this.screen.resolution.height;
+      const screenshot = document.createElement('canvas');
+      screenshot.width = finalWidth;
+      screenshot.height = finalHeight;
+      const ctx = screenshot.getContext('2d');
+      ctx.imageSmoothingEnabled = this.screen.antialiasing;
+      ctx.drawImage(this.canvas, 0, 0, finalWidth, finalHeight);
+
+      const result = new Image();
+      const raw = screenshot.toDataURL('image/png');
+      result.src = raw;
+      request.resolve(result);
+    }
+    // Reset state
+    this._screenShotRequests.length = 0;
   }
 
   /**
@@ -1270,33 +1496,12 @@ O|===|* >________________>\n\
    * will appear.
    * @param loader  Some [[Loadable]] such as a [[Loader]] collection, [[Sound]], or [[Texture]].
    */
-  public load(loader: Loadable<any>): Promise<void> {
-    const complete = new Promise<void>((resolve) => {
-      this._isLoading = true;
-
-      loader.load().then(() => {
-        if (this._suppressPlayButton) {
-          setTimeout(() => {
-            this._isLoading = false;
-            resolve();
-            // Delay is to give the logo a chance to show, otherwise don't delay
-          }, 500);
-        } else {
-          this._isLoading = false;
-          resolve();
-        }
-      });
-    });
-
-    return complete;
+  public async load(loader: Loadable<any>): Promise<void> {
+    try {
+      await loader.load();
+    } catch (e) {
+      this._logger.error('Error loading resources, things may not behave properly', e);
+      await Promise.resolve();
+    }
   }
-}
-
-/**
- * @internal
- * @deprecated
- */
-@obsolete({ message: 'Will be removed in excalibur v0.26.0' })
-class AnimationNode {
-  constructor(public animation: Animation, public x: number, public y: number) {}
 }

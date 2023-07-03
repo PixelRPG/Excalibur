@@ -3,17 +3,15 @@ import { Actor } from './Actor';
 import { Color } from './Color';
 import { Vector, vec } from './Math/vector';
 import * as Util from './Util/Util';
-import * as DrawUtil from './Util/DrawUtil';
-import * as Traits from './Traits/Index';
 import { Configurable } from './Configurable';
 import { Random } from './Math/Random';
 import { CollisionType } from './Collision/CollisionType';
 import { TransformComponent } from './EntityComponentSystem/Components/TransformComponent';
 import { GraphicsComponent } from './Graphics/GraphicsComponent';
 import { Entity } from './EntityComponentSystem/Entity';
-import { CanvasDrawComponent } from './Drawing/Index';
 import { Sprite } from './Graphics/Sprite';
-import { LegacyDrawing } from '.';
+import { BoundingBox } from './Collision/BoundingBox';
+import { clamp, randomInRange } from './Math/util';
 
 /**
  * An enum that represents the types of emitter nozzles
@@ -58,7 +56,7 @@ export class ParticleImpl extends Entity {
 
   public emitter: ParticleEmitter = null;
   public particleSize: number = 5;
-  public particleSprite: LegacyDrawing.Sprite = null;
+  public particleSprite: Sprite = null;
 
   public startSize: number;
   public endSize: number;
@@ -104,8 +102,15 @@ export class ParticleImpl extends Entity {
     this.endColor = endColor || this.endColor.clone();
     this.beginColor = beginColor || this.beginColor.clone();
     this._currentColor = this.beginColor.clone();
-    this.position = (position || this.position).add(this.emitter.pos);
-    this.velocity = velocity || this.velocity;
+
+    if (this.emitter.particleTransform === ParticleTransform.Global) {
+      const globalPos = this.emitter.transform.globalPos;
+      this.position = (position || this.position).add(globalPos);
+      this.velocity = (velocity || this.velocity).rotate(this.emitter.transform.globalRotation);
+    } else {
+      this.velocity = velocity || this.velocity;
+      this.position = (position || this.position);
+    }
     this.acceleration = acceleration || this.acceleration;
     this._rRate = (this.endColor.r - this.beginColor.r) / this.life;
     this._gRate = (this.endColor.g - this.beginColor.g) / this.life;
@@ -121,7 +126,6 @@ export class ParticleImpl extends Entity {
     }
 
     this.addComponent((this.transform = new TransformComponent()));
-    this.addComponent(new CanvasDrawComponent((ctx) => this.draw(ctx)));
     this.addComponent((this.graphics = new GraphicsComponent()));
 
     this.transform.pos = this.position;
@@ -129,8 +133,9 @@ export class ParticleImpl extends Entity {
     this.transform.scale = vec(1, 1); // TODO wut
     if (this.particleSprite) {
       this.graphics.opacity = this.opacity;
-      this.graphics.use(Sprite.fromLegacySprite(this.particleSprite));
+      this.graphics.use(this.particleSprite);
     } else {
+      this.graphics.localBounds = BoundingBox.fromDimension(this.particleSize, this.particleSize, Vector.Half);
       this.graphics.onPostDraw = (ctx) => {
         ctx.save();
         this.graphics.opacity = this.opacity;
@@ -155,21 +160,21 @@ export class ParticleImpl extends Entity {
     }
 
     if (this.fadeFlag) {
-      this.opacity = Util.clamp(this._aRate * this.life, 0.0001, 1);
+      this.opacity = clamp(this._aRate * this.life, 0.0001, 1);
     }
 
     if (this.startSize > 0 && this.endSize > 0) {
-      this.particleSize = Util.clamp(
+      this.particleSize = clamp(
         this.sizeRate * delta + this.particleSize,
         Math.min(this.startSize, this.endSize),
         Math.max(this.startSize, this.endSize)
       );
     }
 
-    this._currentColor.r = Util.clamp(this._currentColor.r + this._rRate * delta, 0, 255);
-    this._currentColor.g = Util.clamp(this._currentColor.g + this._gRate * delta, 0, 255);
-    this._currentColor.b = Util.clamp(this._currentColor.b + this._bRate * delta, 0, 255);
-    this._currentColor.a = Util.clamp(this.opacity, 0.0001, 1);
+    this._currentColor.r = clamp(this._currentColor.r + this._rRate * delta, 0, 255);
+    this._currentColor.g = clamp(this._currentColor.g + this._gRate * delta, 0, 255);
+    this._currentColor.b = clamp(this._currentColor.b + this._bRate * delta, 0, 255);
+    this._currentColor.a = clamp(this.opacity, 0.0001, 1);
 
     if (this.focus) {
       const accel = this.focus
@@ -192,23 +197,6 @@ export class ParticleImpl extends Entity {
     this.transform.scale = vec(1, 1); // todo wut
     this.graphics.opacity = this.opacity;
   }
-
-  public draw(ctx: CanvasRenderingContext2D) {
-    if (this.particleSprite) {
-      this.particleSprite.opacity(this.opacity);
-      this.particleSprite.draw(ctx, 0, 0);
-      return;
-    }
-
-    ctx.save();
-    this._currentColor.a = Util.clamp(this.opacity, 0.0001, 1);
-    ctx.fillStyle = this._currentColor.toString();
-    ctx.beginPath();
-    ctx.arc(0, 0, this.particleSize, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.closePath();
-    ctx.restore();
-  }
 }
 
 export interface ParticleArgs extends Partial<ParticleImpl> {
@@ -219,7 +207,7 @@ export interface ParticleArgs extends Partial<ParticleImpl> {
   particleRotationalVelocity?: number;
   currentRotation?: number;
   particleSize?: number;
-  particleSprite?: LegacyDrawing.Sprite;
+  particleSprite?: Sprite;
 }
 
 /**
@@ -255,6 +243,19 @@ export class Particle extends Configurable(ParticleImpl) {
   }
 }
 
+export enum ParticleTransform {
+  /**
+   * [[ParticleTransform.Global]] is the default and emits particles as if
+   * they were world space objects, useful for most effects.
+   */
+  Global = 'global',
+  /**
+   * [[ParticleTransform.Local]] particles are children of the emitter and move relative to the emitter
+   * as they would in a parent/child actor relationship.
+   */
+  Local = 'local'
+}
+
 export interface ParticleEmitterArgs {
   x?: number;
   y?: number;
@@ -269,6 +270,14 @@ export interface ParticleEmitterArgs {
   maxAngle?: number;
   emitRate?: number;
   particleLife?: number;
+  /**
+   * Optionally set the emitted particle transform style, [[ParticleTransform.Global]] is the default and emits particles as if
+   * they were world space objects, useful for most effects.
+   *
+   * If set to [[ParticleTransform.Local]] particles are children of the emitter and move relative to the emitter
+   * as they would in a parent/child actor relationship.
+   */
+  particleTransform?: ParticleTransform;
   opacity?: number;
   fadeFlag?: boolean;
   focus?: Vector;
@@ -279,7 +288,7 @@ export interface ParticleEmitterArgs {
   maxSize?: number;
   beginColor?: Color;
   endColor?: Color;
-  particleSprite?: LegacyDrawing.Sprite;
+  particleSprite?: Sprite;
   emitterType?: EmitterType;
   radius?: number;
   particleRotationalVelocity?: number;
@@ -399,19 +408,17 @@ export class ParticleEmitter extends Actor {
    */
   public endColor: Color = Color.White;
 
-  private _og: LegacyDrawing.Sprite = null;
   private _sprite: Sprite = null;
   /**
    * Gets or sets the sprite that a particle should use
    */
-  public get particleSprite(): LegacyDrawing.Sprite {
-    return this._og;
+  public get particleSprite(): Sprite {
+    return this._sprite;
   }
 
-  public set particleSprite(val: LegacyDrawing.Sprite) {
-    this._og = val;
+  public set particleSprite(val: Sprite) {
     if (val) {
-      this._sprite = Sprite.fromLegacySprite(val);
+      this._sprite = val;
     }
   }
 
@@ -434,6 +441,15 @@ export class ParticleEmitter extends Actor {
    * Indicates whether particles should start with a random rotation
    */
   public randomRotation: boolean = false;
+
+  /**
+   * Gets or sets the emitted particle transform style, [[ParticleTransform.Global]] is the default and emits particles as if
+   * they were world space objects, useful for most effects.
+   *
+   * If set to [[ParticleTransform.Local]] particles are children of the emitter and move relative to the emitter
+   * as they would in a parent/child actor relationship.
+   */
+  public particleTransform: ParticleTransform = ParticleTransform.Global;
 
   /**
    * @param config particle emitter options bag
@@ -467,6 +483,7 @@ export class ParticleEmitter extends Actor {
       emitterType,
       radius,
       particleRotationalVelocity,
+      particleTransform,
       randomRotation,
       random
     } = { ...config };
@@ -495,17 +512,11 @@ export class ParticleEmitter extends Actor {
     this.radius = radius ?? this.radius;
     this.particleRotationalVelocity = particleRotationalVelocity ?? this.particleRotationalVelocity;
     this.randomRotation = randomRotation ?? this.randomRotation;
+    this.particleTransform = particleTransform ?? this.particleTransform;
 
     this.body.collisionType = CollisionType.PreventCollision;
 
     this.random = random ?? new Random();
-
-    // Remove offscreen culling from particle emitters
-    for (let i = 0; i < this.traits.length; i++) {
-      if (this.traits[i] instanceof Traits.OffscreenCulling) {
-        this.traits.splice(i, 1);
-      }
-    }
   }
 
   public removeParticle(particle: Particle) {
@@ -521,7 +532,11 @@ export class ParticleEmitter extends Actor {
       const p = this._createParticle();
       this.particles.push(p);
       if (this?.scene?.world) {
-        this.scene.world.add(p);
+        if (this.particleTransform === ParticleTransform.Global) {
+          this.scene.world.add(p);
+        } else {
+          this.addChild(p);
+        }
       }
     }
   }
@@ -536,17 +551,17 @@ export class ParticleEmitter extends Actor {
     let ranX = 0;
     let ranY = 0;
 
-    const angle = Util.randomInRange(this.minAngle, this.maxAngle, this.random);
-    const vel = Util.randomInRange(this.minVel, this.maxVel, this.random);
-    const size = this.startSize || Util.randomInRange(this.minSize, this.maxSize, this.random);
+    const angle = randomInRange(this.minAngle, this.maxAngle, this.random);
+    const vel = randomInRange(this.minVel, this.maxVel, this.random);
+    const size = this.startSize || randomInRange(this.minSize, this.maxSize, this.random);
     const dx = vel * Math.cos(angle);
     const dy = vel * Math.sin(angle);
 
     if (this.emitterType === EmitterType.Rectangle) {
-      ranX = Util.randomInRange(0, this.width, this.random);
-      ranY = Util.randomInRange(0, this.height, this.random);
+      ranX = randomInRange(0, this.width, this.random);
+      ranY = randomInRange(0, this.height, this.random);
     } else if (this.emitterType === EmitterType.Circle) {
-      const radius = Util.randomInRange(0, this.radius, this.random);
+      const radius = randomInRange(0, this.radius, this.random);
       ranX = radius * Math.cos(angle);
       ranY = radius * Math.sin(angle);
     }
@@ -572,7 +587,7 @@ export class ParticleEmitter extends Actor {
     }
     p.particleRotationalVelocity = this.particleRotationalVelocity;
     if (this.randomRotation) {
-      p.currentRotation = Util.randomInRange(0, Math.PI * 2, this.random);
+      p.currentRotation = randomInRange(0, Math.PI * 2, this.random);
     }
     if (this.focus) {
       p.focus = this.focus.add(new Vector(this.pos.x, this.pos.y));
@@ -600,23 +615,5 @@ export class ParticleEmitter extends Actor {
       }
     }
     this.deadParticles.length = 0;
-  }
-
-  public draw(ctx: CanvasRenderingContext2D) {
-    // todo is there a more efficient to draw
-    // possibly use a webgl offscreen canvas and shaders to do particles?
-    this.particles.forEach((p) => p.draw(ctx));
-  }
-
-  public debugDraw(ctx: CanvasRenderingContext2D) {
-    super.debugDraw(ctx);
-    ctx.fillStyle = Color.Black.toString();
-    ctx.fillText('Particles: ' + this.particles.length, this.pos.x, this.pos.y + 20);
-
-    if (this.focus) {
-      ctx.fillRect(this.focus.x + this.pos.x, this.focus.y + this.pos.y, 3, 3);
-      DrawUtil.line(ctx, Color.Yellow, this.focus.x + this.pos.x, this.focus.y + this.pos.y, this.center.x, this.center.y);
-      ctx.fillText('Focus', this.focus.x + this.pos.x, this.focus.y + this.pos.y);
-    }
   }
 }

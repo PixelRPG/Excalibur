@@ -2,6 +2,7 @@ import { DebugFlags, ColorBlindFlags } from './DebugFlags';
 import { Engine } from '../Engine';
 import { Color } from '../Color';
 import { CollisionContact } from '../Collision/Detection/CollisionContact';
+import { StandardClock, TestClock } from '..';
 
 /**
  * Debug stats containing current and previous frame statistics
@@ -161,6 +162,45 @@ export class Debug implements DebugFlags {
   }
 
   /**
+   * Switch the current excalibur clock with the [[TestClock]] and return
+   * it in the same running state.
+   *
+   * This is useful when you need to debug frame by frame.
+   */
+  public useTestClock(): TestClock {
+    const clock = this._engine.clock;
+    const wasRunning = clock.isRunning();
+    clock.stop();
+
+    const testClock = clock.toTestClock();
+    if (wasRunning) {
+      testClock.start();
+    }
+    this._engine.clock = testClock;
+    return testClock;
+  }
+
+  /**
+   * Switch the current excalibur clock with the [[StandardClock]] and
+   * return it in the same running state.
+   *
+   * This is useful when you need to switch back to normal mode after
+   * debugging.
+   */
+  public useStandardClock(): StandardClock {
+    const currentClock = this._engine.clock;
+    const wasRunning = currentClock.isRunning();
+    currentClock.stop();
+
+    const standardClock = currentClock.toStandardClock();
+    if (wasRunning) {
+      standardClock.start();
+    }
+    this._engine.clock = standardClock;
+    return standardClock;
+  }
+
+  /**
    * Performance statistics
    */
   public stats: DebugStats = {
@@ -178,7 +218,7 @@ export class Debug implements DebugFlags {
   };
 
   /**
-   * Correct or simulate color blindness using [[ColorBlindness]] post processor.
+   * Correct or simulate color blindness using [[ColorBlindnessPostProcessor]].
    * @warning Will reduce FPS.
    */
   public colorBlindMode: ColorBlindFlags;
@@ -217,7 +257,10 @@ export class Debug implements DebugFlags {
     showAll: false,
 
     showPosition: false,
+    showPositionLabel: false,
     positionColor: Color.Yellow,
+
+    showZIndex: false,
 
     showScale: false,
     scaleColor: Color.Green,

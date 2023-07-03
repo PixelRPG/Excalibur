@@ -8,8 +8,9 @@ import { Component } from '../EntityComponentSystem/Component';
 import { CollisionGroup } from './Group/CollisionGroup';
 import { EventDispatcher } from '../EventDispatcher';
 import { createId, Id } from '../Id';
-import { clamp } from '../Util/Util';
+import { clamp } from '../Math/util';
 import { ColliderComponent } from './ColliderComponent';
+import { Transform } from '../Math/transform';
 
 export interface BodyComponentOptions {
   type?: CollisionType;
@@ -34,6 +35,19 @@ export class BodyComponent extends Component<'ex.body'> implements Clonable<Body
   public readonly id: Id<'body'> = createId('body', BodyComponent._ID++);
   public events = new EventDispatcher();
 
+  private _oldTransform = new Transform();
+
+  /**
+   * Indicates whether the old transform has been captured at least once for interpolation
+   * @internal
+   */
+  public __oldTransformCaptured: boolean = false;
+
+  /**
+   * Enable or disabled the fixed update interpolation, by default interpolation is on.
+   */
+  public enableFixedUpdateInterpolate = true;
+
   constructor(options?: BodyComponentOptions) {
     super();
     if (options) {
@@ -41,6 +55,10 @@ export class BodyComponent extends Component<'ex.body'> implements Clonable<Body
       this.group = options.group ?? this.group;
       this.useGravity = options.useGravity ?? this.useGravity;
     }
+  }
+
+  public get matrix() {
+    return this.transform.get().matrix;
   }
 
   /**
@@ -56,7 +74,16 @@ export class BodyComponent extends Component<'ex.body'> implements Clonable<Body
   /**
    * The amount of mass the body has
    */
-  public mass: number = Physics.defaultMass;
+  private _mass: number = Physics.defaultMass;
+  public get mass(): number {
+    return this._mass;
+  }
+
+  public set mass(newMass: number) {
+    this._mass = newMass;
+    this._cachedInertia = undefined;
+    this._cachedInverseInertia = undefined;
+  }
 
   /**
    * The inverse mass (1/mass) of the body. If [[CollisionType.Fixed]] this is 0, meaning "infinite" mass
@@ -116,23 +143,41 @@ export class BodyComponent extends Component<'ex.body'> implements Clonable<Body
     }
   }
 
+  private _cachedInertia: number;
   /**
    * Get the moment of inertia from the [[ColliderComponent]]
    */
   public get inertia() {
+    if (this._cachedInertia) {
+      return this._cachedInertia;
+    }
+
     // Inertia is a property of the geometry, so this is a little goofy but seems to be okay?
     const collider = this.owner.get(ColliderComponent);
-    if (collider?.get()) {
-      return collider.get().getInertia(this.mass);
+    if (collider) {
+      collider.$colliderAdded.subscribe(() => {
+        this._cachedInertia = null;
+      });
+      collider.$colliderRemoved.subscribe(() => {
+        this._cachedInertia = null;
+      });
+      const maybeCollider = collider.get();
+      if (maybeCollider) {
+        return this._cachedInertia = maybeCollider.getInertia(this.mass);
+      }
     }
     return 0;
   }
 
+  private _cachedInverseInertia: number;
   /**
    * Get the inverse moment of inertial from the [[ColliderComponent]]. If [[CollisionType.Fixed]] this is 0, meaning "infinite" mass
    */
   public get inverseInertia() {
-    return this.collisionType === CollisionType.Fixed ? 0 : 1 / this.inertia;
+    if (this._cachedInverseInertia) {
+      return this._cachedInverseInertia;
+    }
+    return this._cachedInverseInertia = this.collisionType === CollisionType.Fixed ? 0 : 1 / this.inertia;
   }
 
   /**
@@ -153,6 +198,8 @@ export class BodyComponent extends Component<'ex.body'> implements Clonable<Body
 
   /**
    * Degrees of freedom to limit
+   *
+   * Note: this only limits responses in the realistic solver, if velocity/angularVelocity is set the actor will still respond
    */
   public limitDegreeOfFreedom: DegreeOfFreedom[] = [];
 
@@ -163,8 +210,11 @@ export class BodyComponent extends Component<'ex.body'> implements Clonable<Body
     return !!this.owner?.active;
   }
 
+  /**
+   * @deprecated Use globalP0s
+   */
   public get center() {
-    return this.pos;
+    return this.globalPos;
   }
 
   public get transform(): TransformComponent {
@@ -172,7 +222,15 @@ export class BodyComponent extends Component<'ex.body'> implements Clonable<Body
   }
 
   public get motion(): MotionComponent {
-    return this.owner?.get(MotionComponent);
+    return  this.owner?.get(MotionComponent);
+  }
+
+  public get pos(): Vector {
+    return this.transform.pos;
+  }
+
+  public set pos(val: Vector) {
+    this.transform.pos = val;
   }
 
   /**
@@ -180,18 +238,20 @@ export class BodyComponent extends Component<'ex.body'> implements Clonable<Body
    * [[Actor.anchor]] is set to (0.5, 0.5) which is default.
    * If you want the (x, y) position to be the top left of the actor specify an anchor of (0, 0).
    */
-  public get pos(): Vector {
+  public get globalPos(): Vector {
     return this.transform.globalPos;
   }
 
-  public set pos(val: Vector) {
+  public set globalPos(val: Vector) {
     this.transform.globalPos = val;
   }
 
   /**
    * The position of the actor last frame (x, y) in pixels
    */
-  public oldPos: Vector = new Vector(0, 0);
+  public get oldPos(): Vector {
+    return this._oldTransform.pos;
+  }
 
   /**
    * The current velocity vector (vx, vy) of the actor in pixels/second
@@ -240,7 +300,9 @@ export class BodyComponent extends Component<'ex.body'> implements Clonable<Body
   /**
    * Gets/sets the rotation of the body from the last frame.
    */
-  public oldRotation: number = 0; // radians
+  public get oldRotation(): number {
+    return this._oldTransform.rotation;
+  }
 
   /**
    * The rotation of the body in radians
@@ -255,7 +317,6 @@ export class BodyComponent extends Component<'ex.body'> implements Clonable<Body
 
   /**
    * The scale vector of the actor
-   * @deprecated ex.Body.scale will be removed in v0.25.0, Use ex.Transform.scale
    */
   public get scale(): Vector {
     return this.transform.globalScale;
@@ -267,48 +328,20 @@ export class BodyComponent extends Component<'ex.body'> implements Clonable<Body
 
   /**
    * The scale of the actor last frame
-   * @deprecated ex.Body.scale will be removed in v0.25.0
    */
-  public oldScale: Vector = Vector.One;
-
-  /**
-   * The x scalar velocity of the actor in scale/second
-   * @deprecated ex.Body.scale will be removed in v0.25.0
-   */
-  public get sx(): number {
-    return this.motion.scaleFactor.x;
-  }
-
-  public set sx(xFactor: number) {
-    this.motion.scaleFactor.x = xFactor;
+  public get oldScale(): Vector {
+    return this._oldTransform.scale;
   }
 
   /**
-   * The y scalar velocity of the actor in scale/second
-   * @deprecated ex.Body.scale will be removed in v0.25.0
+   * The scale rate of change of the actor in scale/second
    */
-  public get sy(): number {
-    return this.motion.scaleFactor.y;
+  public get scaleFactor(): Vector {
+    return this.motion.scaleFactor;
   }
 
-  public set sy(yFactor: number) {
-    this.motion.scaleFactor.y = yFactor;
-  }
-
-  /**
-   * The rotational velocity of the actor in radians/second
-   * @deprecated
-   */
-  public get rx(): number {
-    return this.motion.angularVelocity;
-  }
-
-  /**
-   * The rotational velocity of the actor in radians/second
-   * @deprecated
-   */
-  public set rx(value: number) {
-    this.motion.angularVelocity = value;
+  public set scaleFactor(scaleFactor: Vector) {
+    this.motion.scaleFactor = scaleFactor;
   }
 
   /**
@@ -346,7 +379,7 @@ export class BodyComponent extends Component<'ex.body'> implements Clonable<Body
     this.vel.addEqual(finalImpulse);
 
     if (!this.limitDegreeOfFreedom.includes(DegreeOfFreedom.Rotation)) {
-      const distanceFromCenter = point.sub(this.pos);
+      const distanceFromCenter = point.sub(this.globalPos);
       this.angularVelocity += this.inverseInertia * distanceFromCenter.cross(impulse);
     }
   }
@@ -373,7 +406,7 @@ export class BodyComponent extends Component<'ex.body'> implements Clonable<Body
   }
 
   /**
-   * Apply only angular impuse to the body
+   * Apply only angular impulse to the body
    * @param point
    * @param impulse
    */
@@ -383,7 +416,7 @@ export class BodyComponent extends Component<'ex.body'> implements Clonable<Body
     }
 
     if (!this.limitDegreeOfFreedom.includes(DegreeOfFreedom.Rotation)) {
-      const distanceFromCenter = point.sub(this.pos);
+      const distanceFromCenter = point.sub(this.globalPos);
       this.angularVelocity += this.inverseInertia * distanceFromCenter.cross(impulse);
     }
   }
@@ -393,14 +426,14 @@ export class BodyComponent extends Component<'ex.body'> implements Clonable<Body
    */
   public captureOldTransform() {
     // Capture old values before integration step updates them
+    this.__oldTransformCaptured = true;
+    this.transform.get().clone(this._oldTransform);
     this.oldVel.setTo(this.vel.x, this.vel.y);
-    this.oldPos.setTo(this.pos.x, this.pos.y);
     this.oldAcc.setTo(this.acc.x, this.acc.y);
-    this.oldScale.setTo(this.scale.x, this.scale.y);
-    this.oldRotation = this.rotation;
   }
 
-  debugDraw(_ctx: CanvasRenderingContext2D) {
-    // pass
+  public clone(): BodyComponent {
+    const component = super.clone() as BodyComponent;
+    return component;
   }
 }

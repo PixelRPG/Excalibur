@@ -3,11 +3,376 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+
 ## [Unreleased]
 
 ### Breaking Changes
 
-- `ex.Util.extend()` is removed, modern js spread operator `{...someobject, ...someotherobject}` handles this better.
+-
+
+### Deprecated
+
+- [[ex.Input.Gamepad]] `isButtonPressed` has been renamed to `isButtonHeld`
+- `ex.EventDispatcher` is marked deprecated, will eventually be removed in v0.29.0
+
+
+### Added
+
+- Added updates to `ex.PostProcessor` 
+  * New optional `ex.PostProcessor.onUpdate` hook for updating custom uniforms
+  * Added default uniforms that are automatically added
+    * `uniform float u_time_ms` - total playback time in milliseconds
+    * `uniform float u_elapsed_ms` - the elapsed time from the last frame in milliseconds
+    * `uniform vec2 u_resolution` - the resolution of the canvas (in pixels)
+
+- Added new helper called `ex.Animation.fromSpriteSheetCoordinates` to help build animations more tersely from SpriteSheets
+  ```typescript
+   const spriteSheet = SpriteSheet.fromImageSource({...});
+      const anim = Animation.fromSpriteSheetCoordinates({
+    spriteSheet,
+    frameCoordinates: [
+      {x: 0, y: 5, duration: 100},
+      {x: 1, y: 5, duration: 200},
+      {x: 2, y: 5, duration: 100},
+      {x: 3, y: 5, duration: 500}
+    ],
+    strategy: AnimationStrategy.PingPong
+   });
+  ```
+
+- Added new `FrameEvent` to `ex.Animation` which includes the frame index of the current frame!
+  ```typescript
+    const anim = new Animation();
+
+    // TS autocompletes the handler
+    anim.on('frame', (frame: FrameEvent) => {
+      // Do stuff on frame
+    });
+  ```
+
+- Added new typed `ex.EventEmitter` which will eventually replace the old `ex.EventDispatcher`, this gives users a way of strongly typing the possible events that can be emitted using a type map. This is loosely typed you can still emit any event you want, you only get type completion suggestions for the type map.
+  ```typescript
+  export type AnimationEvents = {
+    frame: FrameEvent;
+    loop: Animation;
+    ended: Animation;
+  };
+
+  export class Animation {
+    public events = new EventEmitter<AnimationEvents>();
+    ...
+  }
+
+  const anim = new Animation();
+
+  // TS autocompletes the handler
+  anim.on('frame', (frame: FrameEvent) => {
+    // Do stuff on frame
+  });
+  ```
+
+- Added ability to perform arbitrary ray casts into `ex.Scene`, the `ex.PhysicsWorld` can be passed a variety of options to influence the types of ray cast hits that
+are returned
+  ```typescript
+    const engine = new ex.Engine({...});
+    const enemyGroup = ex.CollisionGroupManager.create('enemy');
+    const ray = new ex.Ray(ex.vec(0, 0), ex.Vector.Right);
+    const hits = engine.currentScene.physics.rayCast(ray, {
+      /**
+       * Optionally specify to search for all colliders that intersect the ray cast, not just the first which is the default
+       */
+      searchAllColliders: true,
+      /**
+       * Optionally specify the maximum distance in pixels to ray cast, default is Infinity
+       */
+      maxDistance: 100,
+      /**
+       * Optionally specify a collision group to consider in the ray cast, default is All
+       */
+      collisionGroup: enemyGroup
+    });
+
+  ```
+- Added word-wrap support for `ex.Text` using the optional parameter `maxWidth`
+- Added the emitted particle transform style as part of `ex.ParticleEmitter({particleTransform: ex.ParticleTransform.Global})`, [[ParticleTransform.Global]] is the default and emits particles as if they were world space objects, useful for most effects. If set to [[ParticleTransform.Local]] particles are children of the emitter and move relative to the emitter as they would in a parent/child actor relationship.
+- Added `wasButtonReleased` and `wasButtonPressed` methods to [[ex.Input.Gamepad]]
+- Added `clone()` method to `ex.SpriteSheet` 
+
+### Fixed
+
+- Fixed issue where `ex.ScreenElement` pointer events were not working by default.
+- Fixed issue where setting lineWidth on `ex.Circle` was not accounted for in the bitmap
+- Fixed issue in macos where the meta key would prevent keyup's from firing correctly
+- Fixed issue when excalibur was hosted in a x-origin iframe, the engine will grab window focus by default if in an iframe. This can be suppressed with `new ex.Engine({grabWindowFocus: false})`
+- Fixed issue where `ex.Camera.rotation = ...` did not work to rotate the camera, also addressed offscreen culling issues that were revealed by this fix.
+- Fixed issue where the `ex.ScreenElement` anchor was not being accounted for properly when passed as a constructor parameter.
+- Fixed issue where you could not use multiple instances of Excalibur on the same page, you can now have as many Excalibur's as you want (up to the webgl context limit).
+- Fixed issue where `ex.ScreenElement` would log a warning when created without a height or width
+- Fixed issue where `ex.Sound` would get confused parsing and playing sound files with a querystring in their path
+- Fixed issue where `ex.ColliderComponent` was not deeply cloning the stored `ex.Collider` causing them to be shared across clones.
+- Fixed issue where `ex.GraphicsComponent` was not deeploy cloning the
+stored `ex.Graphics` causing them to be shared across clones.
+- Fixed issue where `Actor.clone()` and `Entity.clone()` crashed.
+- Fixed issue where zero mtv collisions cause erroneous precollision events to be fired in the `ArcadeSolver` and `RealisticSolver`
+- Fixed issue where calling `.kill()` on a child entity would not remove it from the parent `Entity`
+- Fixed issue where calling `.removeAllChildren()` would not remove all the children from the parent `Entity`
+- Fixed issue where world origin was inconsistent when the using `ex.DisplayMode.FitScreenAndFill` when the screen was resized.
+- Fixed issue where context opacity was not respected when set in a `preDraw`
+- Fixed issue where `ex.Sound.loop` was not working, and switching tab visibility would cause odd behavior with looping `ex.Sound`
+- Fixed issue where adding a `ex.ParticleEmitter` as a child did not position particles according to the parent
+- Fixed issue where screenshots from `ex.Engine.screenshot()` did not match the smoothing set on the engine.
+- Fixed incorrect event type returned when `ex.Actor.on('postupdate', (event) => {...})`.
+- Fixed issue where using numerous `ex.Text` instances would cause Excalibur to crash webgl by implementing a global font cache.
+- Fixed issue where child entities did not inherit the scene from their parent
+- Fixed issue where `ex.Font` would become corrupted when re-used by multiple `ex.Text` instances
+- Fixed `engine.on('visible')` event not firing
+- Fixed `EventDispatcher.emit` converting falsy values to `ex.GameEvent`. It will only convert `undefined` or `null` values now.
+
+### Updates
+
+-
+
+### Changed
+
+- Excalibur resources by default no longer add cache busting query string to resources. All built in resources now expose a `bustCache` property to allow setting this before loading, for example `ex.Sound.bustCache`.
+
+
+
+<!--------------------------------- DO NOT EDIT BELOW THIS LINE --------------------------------->
+<!--------------------------------- DO NOT EDIT BELOW THIS LINE --------------------------------->
+<!--------------------------------- DO NOT EDIT BELOW THIS LINE --------------------------------->
+
+## [0.27.0] - 2022-07-08
+
+### Breaking Changes
+
+- `ex.Engine.snapToPixel` now defaults to `false`, it was unexpected to have pixel snapping on by default it has now been switched.
+- The `ex.Physics.useRealisticPhysics()` physics solver has been updated to fix a bug in bounciness to be more physically accurate, this does change how physics behaves. Setting `ex.Body.bounciness = 0` will simulate the old behavior. 
+- `ex.TransformComponent.posChanged$` has been removed, it incurs a steep performance cost
+- `ex.EventDispatcher` meta events 'subscribe' and 'unsubscribe' were unused and undocumented and have been removed
+- `ex.TileMap` tlies are now drawn from the lower left by default to match with `ex.IsometricMap` and Tiled, but can be configured with `renderFromTopOfGraphic` to restore the previous behavior.
+- Scene `onActivate` and `onDeactivate` methods have been changed to receive a single parameter, an object containing the `previousScene`, `nextScene`, and optional `data` passed in from `goToScene()`
+
+### Deprecated
+
+-
+
+### Added
+- Added new configurable `ex.TileMap` option for rendering from the bottom or the top of the graphic, this matches with `ex.IsometricMap` and how Tiled renders `renderFromTopOfGraphic`, by default `false` and renders from the bottom.
+  ```typescript
+  const tileMap = new ex.TileMap({
+    renderFromTopOfGraphic: false
+  })
+  ```
+- Added new `ex.Future` type which is a convenient way of wrapping a native browser promise and resolving/rejecting later
+  ```typescript
+  const future = new ex.Future();
+  const promise = future.promise; // returns promise
+  promise.then(() => {
+    console.log('Resolved!');
+  });
+  future.resolve(); // resolved promise
+  ```
+- Added new `ex.Semaphore` type to limit the number of concurrent cans in a section of code, this is used internally to work around a chrome browser limitation, but can be useful for throttling network calls or even async game events.
+  ```typescript
+  const semaphore = new ex.Semaphore(10); // Only allow 10 concurrent between enter() and exit()
+  ...
+
+  await semaphore.enter();
+  await methodToBeLimited();
+  semaphore.exit();
+  ```
+- Added new `ex.WatchVector` type that can observe changes to x/y more efficiently than `ex.watch()`
+- Added performance improvements 
+   * `ex.Vector.distance` improvement
+   * `ex.BoundingBox.transform` improvement
+- Added ability to clone `ex.Vector.clone(destVector)` into a destination vector
+- Added new `ex.Transform` type that is a light weight container for transformation data. This logic has been extracted from the `ex.TransformComponent`, this makes it easy to pass `ex.Transform`s around. Additionally the extracted `ex.Transform` logic has been refactored for performance.
+- Added new `ex.AffineMatrix` that is meant for 2D affine transformations, it uses less memory and performs less calculations than the `ex.Matrix` which uses a 4x4 Float32 matrix.
+- Added new fixed update step to Excalibur! This allows developers to configure a fixed FPS for the update loop. One advantage of setting a fix update is that you will have a more consistent and predictable physics simulation. Excalibur graphics will be interpolated automatically to avoid any jitter in the fixed update.
+  * If the fixed update FPS is greater than the display FPS, excalibur will run multiple updates in a row (at the configured update elapsed) to catch up, for example there could be X updates and 1 draw each clock step.
+  * If the fixed update FPS is less than the display FPS, excalibur will skip updates until it meets the desired FPS, for example there could be no update for 1 draw each clock step.
+  ```typescript
+  const game = new ex.Engine({
+    fixedUpdateFps: 20 // 20 fps fixed update, or a fixed update delta of 50 milliseconds
+  });
+  // turn off interpolation on a per actor basis
+  const actor = new ex.Actor({...});
+  actor.body.enableFixedUpdateInterpolate = false;
+  game.add(game);
+  ```
+
+- Allowed setting playback `ex.Sound.duration` which will limit the amount of time that a clip plays from the current playback position.
+- Added a new lightweight `ex.StateMachine` type for building finite state machines
+  ```typescript
+  const machine = ex.StateMachine.create({
+    start: 'STOPPED',
+    states: {
+      PLAYING: {
+        onEnter: () => {
+          console.log("playing");
+        },
+        transitions: ['STOPPED', 'PAUSED']
+      },
+      STOPPED: {
+        onEnter: () => {
+          console.log("stopped");
+        },
+        transitions: ['PLAYING', 'SEEK']
+      },
+      SEEK: {
+        transitions: ['*']
+      },
+      PAUSED: {
+        onEnter: () => {
+          console.log("paused")
+        },
+        transitions: ['PLAYING', 'STOPPED']
+      }
+    }
+  });
+  ```
+- Added `ex.Sound.seek(positionInSeconds)` which will allow you to see to a place in the sound, this will implicitly pause the sound
+- Added `ex.Sound.getTotalPlaybackDuration()` which will return the total time in the sound in seconds.
+- Allow tinting of `ex.Sprite`'s by setting a new `tint` property, renderers must support the tint property in order to function.
+  ```typescript
+  const imageSource = new ex.ImageSource('./path/to/image.png');
+  await imageSource.load();
+  const sprite = imageSource.toSprite();
+  sprite.tint = ex.Color.Red;
+  ```
+- Added `ex.Sound.getPlaybackPosition()` which returns the current playback position in seconds of the currently playing sound.
+- Added `ex.Sound.playbackRate` which allows developers to get/set the current rate of playback. 1.0 is the default playback rate, 2.0 is twice the speed, and 0.5 is half speed.
+- Added missing `ex.EaseBy` action type, uses `ex.EasingFunctions` to move relative from the current entity position.
+- Added 2 new `Action` types to enable running parallel actions. `ex.ActionSequence` which allows developers to specify a sequence of actions to run in order, and `ex.ParallelActions` to run multiple actions at the same time.
+  ```typescript
+  const actor = new ex.Actor();
+  const parallel = new ex.ParallelActions([
+    new ex.ActionSequence(actor, ctx => ctx.moveTo(ex.vec(100, 0), 100)),
+    new ex.ActionSequence(actor, ctx => ctx.rotateTo(Math.PI/2, Math.PI/2))
+  ]);
+  actor.actions.runAction(parallel);
+  // actor will now move to (100, 100) and rotate to Math.PI/2 at the same time!!
+  ```
+- Add target element id to `ex.Screen.goFullScreen('some-element-id')` to influence the fullscreen element in the fullscreen browser API.
+- Added optional `data` parameter to `goToScene`, which gets passed to the target scene's `onActivate` method.
+  ```typescript
+  class SceneA extends ex.Scene {
+    /* ... */
+
+    onActivate(context: ex.SceneActivationContext<{ foo: string }>) {
+      console.log(context.data.foo); // bar
+    }
+  }
+
+  engine.goToScene('sceneA', { foo: 'bar' })
+  ```
+  - Added the ability to select variable duration into Timer constructor.
+  ```typescript
+  const random = new ex.Random(1337);
+  const timer = new ex.Timer({
+    random,
+    interval: 500,
+    randomRange: [0, 500]
+  })
+  ```
+
+### Fixed
+
+- Fixed issue with `ex.Canvas` and `ex.Raster` graphics that forced their dimensions to the next highest power of two.
+- Fixed issue with `ex.Engine.snapToPixel` where positions very close to pixel boundary created jarring 1 pixel oscillations.
+- Fixed bug where a deferred `goToScene` would preserve the incorrect scene so `engine.add(someActor)` would place actors in the wrong scene after transitioning to another.
+- Fixed usability issue and log warning if the `ex.ImageSource` is not loaded and a draw was attempted.
+- Fixed bug in `ex.Physics.useRealisticPhysics()` solver where `ex.Body.bounciness` was not being respected in the simulation
+- Fixed bug in `ex.Physics.useRealisticPhysics()` solver where `ex.Body.limitDegreeOfFreedom` was not working all the time.
+- Fixed bug in `Clock.schedule` where callbacks would not fire at the correct time, this was because it was scheduling using browser time and not the clock's internal time.
+- Fixed issue in Chromium browsers where Excalibur crashes if more than 256 `Image.decode()` calls are happening in the same frame.
+- Fixed issue where `ex.EdgeCollider` were not working properly in `ex.CompositeCollider` for `ex.TileMap`'s
+- Fixed issue where `ex.BoundingBox` overlap return false due to floating point rounding error causing multiple collisions to be evaluated sometimes
+- Fixed issue with `ex.EventDispatcher` where removing a handler that didn't already exist would remove another handler by mistake
+- Fixed issue with `ex.EventDispatcher` where concurrent modifications of the handler list where handlers would or would not fire correctly and throw
+- Tweak to the `ex.ArcadeSolver` to produce more stable results by adjusting by an infinitesimal epsilon
+  - Contacts with overlap smaller than the epsilon are ignored
+  - Colliders with bounds that overlap smaller than the epsilon are ignored
+- Fixed issue with `ex.ArcadeSolver` based collisions where colliders were catching on seams when sliding along a floor of multiple colliders. This was by sorting contacts by distance between bodies.
+  ![sorted-collisions](https://user-images.githubusercontent.com/612071/172401390-9e9c3490-3566-47bf-b258-6a7da86a3464.gif)
+
+- Fixed issue with `ex.ArcadeSolver` where corner contacts would zero out velocity even if the bodies were already moving away from the contact "divergent contacts".
+  ![cancel-velocity-fix](https://user-images.githubusercontent.com/612071/172500318-539f3a36-31ae-4efc-b6ab-c4524b297adb.gif)
+
+- Fixed issue where `ex.Sound` wasn't being paused when the browser window lost focus
+
+### Updates
+
+- Updated the collision system to improve performance
+  * Cache computed values where possible
+  * Avoid calculating transformations until absolutely necessary
+  * Avoid calling methods in tight loops
+
+### Changed
+
+- `ex.Engine.configurePerformanceCanvas2DFallback` no longer requires `threshold` or `showPlayerMessage`
+- `ex.Engine.snapToPixel` now defaults to `false`
+- Most places where `ex.Matrix` was used have been switched to `ex.AffineMatrix`
+- Most places where `ex.TransformComponent` was used have been switched to `ex.Transform`
+
+## [0.26.0] - 2022-05-20
+
+### Breaking Changes
+
+- `ex.Line` has be replaced with a new Graphics type, the old geometric behavior is now under the type `ex.LineSegment`
+- Notable deprecated types removed
+  - `ex.SortedList` old sorted list is removed
+  - `ex.Collection` old collection type is removed
+  - `ex.Util` import site, exported code promoted `ex.*`
+  - `ex.DisplayMode.Position` is removed, use CSS to position the canvas
+  - `ex.Trait` interface, traits are not longer supported
+  - `ex.Promises` old promise implementation is removed in favor of browser promises
+- Notable method & property removals
+  - `ex.Actor`
+      * `.getZIndex()` and `.setZIndex()` removed use `.z`
+  - `ex.Scene`
+      * `.screenElements` removed in favor of `.entities`
+      * `.addScreenElement(...)` removed use `.add(...)`
+      * `.addTileMap(...)` removed use `.add(...)`
+      * `.removeTileMap(...)` removed use `.remove(...)`
+  - `ex.Timer`
+      * `.unpause()` removed use `.resume()`
+  - `ex.Camera`
+      * `.rx` removed use `.angularVelocity`
+  - `ex.BodyComponent`
+      * `.sx` removed use `.scaleFactor`
+      * `.rx` removed use `.angularVelocity`
+  - `ex.ActionsComponent`
+      * `.asPromise()` removed use `.toPromise()`
+  - `ex.ActionContext`
+      * `.asPromise()` removed use `.toPromise()`
+  - `ex.Color`
+      * Misspellings corrected
+- The old drawing API had been removed from excalibur, this should not affect you unless you were using the `ex.Flags.useLegacyDrawing()` or `ex.Flags.useCanvasGraphicsContext()`.
+  - Notably all implementations of `Drawable` are removed, use the new `Graphics` API
+  - Methods on actor `ex.Actor.setDrawing(...)`, `ex.Actor.addDrawing(...)` are removed, use the `ex.Actor.graphics.add(...)`, `ex.Actor.graphics.show(...)` and `ex.Actor.graphics.use(...)`
+  - The `ex.Actor.onPreDraw(...)` and `ex.Actor.onPostDraw(...)` are removed, use `ex.Actor.graphics.onPreDraw(...)` and `ex.Actor.graphics.onPostDraw(...)`
+  - The events `predraw` and `postdraw` are removed
+  - `ex.Scene.onPreDraw()` and `ex.Scene.onPostDraw()` are now called with the `ExcaliburGraphicsContext` instead of an `CanvasRenderingContext2D`
+- `ex.TileMap` has several breaking changes around naming, but brings it consistent with Tiled terminology and the new `ex.IsometricMap`. Additionally the new names are easier to follow.
+  - Constructor has been changed to the following
+    ```typescript
+     new ex.TileMap({
+      pos: ex.vec(100, 100),
+      tileWidth: 64,
+      tileHeight: 48,
+      rows: 20,
+      columns: 20
+    });
+    ```
+  - `ex.Cell` has been renamed to `ex.Tile`
+    - `ex.Tile` now uses `addGraphic(...)`, `removeGraphic(...)`, `clearGraphics()` and `getGraphics()` instead of having an accessible `ex.Tile.graphics` array.
+  - `ex.TileMap.data` has been renamed to `ex.TileMap.tiles`
+  - `ex.TileMap.getCell(..)` has been renamed to `ex.TileMap.getTile(...)`
+  - `ex.TileMap.getCellByIndex(...)` has been renamed to `ex.TileMap.getTileByIndex(...)`
+  - `ex.TileMap.getCellByPoint(...)` has been renamed to `ex.TileMap.getTileByPoint(...)`
+
 
 ### Deprecated
 
@@ -15,13 +380,209 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Added
 
-- Pointers can now be configured to use the collider or the graphics bounds as the target for pointers with the `ex.PointerComponent`
-  - `useColliderShape` - (default true) uses the collider component geometry for pointer events
-  - `useGraphicsBounds` - (default false) uses the graphics bounds for pointer events
+- Added new parameter to `ex.Raster({quality: 4})` to specify the internal scaling for the bitmap, this is useful for improving the rendering quality of small rasters due to sampling error.
+- Added new `ex.Line` graphics object for drawing lines!
+  ```typescript
+  const lineActor = new ex.Actor({
+    pos: ex.vec(100, 0)
+  });
+  lineActor.graphics.anchor = ex.Vector.Zero;
+  lineActor.graphics.use(new ex.Line({
+    start: ex.vec(0, 0),
+    end: ex.vec(200, 200),
+    color: ex.Color.Green,
+    thickness: 10
+  }));
+  game.add(lineActor);
+  ```
+- Added new performance fallback configuration to `ex.Engine` for developers to help players experiencing poor performance in non-standard browser configurations
+  * This will fallback to the Canvas2D rendering graphics context which usually performs better on non hardware accelerated browsers, currently postprocessing effects are unavailable in this fallback.
+  * By default if a game is running at 20fps or lower for 100 frames or more after the game has started it will be triggered, the developer can optionally show a player message that is off by default.
+  ```typescript
+    var game = new ex.Engine({
+      ...
+      configurePerformanceCanvas2DFallback: {
+        allow: true, // opt-out of the fallback
+        showPlayerMessage: true, // opt-in to a player pop-up message
+        threshold: { fps: 20, numberOfFrames: 100 } // configure the threshold to trigger the fallback
+      }
+    });
+  ```
+- Added new `ex.ParallaxComponent` for creating parallax effects on the graphics, entities with this component are drawn differently and a collider will not be where you expect. It is not recommended you use colliders with parallax entities.
+  ```typescript
+  const actor = new ex.Actor();
+  // The actor will be drawn shifted based on the camera position scaled by the parallax factor
+  actor.addComponent(new ParallaxComponent(ex.vec(0.5, 0.5)));
+  ```
+- Added feature to build `SpriteSheet`s from a list of different sized source views using `ex.SpriteSheet.fromImageSourceWithSourceViews(...)`
+  ```typescript
+    const ss = ex.SpriteSheet.fromImageSourceWithSourceViews({
+      image,
+      sourceViews: [
+        {x: 0, y: 0, width: 20, height: 30},
+        {x: 20, y: 0, width: 40, height: 50},
+      ]
+    });
+  ```
+- Added draw call sorting `new ex.Engine({useDrawSorting: true})` to efficiently draw render plugins in batches to avoid expensive renderer switching as much as possible. By default this is turned on, but can be opted out of.
+- Added the ability to clone into a target `Matrix` this is useful to save allocations and in turn garbage collection pauses.
+- `ex.Engine` now support setting the pixel ratio in the constructor `new ex.Engine({pixelRatio: 2})`, this is useful for smooth `ex.Text` rendering when `antialiasing: false` and rendering pixel art type graphics
+- `ex.TileMap` now supports per Tile custom colliders!
+  ```typescript
+  const tileMap = new ex.TileMap(...);
+  const tile = tileMap.getTile(0, 0);
+  tile.solid = true;
+  tile.addCollider(...); // add your custom collider!
+  ```
+- New `ex.IsometricMap` for drawing isometric grids! (They also support custom colliders via the same mechanism as `ex.TileMap`)
+  ```typescript
+  new ex.IsometricMap({
+      pos: ex.vec(250, 10),
+      tileWidth: 32,
+      tileHeight: 16,
+      columns: 15,
+      rows: 15
+    });
+  ```
+  - `ex.IsometricTile` now come with a `ex.IsometricEntityComponent` which can be applied to any entity that needs to be correctly sorted to preserve the isometric illusion
+  - `ex.IsometricEntitySystem` generates a new z-index based on the `elevation` and y position of an entity with `ex.IsometricEntityComponent`
+
+- Added arbitrary non-convex polygon support (only non-self intersecting) with `ex.PolygonCollider(...).triangulate()` which builds a new `ex.CompositeCollider` composed of triangles.
+- Added faster `ex.BoundingBox.transform(...)` implementation.
+- Added faster `ex.BoundingBox.overlap(...)` implementation.
+- Added `ex.Vector.min(...)` and `ex.Vector.max(...)` to find the min/max of each vector component between 2 vectors.
+- Added `ex.TransformComponent.zIndexChange$` observable to watch when z index changes.
+- Added new display mode `ex.DisplayMode.FitContainerAndFill`.
+- Added new display mode `ex.DisplayMode.FitScreenAndFill`.
+- Added new display mode `ex.DisplayMode.FitContainerAndZoom`.
+- Added new display mode `ex.DisplayMode.FitScreenAndZoom`.
+### Fixed
+
+- Fixed unreleased issue where fixed update interpolation was incorrect with child actors
+- Fixed unreleased bug where CompositeCollider components would not collide appropriately because contacts did not have unique ids
+- Fixed issue where CompositeColliders treat separate constituents as separate collisionstart/collisionend which is unexpected
+- Fixed issue where resources that failed to load would silently fail making debugging challenging
+- Fixed issue where large pieces of Text were rendered as black rectangles on mobile, excalibur now internally breaks these into smaller chunks in order to render them.
+- Fixed issue #2263 where keyboard input `wasPressed` was not working in the `onPostUpdate` lifecycle
+- Fixed issue #2263 where there were some keys missing from the `ex.Input.Keys` enum, including `Enter`
+- Fixed issue where Rectangle line renderer did not respect z order
+
+### Updates
+
+- Performance improvement to the `ex.Loader` screen keeping frame rates higher by only updating the backing `ex.Canvas` when there are changes
+- Improved collision broadphase by swapping to a more efficient `ex.BoundingBox.overlaps` check
+- Improved collision narrowphase by improving `ex.PolygonCollider` calculations for localBounds, bounds, and transformed point geometry
+- Improved Text/Font performance by internally caching expensive native `measureText()` calls
+- Performance improvement to GraphicsSystem
+- Performance improvement to the transform capture of the previous frame transform and motion
+
+### Changed
+
+- Split offscreen detection into a separate system
+- Renamed `ex.Matrix.multv()` and `ex.Matrix.multm()` to `ex.Matrix.multiply()` which matches our naming conventions
+
+<!--------------------------------- DO NOT EDIT BELOW THIS LINE --------------------------------->
+<!--------------------------------- DO NOT EDIT BELOW THIS LINE --------------------------------->
+<!--------------------------------- DO NOT EDIT BELOW THIS LINE --------------------------------->
+
+## [0.25.3] - 2022-02-05
+
+## Breaking Changes
+
+- Small breaking change to `engine.screenshot()` you must now use `await engine.screenshot()`. This avoids copy buffer performance impact of `preserveDrawingBuffer: true` by capturing a screen shot request on the next frame when the buffer has not yet been cleared.
+
+### Deprecated
+
+-
+
+### Added
+
 -
 
 ### Fixed
 
+- Fixed issue where collision normals are inaccurate on polygon colliders that offset from their origin
+- Fixed issue where only Pixel 6 devices crash when using their MAX_TEXTURE_IMAGE_UNITS, artificially cap Excalibur to 125 textures max
+- Fixed issue [#2224] where pointer events sometimes didn't work in mobile platforms due to `touch-action` not being set to `none`
+- Fixed issue [#2203] where `engine.screenshot()` did not work in the WebGL implementation
+- Fixed issue [#1528] where screenshots didn't match the displayed game's size in HiDPI displays, images are now consistent with the game. If you want the full scaled image pass `engine.screenshot(true)` to preserve HiDPI Resolution.
+- Fixed issue [#2206] error and warning logs for large images to help developers identify error situations in the webgl implementation
+
+### Updates
+
+-
+
+### Changed
+
+-
+
+## [0.25.2] - 2022-01-21
+
+### Breaking Changes
+
+- `ex.Util.extend()` is removed, modern js spread operator `{...someobject, ...someotherobject}` handles this better.
+- Excalibur post processing is now moved to the `engine.graphicsContext.addPostProcessor()`
+- Breaking change to `ex.PostProcessor`, all post processors must now now implement this interface
+  ```typescript
+  export interface PostProcessor {
+    intialize(gl: WebGLRenderingContext): void;
+    getShader(): Shader;
+  }
+  ```
+### Deprecated
+
+- The static `Engine.createMainLoop` is now marked deprecated and will be removed in v0.26.0, it is replaced by the `Clock` api
+- Mark legacy draw routines in `ex.Engine`, `ex.Scene`, and `ex.Actor` deprecated
+
+### Added
+
+- Added ability to build custom renderer plugins that are accessible to the `ex.ExcaliburGraphicsContext.draw<TCustomRenderer>(...)` after registering them `ex.ExcaliburGraphicsContext.register(new LineRenderer())`
+- Added ability to draw circles and rectangles with outlines! `ex.ExcaliburGraphicsContext.drawCircle(...)` and `ex.ExcaliburGraphicsContext.drawRectangle(...)`
+- Added `ex.CoordPlane` can be set in the `new ex.Actor({coordPlane: CoordPlane.Screen})` constructor
+- Added convenience feature, setting the color, sets the color on default graphic if applicable
+- Added a `DebugGraphicsComponent` for doing direct debug draw in the `DebugSystem`
+- Added back TileMap debug draw
+- Added `ex.Scene.timers` to expose the list of timers
+- Added support for different webgl texture blending modes as `ex.ImageFiltering` :
+  * `ex.ImageFiltering.Blended` -  Blended is useful when you have high resolution artwork and would like it blended and smoothed
+  * `ex.ImageFiltering.Pixel` - Pixel is useful when you do not want smoothing aka antialiasing applied to your graphics.
+- Excalibur will set a "default" blend mode based on the `ex.EngineOption` antialiasing property, but can be overridden per graphic
+  - `antialiasing: true`, then the blend mode defaults to  `ex.ImageFiltering.Blended`
+  - `antialiasing: false`, then the blend mode defaults to `ex.ImageFiltering.Pixel`
+- `ex.Text/ex.Font` defaults to blended which improves the default look of text rendering dramatically!
+- `ex.Circle` and `ex.Polygon` also default to blended which improves the default look dramatically!
+- `ex.ImageSource` can now specify a blend mode before the Image is loaded, otherwise
+- Added new `measureText` method to the `ex.SpriteFont` and `ex.Font` to return the bounds of any particular text
+- Added new `Clock` api to manage the core main loop. Clocks hide the implementation detail of how the mainloop runs, users just knows that it ticks somehow. Clocks additionally encapsulate any related browser timing, like `performance.now()`
+  1. `StandardClock` encapsulates the existing `requestAnimationFrame` api logic
+  2. `TestClock` allows a user to manually step the mainloop, this can be useful for frame by frame debugging #1170 
+  3. The base abstract clock implements the specifics of elapsed time 
+
+- Added a new feature to Engine options to set a maximum fps `new ex.Engine({...options, maxFps: 30})`. This can be useful when needing to deliver a consistent experience across devices.
+- Pointers can now be configured to use the collider or the graphics bounds as the target for pointers with the `ex.PointerComponent`
+  - `useColliderShape` - (default true) uses the collider component geometry for pointer events
+  - `useGraphicsBounds` - (default false) uses the graphics bounds for pointer events
+
+
+### Fixed
+
+- Fixed issue [#2192] where Actor.center was not correct in child actors
+- Fixed issue where `ex.CircleCollider`s did not respect rotation/scale when offset
+- Fixed issue [#2157] when compiling in TS strict mode complaining about `ex.Poolable`
+- Fixed issue where scaled graphics were not calculating the correct bounds
+- Fixed unreleased issue where clock implementation was not updating frame id
+- Fixed alpha pre-multiply math in multiple shaders
+- Fixed label initialization of fonts, passing a font in the constructor work
+- Fixed bug in sprite bounds calculations not taking scale into account
+- Fixed bug with pointer api where clicking on screen coordinate actors didn't work
+- Fixed [#1815] issue where Camera would jitter when using a strategies based off of actors in the previous frame. 
+- Fixed issue where TileMaps would sometimes have a geometry seam that may not fall on an actual screen pixel causing a visible gap between tiles and the background
+  -- ![image](https://user-images.githubusercontent.com/612071/144700377-ac4585ba-3f4c-44b8-95db-ad36c5fc9a32.png)
+- Fixed unreleased issue where SpriteFonts log every frame they detect a misconfigured font.
+- Fixed unreleased issue where clock when constraining fps would pass larger than expected elapsed times to the simulation causing things to "speed up" bizarrely
+- Fixed unreleased issue where games with no resources would crash
+- Fixed issue [#2152] where shared state in `ex.Font` and `ex.SpriteFont` prevented text from aligning properly when re-used
+- Fixed issue where fast moving `CompositeCollider`s were erroneously generating pairs for their constituent parts
 - Fixed Safari 13.1 crash when booting Excalibur because of they odd MediaQuery API in older Safari
 - Fixed issue where pointers did not work because of missing types
 - Fixed issue with `ArcadeSolver` where stacked/overlapped tiles would double solve the position of the collider for the same overlap
@@ -36,18 +597,24 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 ### Updates
 
 - The following Engine's pieces: `Collision` `Graphics` `Resources` `Trigger` are updated to reflect the new EventDispatcher behavior.
-
+- Refactor camera/screen interaction to utilize transforms instead of bespoke coordinate conversion
 ### Changed
 
+- Updated Graphics to improve general performance
+- Updated the webgl primitives to make building `ex.Shader`s, `ex.VertexBuffer`s, and `ex.VertexLayout`s much easier 
+- Broke up the internal monolithic shader into separate internal renderer plugins
+- Changed the debug system to separate displaying the debug position point (`game.debug.transform.showPosition = true`) and debug position label (`game.debug.transform.showPositionLabel = true`)
+- `ex.ColorBlindCorrector` is renamed to `ex.ColorBlindnessPostProcessor`, and `ex.ColorBlindness` is renamed to `ex.ColorBlindnessMode`
+   - Color blindness can still be corrected or simulated:
+      * `game.debug.colorBlindMode.correct(ex.ColorBlindnessMode.Deuteranope)`
+      * `game.debug.colorBlindMode.simulate(ex.ColorBlindnessMode.Deuteranope)`
+- Excalibur now uses pre-multiplied alpha automatically, images will be unpacked into memory using `gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true)`
+- Excalibur FPS is now sampled over 100ms blocks, this gives a more usable fps in the stats. The sampler is available off of the engine clock `engine.clock.fpsSampler.fps` 
 - Pointer Events:
   * Event types (up, down, move, etc) now all exist in 2 types `ex.Input.PointerEvent` and `ex.Input.WheelEvent`
   * The `stopPropagation()` method used to cancel further dispatches has been renamed to `cancel()` to match other events API.
   * Events no longer have a reference to the `pointer` but now have all of the same information that was availabe on the pointer `worldPos`, `screenPos`, `pagePos`
--
 
-<!--------------------------------- DO NOT EDIT BELOW THIS LINE --------------------------------->
-<!--------------------------------- DO NOT EDIT BELOW THIS LINE --------------------------------->
-<!--------------------------------- DO NOT EDIT BELOW THIS LINE --------------------------------->
 
 ## [0.25.1] - 2021-11-05
 

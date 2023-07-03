@@ -1,6 +1,7 @@
 import { Logger } from '../Util/Log';
 import { Class } from '../Class';
 import * as Events from '../Events';
+import { isCrossOriginIframe } from '../Util/IFrame';
 
 /**
  * Enum representing physical input key codes
@@ -46,6 +47,10 @@ export enum Keys {
   ShiftRight = 'ShiftRight',
   AltLeft = 'AltLeft',
   AltRight = 'AltRight',
+  ControlLeft = 'ControlLeft',
+  ControlRight = 'ControlRight',
+  MetaLeft = 'MetaLeft',
+  MetaRight = 'MetaRight',
 
   // NUMBERS
   Key0 = 'Digit0',
@@ -68,6 +73,20 @@ export enum Keys {
   Digit7 = 'Digit7',
   Digit8 = 'Digit8',
   Digit9 = 'Digit9',
+
+  // FUNCTION KEYS
+  F1 = 'F1',
+  F2 = 'F2',
+  F3 = 'F3',
+  F4 = 'F4',
+  F5 = 'F5',
+  F6 = 'F6',
+  F7 = 'F7',
+  F8 = 'F8',
+  F9 = 'F9',
+  F10 = 'F10',
+  F11 = 'F11',
+  F12 = 'F12',
 
   // LETTERS
   A = 'KeyA',
@@ -148,8 +167,13 @@ export enum Keys {
 
   // OTHER
   Space = 'Space',
+  Backspace = 'Backspace',
+  Delete = 'Delete',
   Esc = 'Escape',
-  Escape = 'Escape'
+  Escape = 'Escape',
+  Enter = 'Enter',
+  NumpadEnter = 'NumpadEnter',
+  ContextMenu = 'ContextMenu'
 }
 
 /**
@@ -166,12 +190,26 @@ export class KeyEvent extends Events.GameEvent<any> {
   }
 }
 
+export interface KeyboardInitOptions {
+  global?: GlobalEventHandlers,
+  grabWindowFocus?: boolean
+}
+
 /**
  * Provides keyboard support for Excalibur.
  */
 export class Keyboard extends Class {
+  /**
+   * Keys that are currently held down
+   */
   private _keys: Keys[] = [];
+  /**
+   * Keys up in the current frame
+   */
   private _keysUp: Keys[] = [];
+  /**
+   * Keys down in the current frame
+   */
   private _keysDown: Keys[] = [];
 
   constructor() {
@@ -189,31 +227,22 @@ export class Keyboard extends Class {
   /**
    * Initialize Keyboard event listeners
    */
-  init(global?: GlobalEventHandlers): void {
+  init(keyboardOptions?: KeyboardInitOptions): void {
+    let { global } = keyboardOptions;
+    const { grabWindowFocus } = keyboardOptions;
     if (!global) {
-      try {
-        // Try and listen to events on top window frame if within an iframe.
-        //
-        // See https://github.com/excaliburjs/Excalibur/issues/1294
-        //
-        // Attempt to add an event listener, which triggers a DOMException on
-        // cross-origin iframes
-        const noop = () => {
-          return;
-        };
-        window.top.addEventListener('blur', noop);
-        window.top.removeEventListener('blur', noop);
-
-        // this will be the same as window if not embedded within an iframe
-        global = window.top;
-      } catch {
-        // fallback to current frame
+      if (isCrossOriginIframe()) {
         global = window;
+        // Workaround for iframes like for itch.io or codesandbox
+        // https://www.reddit.com/r/gamemaker/comments/kfs5cs/keyboard_inputs_no_longer_working_in_html5_game/
+        // https://forum.gamemaker.io/index.php?threads/solved-keyboard-issue-on-itch-io.87336/
+        if (grabWindowFocus) {
+          window.focus();
+        }
 
-        Logger.getInstance().warn(
-          'Failed to bind to keyboard events to top frame. ' +
-            'If you are trying to embed Excalibur in a cross-origin iframe, keyboard events will not fire.'
-        );
+        Logger.getInstance().warn('Excalibur might be in a cross-origin iframe, in order to receive keyboard events it must be in focus');
+      } else {
+        global = window.top;
       }
     }
 
@@ -222,30 +251,56 @@ export class Keyboard extends Class {
     });
 
     // key up is on window because canvas cannot have focus
-    global.addEventListener('keyup', (ev: KeyboardEvent) => {
-      const code = ev.code as Keys;
-      const key = this._keys.indexOf(code);
-      this._keys.splice(key, 1);
-      this._keysUp.push(code);
-      const keyEvent = new KeyEvent(code, ev.key, ev);
-
-      // alias the old api, we may want to deprecate this in the future
-      this.eventDispatcher.emit('up', keyEvent);
-      this.eventDispatcher.emit('release', keyEvent);
-    });
+    global.addEventListener('keyup', this._handleKeyUp);
 
     // key down is on window because canvas cannot have focus
-    global.addEventListener('keydown', (ev: KeyboardEvent) => {
-      const code = ev.code as Keys;
-      if (this._keys.indexOf(code) === -1) {
-        this._keys.push(code);
-        this._keysDown.push(code);
-        const keyEvent = new KeyEvent(code, ev.key, ev);
-        this.eventDispatcher.emit('down', keyEvent);
-        this.eventDispatcher.emit('press', keyEvent);
-      }
-    });
+    global.addEventListener('keydown', this._handleKeyDown);
   }
+
+  private _releaseAllKeys = (ev: KeyboardEvent) => {
+    for (const code of this._keys) {
+      const keyEvent = new KeyEvent(code, ev.key, ev);
+      this.eventDispatcher.emit('up', keyEvent);
+      this.eventDispatcher.emit('release', keyEvent);
+    }
+    this._keysUp = Array.from((new Set(this._keys.concat(this._keysUp))));
+    this._keys.length = 0;
+  };
+
+  private _handleKeyDown = (ev: KeyboardEvent) => {
+    // handle macos meta key issue
+    // https://github.com/excaliburjs/Excalibur/issues/2608
+    if (!ev.metaKey && (this._keys.includes(Keys.MetaLeft) || this._keys.includes(Keys.MetaRight))) {
+      this._releaseAllKeys(ev);
+    }
+
+    const code = ev.code as Keys;
+    if (this._keys.indexOf(code) === -1) {
+      this._keys.push(code);
+      this._keysDown.push(code);
+      const keyEvent = new KeyEvent(code, ev.key, ev);
+      this.eventDispatcher.emit('down', keyEvent);
+      this.eventDispatcher.emit('press', keyEvent);
+    }
+  };
+
+  private _handleKeyUp = (ev: KeyboardEvent) => {
+    const code = ev.code as Keys;
+    const key = this._keys.indexOf(code);
+    this._keys.splice(key, 1);
+    this._keysUp.push(code);
+    const keyEvent = new KeyEvent(code, ev.key, ev);
+
+    // alias the old api, we may want to deprecate this in the future
+    this.eventDispatcher.emit('up', keyEvent);
+    this.eventDispatcher.emit('release', keyEvent);
+
+    // handle macos meta key issue
+    // https://github.com/excaliburjs/Excalibur/issues/2608
+    if (ev.key === 'Meta') {
+      this._releaseAllKeys(ev);
+    }
+  };
 
   public update() {
     // Reset keysDown and keysUp after update is complete
@@ -287,5 +342,26 @@ export class Keyboard extends Class {
    */
   public wasReleased(key: Keys): boolean {
     return this._keysUp.indexOf(key) > -1;
+  }
+
+  /**
+   * Trigger a manual key event
+   * @param type
+   * @param key
+   * @param character
+   */
+  public triggerEvent(type: 'down' | 'up', key: Keys, character?: string) {
+    if (type === 'down') {
+      this._handleKeyDown(new KeyboardEvent('keydown', {
+        code: key,
+        key: character ?? null
+      }));
+    }
+    if (type === 'up') {
+      this._handleKeyUp(new KeyboardEvent('keyup', {
+        code: key,
+        key: character ?? null
+      }));
+    }
   }
 }

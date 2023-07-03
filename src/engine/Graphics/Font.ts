@@ -1,14 +1,40 @@
 import { Vector } from '../Math/vector';
 import { BoundingBox } from '../Collision/Index';
 import { Color } from '../Color';
-import { line } from '../Util/DrawUtil';
 import { ExcaliburGraphicsContext } from './Context/ExcaliburGraphicsContext';
 import { BaseAlign, Direction, FontOptions, FontStyle, FontUnit, TextAlign, FontRenderer } from './FontCommon';
-import { Raster, RasterOptions } from './Raster';
+import { Graphic, GraphicOptions } from './Graphic';
+import { RasterOptions } from './Raster';
+import { ImageFiltering } from './Filtering';
+import { FontTextInstance } from './FontTextInstance';
+import { FontCache } from './FontCache';
+/**
+ * Represents a system or web font in Excalibur
+ *
+ * If no options specified, the system sans-serif 10 pixel is used
+ *
+ * If loading a custom web font be sure to have the font loaded before you use it https://erikonarheim.com/posts/dont-test-fonts/
+ */
+export class Font extends Graphic implements FontRenderer {
+  /**
+   * Set the font filtering mode, by default set to [[ImageFiltering.Blended]] regardless of the engine default smoothing
+   *
+   * If you have a pixel style font that may be a reason to switch this to [[ImageFiltering.Pixel]]
+   */
+  public filtering: ImageFiltering = ImageFiltering.Blended;
+  constructor(options: FontOptions & GraphicOptions & RasterOptions = {}) {
+    super(options); // <- Graphics properties
 
-export class Font extends Raster implements FontRenderer {
-  constructor(options: FontOptions & RasterOptions = {}) {
-    super(options);
+    // Raster properties
+    this.smoothing = options?.smoothing ?? this.smoothing;
+    this.padding = options?.padding ?? this.padding;
+    this.color = options?.color ?? this.color;
+    this.strokeColor = options?.strokeColor ?? this.strokeColor;
+    this.lineDash = options?.lineDash ?? this.lineDash;
+    this.lineWidth = options?.lineWidth ?? this.lineWidth;
+    this.filtering = options?.filtering ?? this.filtering;
+
+    // Font specific properties
     this.family = options?.family ?? this.family;
     this.style = options?.style ?? this.style;
     this.bold = options?.bold ?? this.bold;
@@ -24,13 +50,11 @@ export class Font extends Raster implements FontRenderer {
       this.shadow.offset = options.shadow.offset ?? this.shadow.offset;
       this.shadow.color = options.shadow.color ?? this.shadow.color;
     }
-    this.flagDirty();
   }
 
   public clone() {
     return new Font({
       ...this.cloneGraphicOptions(),
-      ...this.cloneRasterOptions(),
       size: this.size,
       unit: this.unit,
       family: this.family,
@@ -50,14 +74,22 @@ export class Font extends Raster implements FontRenderer {
   }
 
   /**
-   * Font quality determines the size of the underlying rastered text, higher quality means less jagged edges.
+   * Font quality determines the size of the underlying raster text, higher quality means less jagged edges.
    * If quality is set to 1, then just enough raster bitmap is generated to render the text.
    *
    * You can think of quality as how zoomed in to the text you can get before seeing jagged edges.
    *
-   * (Default 4)
+   * (Default 2)
    */
   public quality = 2;
+
+  // Raster properties for fonts
+  public padding = 2;
+  public smoothing = false;
+  public lineWidth = 1;
+  public lineDash: number[] = [];
+  public color: Color = Color.Black;
+  public strokeColor: Color;
 
   public family: string = 'sans-serif';
   public style: FontStyle = FontStyle.Normal;
@@ -73,66 +105,14 @@ export class Font extends Raster implements FontRenderer {
     return `${this.style} ${this.bold ? 'bold' : ''} ${this.size}${this.unit} ${this.family}`;
   }
 
-  private _text: string;
-  private _lines: string[];
   private _textBounds: BoundingBox = new BoundingBox();
-  private _textWidth: number = 0;
-  private _textHeight: number = 0;
-
-  public get width() {
-    return this._textWidth;
-  }
-
-  public set width(value: number) {
-    this._textWidth = value;
-  }
-
-  public get height() {
-    const numLines = this._lines?.length ?? 1;
-    return this._textHeight * numLines;
-  }
-
-  public set height(value: number) {
-    const numLines = this._lines?.length ?? 1;
-    this._textHeight = value / numLines;
-  }
-
-  private get _rasterWidth() {
-    return this._bitmap.width;
-  }
-
-  private get _rasterHeight() {
-    return this._bitmap.height;
-  }
-
-  private get _halfRasterWidth() {
-    return Math.floor(this._bitmap.width / 2);
-  }
-
-  private get _halfRasterHeight() {
-    return Math.floor(this._bitmap.height / 2);
-  }
 
   public get localBounds(): BoundingBox {
     return this._textBounds;
   }
 
-  protected _drawImage(ex: ExcaliburGraphicsContext, x: number, y: number) {
-    if (this.dirty) {
-      this.rasterize();
-    }
-
-    ex.drawImage(
-      this._bitmap,
-      0,
-      0,
-      this._rasterWidth,
-      this._rasterHeight,
-      x - this._rasterWidth / this.quality / 2,
-      y - this._rasterHeight / this.quality / 2,
-      this._rasterWidth / this.quality,
-      this._rasterHeight / this.quality
-    );
+  protected _drawImage(_ex: ExcaliburGraphicsContext, _x: number, _y: number) {
+    // TODO weird vestigial drawimage
   }
 
   protected _rotate(ex: ExcaliburGraphicsContext) {
@@ -155,109 +135,36 @@ export class Font extends Raster implements FontRenderer {
     }
   }
 
-  public updateText(text: string) {
-    if (this._text !== text) {
-      this._text = text;
-      this._lines = this._text.split('\n');
-      this._updateDimensions();
-      this.flagDirty();
-    }
+  private _textMeasurement = new FontTextInstance(this, '', Color.Black);
+
+  public measureTextWithoutCache(text: string, maxWidth?: number) {
+    return this._textMeasurement.measureText(text, maxWidth);
   }
 
-  private _updateDimensions() {
-    if (this._text) {
-      this._applyFont(this._ctx);
-      const maxWidthLine = this._lines.reduce((a, b) => {
-        return a.length > b.length ? a : b;
-      });
-      const metrics = this._ctx.measureText(maxWidthLine);
-      this._textWidth = Math.abs(metrics.actualBoundingBoxLeft) + Math.abs(metrics.actualBoundingBoxRight);
-      this._textHeight = Math.abs(metrics.actualBoundingBoxAscent) + Math.abs(metrics.actualBoundingBoxDescent);
-
-      // TODO lineheight makes the text bounds wonky
-      const lineAdjustedHeight = this._textHeight * this._lines.length;
-      // this._textHeight = lineAdjustedHeight;
-      // Changing the width and height clears the context properties
-      // We double the bitmap width to account for alignment
-      // We scale by "quality" so we render text without jaggies
-      this._bitmap.width = (this._textWidth + this.padding * 2) * 2 * this.quality;
-      this._bitmap.height = (lineAdjustedHeight + this.padding * 2) * 2 * this.quality;
-
-      // These bounds exist in raster bitmap space where the top left corner is the corder of the bitmap
-      const x = 0;
-      const y = 0;
-      const bottomBounds = lineAdjustedHeight - Math.abs(metrics.actualBoundingBoxAscent);
-      this._textBounds = new BoundingBox({
-        left: x - Math.abs(metrics.actualBoundingBoxLeft) - this.padding,
-        top: y - Math.abs(metrics.actualBoundingBoxAscent) - this.padding,
-        bottom: y + bottomBounds + this.padding,
-        right: x + Math.abs(metrics.actualBoundingBoxRight) + this.padding
-      });
-    }
-  }
-
-  protected _preDraw(ex: ExcaliburGraphicsContext, x: number, y: number): void {
-    if (this.dirty) {
-      this._updateDimensions();
-    }
-    super._preDraw(ex, x, y);
+  /**
+   * Returns a BoundingBox that is the total size of the text including multiple lines
+   *
+   * Does not include any padding or adjustment
+   * @param text
+   * @returns BoundingBox
+   */
+  public measureText(text: string, maxWidth?: number): BoundingBox {
+    return FontCache.measureText(text, this, maxWidth);
   }
 
   protected _postDraw(ex: ExcaliburGraphicsContext): void {
-    if (this.showDebug) {
-      /* istanbul ignore next */
-      ex.debug.drawRect(-this._halfRasterWidth, -this._halfRasterHeight, this._rasterWidth, this._rasterHeight);
-    }
     ex.restore();
   }
 
-  private _applyFont(ctx: CanvasRenderingContext2D) {
-    ctx.translate(this.padding + this._halfRasterWidth, this.padding + this._halfRasterHeight);
-    ctx.scale(this.quality, this.quality);
-    ctx.textAlign = this.textAlign;
-    ctx.textBaseline = this.baseAlign;
-    ctx.font = this.fontString;
-    ctx.direction = this.direction;
+  public render(ex: ExcaliburGraphicsContext, text: string, colorOverride: Color, x: number, y: number, maxWidth?: number) {
+    const textInstance = FontCache.getTextInstance(text, this, colorOverride);
 
-    if (this.shadow) {
-      ctx.shadowColor = this.shadow.color.toString();
-      ctx.shadowBlur = this.shadow.blur;
-      ctx.shadowOffsetX = this.shadow.offset.x;
-      ctx.shadowOffsetY = this.shadow.offset.y;
-    }
-  }
+    // Apply affine transformations
+    this._textBounds = textInstance.dimensions;
+    this._preDraw(ex, x, y);
 
-  execute(ctx: CanvasRenderingContext2D): void {
-    if (this._text) {
-      // The reason we need to re-apply the font is setting raster properties (like width/height) can reset the context props
-      this._applyRasterProperites(ctx);
-      this._applyFont(ctx);
+    textInstance.render(ex, x, y, maxWidth);
 
-      const lineHeight = this._textHeight; // TODO user specified line height
-      for (let i = 0; i < this._lines.length; i++) {
-        const line = this._lines[i];
-        if (this.color) {
-          ctx.fillText(line, 0, i * lineHeight);
-        }
-
-        if (this.strokeColor) {
-          ctx.strokeText(line, 0, i * lineHeight);
-        }
-      }
-
-      if (this.showDebug) {
-        // Horizontal line
-        /* istanbul ignore next */
-        line(ctx, Color.Red, -this._halfRasterWidth, 0, this._halfRasterWidth, 0, 2);
-        // Vertical line
-        /* istanbul ignore next */
-        line(ctx, Color.Red, 0, -this._halfRasterHeight, 0, this._halfRasterHeight, 2);
-      }
-    }
-  }
-
-  public render(ex: ExcaliburGraphicsContext, text: string, x: number, y: number) {
-    this.updateText(text);
-    this.draw(ex, x, y);
+    this._postDraw(ex);
   }
 }

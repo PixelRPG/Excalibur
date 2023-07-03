@@ -1,5 +1,5 @@
 import * as ex from '@excalibur';
-import { BoundingBox, GameEvent, Line, Projection, Ray, TransformComponent, vec, Vector } from '@excalibur';
+import { BoundingBox, GameEvent, LineSegment, Projection, Ray, vec, Vector } from '@excalibur';
 import { ExcaliburAsyncMatchers, ExcaliburMatchers } from 'excalibur-jasmine';
 describe('A CompositeCollider', () => {
   beforeAll(() => {
@@ -12,7 +12,7 @@ describe('A CompositeCollider', () => {
 
   it('can be created from multiple colliders', () => {
     const compCollider = new ex.CompositeCollider([ex.Shape.Circle(50), ex.Shape.Box(200, 10)]);
-    const xf = new TransformComponent();
+    const xf = new ex.Transform();
     xf.pos = vec(100, 100);
     compCollider.update(xf);
 
@@ -74,27 +74,31 @@ describe('A CompositeCollider', () => {
     const compCollider = new ex.CompositeCollider([ex.Shape.Circle(50), ex.Shape.Box(200, 10, Vector.Half)]);
 
     const circle = ex.Shape.Circle(50);
-    const xf = new TransformComponent();
+    const xf = new ex.Transform();
 
     xf.pos = vec(300, 0);
     circle.update(xf);
     const lineRight = compCollider.getClosestLineBetween(circle);
-    expect(lineRight).toEqual(new Line(vec(250, 0), vec(100, 0)));
+    expect(lineRight.begin).toEqual(vec(250, 0));
+    expect(lineRight.end).toEqual(vec(100, 0));
 
     xf.pos = vec(0, -300);
     circle.update(xf);
     const lineTop = compCollider.getClosestLineBetween(circle);
-    expect(lineTop).toEqual(new Line(vec(0, -250), vec(0, -50)));
+    expect(lineTop.begin).toEqual(vec(0, -250));
+    expect(lineTop.end).toEqual(vec(0, -50));
 
     xf.pos = vec(0, 300);
     circle.update(xf);
     const lineBottom = compCollider.getClosestLineBetween(circle);
-    expect(lineBottom).toEqual(new Line(vec(0, 250), vec(0, 50)));
+    expect(lineBottom.begin).toEqual(vec(0, 250));
+    expect(lineBottom.end).toEqual(vec(0, 50));
 
     xf.pos = vec(-300, 0);
     circle.update(xf);
     const lineLeft = compCollider.getClosestLineBetween(circle);
-    expect(lineLeft).toEqual(new Line(vec(-250, 0), vec(-100, 0)));
+    expect(lineLeft.begin).toEqual(vec(-250, 0));
+    expect(lineLeft.end).toEqual(vec(-100, 0));
   });
 
   it('can get the closest line between other composite colliders', () => {
@@ -102,25 +106,27 @@ describe('A CompositeCollider', () => {
 
     const compCollider2 = new ex.CompositeCollider([ex.Shape.Circle(50), ex.Shape.Box(200, 10, Vector.Half)]);
 
-    const xf = new TransformComponent();
+    const xf = new ex.Transform();
     xf.pos = vec(500, 0);
     compCollider2.update(xf);
 
     const line = compCollider1.getClosestLineBetween(compCollider2);
-    expect(line).toEqual(new Line(vec(100, -5), vec(400, -5)));
+    expect(line.begin).toEqual(vec(100, -5));
+    expect(line.end).toEqual(vec(400, -5));
 
     xf.pos = vec(0, 500);
     compCollider2.update(xf);
 
     const line2 = compCollider1.getClosestLineBetween(compCollider2);
-    expect(line2).toEqual(new Line(vec(0, 50), vec(0, 450)));
+    expect(line2.begin).toEqual(vec(0, 50));
+    expect(line2.end).toEqual(vec(0, 450));
   });
 
   it('can collide with normal colliders', () => {
     const compCollider = new ex.CompositeCollider([ex.Shape.Circle(50), ex.Shape.Box(200, 10, Vector.Half)]);
 
     const circle = ex.Shape.Circle(50);
-    const xf = new TransformComponent();
+    const xf = new ex.Transform();
     xf.pos = vec(149, 0);
     circle.update(xf);
 
@@ -135,12 +141,28 @@ describe('A CompositeCollider', () => {
     expect(contactCircleCircle[0].points[0]).withContext('Top of the circle in comp').toEqual(vec(0, -50));
   });
 
+  it('creates contacts that have the composite collider id', () => {
+    const compCollider = new ex.CompositeCollider([ex.Shape.Circle(50), ex.Shape.Box(200, 10, Vector.Half)]);
+
+    const circle = ex.Shape.Circle(50);
+    const xf = new ex.Transform();
+    xf.pos = vec(149, 0);
+    circle.update(xf);
+
+    const contactBoxCircle = compCollider.collide(circle);
+    // Composite collisions have a special id that appends the "parent" id to the id to accurately track start/end
+    expect(contactBoxCircle[0].id).toBe(
+      ex.Pair.calculatePairHash(compCollider.getColliders()[1].id, circle.id) +
+      '|' +
+      ex.Pair.calculatePairHash(compCollider.id, circle.id));
+  });
+
   it('can collide with other composite colliders', () => {
     const compCollider1 = new ex.CompositeCollider([ex.Shape.Circle(50), ex.Shape.Box(200, 10, Vector.Half)]);
 
     const compCollider2 = new ex.CompositeCollider([ex.Shape.Circle(50), ex.Shape.Box(200, 10, Vector.Half)]);
 
-    const xf = new TransformComponent();
+    const xf = new ex.Transform();
     xf.pos = vec(200, 0);
     compCollider2.update(xf);
 
@@ -155,7 +177,7 @@ describe('A CompositeCollider', () => {
     const compCollider1 = new ex.CompositeCollider([ex.Shape.Circle(50), ex.Shape.Box(200, 10, Vector.Half)]);
 
     const circle = ex.Shape.Circle(50);
-    const xf = new TransformComponent();
+    const xf = new ex.Transform();
     xf.pos = vec(300, 0);
     circle.update(xf);
 
@@ -221,7 +243,7 @@ describe('A CompositeCollider', () => {
     const ctx = new ex.ExcaliburGraphicsContext2DCanvas({ canvasElement });
 
     const compCollider = new ex.CompositeCollider([ex.Shape.Circle(50), ex.Shape.Box(200, 10, Vector.Half)]);
-    const tx = new TransformComponent();
+    const tx = new ex.Transform();
     tx.pos = ex.vec(150, 150);
     compCollider.update(tx);
 

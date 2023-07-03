@@ -1,6 +1,7 @@
 import { Engine } from './../Engine';
 import * as Events from './../Events';
 import { Scene } from '../Scene';
+import { ExcaliburGraphicsContext } from '../Graphics';
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
 export interface _initialize {
@@ -87,11 +88,18 @@ export interface CanInitialize {
   off(eventName: Events.initialize, handler?: (event: Events.InitializeEvent<any>) => void): void;
 }
 
-export interface CanActivate {
+export interface SceneActivationContext<TData = undefined> {
+  data?: TData;
+  previousScene: Scene;
+  nextScene: Scene;
+  engine: Engine;
+}
+
+export interface CanActivate<TData = undefined> {
   /**
    * Overridable implementation
    */
-  onActivate(oldScene: Scene, newScene: Scene): void;
+  onActivate(context: SceneActivationContext<TData>): void;
 
   /**
    * Event signatures
@@ -105,7 +113,7 @@ export interface CanDeactivate {
   /**
    * Overridable implementation
    */
-  onDeactivate(oldScene: Scene, newScene: Scene): void;
+  onDeactivate(context: SceneActivationContext<never>): void;
 
   /**
    * Event signature
@@ -145,7 +153,7 @@ export interface OnPreDraw {
   /**
    * Overridable implementation
    */
-  onPreDraw(_ctx: CanvasRenderingContext2D, _delta: number): void;
+  onPreDraw(_ctx: ExcaliburGraphicsContext, _delta: number): void;
 
   /**
    * Event signatures
@@ -159,7 +167,7 @@ export interface OnPostDraw {
   /**
    * Overridable implementation
    */
-  onPostDraw(_ctx: CanvasRenderingContext2D, _delta: number): void;
+  onPostDraw(_ctx: ExcaliburGraphicsContext, _delta: number): void;
 
   /**
    * Event signatures

@@ -57,6 +57,35 @@ describe('A camera', () => {
     expect(engine.screen.peekResolution).toHaveBeenCalled();
   });
 
+  it('should run strategies on initialize for the first frame', () => {
+    engine = TestUtils.engine({
+      viewport: {width: 100, height: 100},
+      resolution: {width: 1000, height: 1200 }
+    });
+
+    const sut = new ex.Camera();
+
+    spyOn(sut, 'runStrategies').and.callThrough();
+    sut._initialize(engine);
+
+    expect(sut.runStrategies).toHaveBeenCalledTimes(1);
+  });
+
+  it('should update viewport on initialize for the first frame', () => {
+    engine = TestUtils.engine({
+      viewport: {width: 100, height: 100},
+      resolution: {width: 1000, height: 1200 }
+    });
+
+    const sut = new ex.Camera();
+    expect(sut.viewport).toEqual(new ex.BoundingBox());
+    spyOn(sut, 'updateViewport').and.callThrough();
+    sut._initialize(engine);
+
+    expect(sut.viewport).toEqual(ex.BoundingBox.fromDimension(1000, 1200, ex.Vector.Zero));
+    expect(sut.updateViewport).toHaveBeenCalledTimes(1);
+  });
+
   it('should be center screen by default (when loading complete)', () => {
     engine = TestUtils.engine({
       viewport: {width: 100, height: 100},
@@ -124,6 +153,15 @@ describe('A camera', () => {
     expect(Camera.pos).toBeVector(new ex.Vector(55, 555));
     expect(Camera.x).toBe(55);
     expect(Camera.y).toBe(555);
+  });
+
+  it('can be rotated', () => {
+    Camera._initialize(engine);
+    Camera.rotation = Math.PI / 2;
+
+    Camera.updateTransform();
+
+    expect(Camera.transform.getRotation()).toBe(Math.PI / 2);
   });
 
   it('can have its velocity set 2 ways', () => {
@@ -339,28 +377,6 @@ describe('A camera', () => {
     engine.currentScene.camera.update(engine, 999);
     engine.currentScene.camera.update(engine, 1);
     engine.currentScene.camera.update(engine, 1);
-  });
-
-  xit('can zoom in over time', (done) => {
-    engine.start().then(() => {
-      engine.currentScene.camera.zoomOverTime(5, 1000).then(() => {
-        ensureImagesLoaded(engine.canvas, 'src/spec/images/CameraSpec/zoomin.png').then(([canvas, image]) => {
-          expect(canvas).toEqualImage(image, 0.995);
-          done();
-        });
-      });
-    });
-  });
-
-  xit('can zoom out over time', (done) => {
-    engine.start().then(() => {
-      engine.currentScene.camera.zoomOverTime(0.2, 1000).then(() => {
-        ensureImagesLoaded(engine.canvas, 'src/spec/images/CameraSpec/zoomout.png').then(([canvas, image]) => {
-          expect(canvas).toEqualImage(image, 0.995);
-          done();
-        });
-      });
-    });
   });
 
   describe('lifecycle overrides', () => {

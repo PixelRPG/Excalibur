@@ -10,8 +10,9 @@ import * as Input from './Input/Index';
 import { CollisionContact } from './Collision/Detection/CollisionContact';
 import { Collider } from './Collision/Colliders/Collider';
 import { Entity } from './EntityComponentSystem/Entity';
-import { OnInitialize, OnPreUpdate, OnPostUpdate } from './Interfaces/LifecycleEvents';
+import { OnInitialize, OnPreUpdate, OnPostUpdate, SceneActivationContext } from './Interfaces/LifecycleEvents';
 import { BodyComponent } from './Collision/BodyComponent';
+import { ExcaliburGraphicsContext } from './Graphics';
 
 export enum EventTypes {
   Kill = 'kill',
@@ -49,9 +50,6 @@ export enum EventTypes {
   Disconnect = 'disconnect',
   Button = 'button',
   Axis = 'axis',
-
-  Subscribe = 'subscribe',
-  Unsubscribe = 'unsubscribe',
 
   Visible = 'visible',
   Hidden = 'hidden',
@@ -245,7 +243,7 @@ export class GameStopEvent extends GameEvent<Engine> {
  *
  */
 export class PreDrawEvent extends GameEvent<Entity | Scene | Engine | TileMap> {
-  constructor(public ctx: CanvasRenderingContext2D, public delta: number, public target: Entity | Scene | Engine | TileMap) {
+  constructor(public ctx: ExcaliburGraphicsContext, public delta: number, public target: Entity | Scene | Engine | TileMap) {
     super();
   }
 }
@@ -256,7 +254,7 @@ export class PreDrawEvent extends GameEvent<Entity | Scene | Engine | TileMap> {
  *
  */
 export class PostDrawEvent extends GameEvent<Entity | Scene | Engine | TileMap> {
-  constructor(public ctx: CanvasRenderingContext2D, public delta: number, public target: Entity | Scene | Engine | TileMap) {
+  constructor(public ctx: ExcaliburGraphicsContext, public delta: number, public target: Entity | Scene | Engine | TileMap) {
     super();
   }
 }
@@ -265,7 +263,7 @@ export class PostDrawEvent extends GameEvent<Entity | Scene | Engine | TileMap> 
  * The 'predebugdraw' event is emitted on actors, scenes, and engine before debug drawing starts.
  */
 export class PreDebugDrawEvent extends GameEvent<Entity | Actor | Scene | Engine> {
-  constructor(public ctx: CanvasRenderingContext2D, public target: Entity | Actor | Scene | Engine) {
+  constructor(public ctx: ExcaliburGraphicsContext, public target: Entity | Actor | Scene | Engine) {
     super();
   }
 }
@@ -274,7 +272,7 @@ export class PreDebugDrawEvent extends GameEvent<Entity | Actor | Scene | Engine
  * The 'postdebugdraw' event is emitted on actors, scenes, and engine after debug drawing starts.
  */
 export class PostDebugDrawEvent extends GameEvent<Entity | Actor | Scene | Engine> {
-  constructor(public ctx: CanvasRenderingContext2D, public target: Entity | Actor | Scene | Engine) {
+  constructor(public ctx: ExcaliburGraphicsContext, public target: Entity | Actor | Scene | Engine) {
     super();
   }
 }
@@ -359,26 +357,6 @@ export class GamepadAxisEvent extends GameEvent<Input.Gamepad> {
    * @param value A numeric value between -1 and 1
    */
   constructor(public axis: Input.Axes, public value: number, public target: Input.Gamepad) {
-    super();
-  }
-}
-
-/**
- * Subscribe event thrown when handlers for events other than subscribe are added. Meta event that is received by
- * [[EventDispatcher|event dispatchers]].
- */
-export class SubscribeEvent<T> extends GameEvent<T> {
-  constructor(public topic: string, public handler: (event: GameEvent<T>) => void) {
-    super();
-  }
-}
-
-/**
- * Unsubscribe event thrown when handlers for events other than unsubscribe are removed. Meta event that is received by
- * [[EventDispatcher|event dispatchers]].
- */
-export class UnsubscribeEvent<T> extends GameEvent<T> {
-  constructor(public topic: string, public handler: (event: GameEvent<T>) => void) {
     super();
   }
 }
@@ -517,11 +495,11 @@ export class InitializeEvent<T extends OnInitialize = Entity> extends GameEvent<
 /**
  * Event thrown on a [[Scene]] on activation
  */
-export class ActivateEvent extends GameEvent<Scene> {
+export class ActivateEvent<TData = undefined> extends GameEvent<Scene> {
   /**
-   * @param oldScene  The reference to the old scene
+   * @param context  The context for the scene activation
    */
-  constructor(public oldScene: Scene, public target: Scene) {
+  constructor(public context: SceneActivationContext<TData>, public target: Scene) {
     super();
   }
 }
@@ -531,9 +509,9 @@ export class ActivateEvent extends GameEvent<Scene> {
  */
 export class DeactivateEvent extends GameEvent<Scene> {
   /**
-   * @param newScene  The reference to the new scene
+   * @param context  The context for the scene deactivation
    */
-  constructor(public newScene: Scene, public target: Scene) {
+  constructor(public context: SceneActivationContext<never>, public target: Scene) {
     super();
   }
 }

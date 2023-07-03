@@ -9,7 +9,11 @@ import logoImg from './Loader.logo.png';
 import loaderCss from './Loader.css';
 import { Canvas } from './Graphics/Canvas';
 import { Vector } from './Math/vector';
-import { clamp, delay } from './Util/Util';
+import { delay } from './Util/Util';
+import { ImageFiltering } from './Graphics/Filtering';
+import { clamp } from './Math/util';
+import { Sound } from './Resources/Sound/Sound';
+import { Future } from './Util/Future';
 
 /**
  * Pre-loading assets
@@ -78,7 +82,9 @@ import { clamp, delay } from './Util/Util';
  */
 export class Loader extends Class implements Loadable<Loadable<any>[]> {
   public canvas: Canvas = new Canvas({
+    filtering: ImageFiltering.Blended,
     smoothing: true,
+    cache: true,
     draw: this.draw.bind(this)
   });
   private _resourceList: Loadable<any>[] = [];
@@ -240,10 +246,11 @@ export class Loader extends Class implements Loadable<Loadable<any>[]> {
   /**
    * Shows the play button and returns a promise that resolves when clicked
    */
-  public showPlayButton(): Promise<void> {
+  public async showPlayButton(): Promise<void> {
     if (this.suppressPlayButton) {
       this.hidePlayButton();
-      return Promise.resolve();
+      // Delay is to give the logo a chance to show, otherwise don't delay
+      await delay(500, this._engine?.clock);
     } else {
       const resizeHandler = () => {
         this._positionPlayButton();
@@ -258,9 +265,10 @@ export class Loader extends Class implements Loadable<Loadable<any>[]> {
           this._playButton.click();
         }
       });
-      const promise = new Promise<void>((resolve) => {
+      this._positionPlayButton();
+      const playButtonClicked = new Promise<void>((resolve) => {
         const startButtonHandler = (e: Event) => {
-          // We want to stop propogation to keep bubbling to the engine pointer handlers
+          // We want to stop propagation to keep bubbling to the engine pointer handlers
           e.stopPropagation();
           // Hide Button after click
           this.hidePlayButton();
@@ -274,7 +282,7 @@ export class Loader extends Class implements Loadable<Loadable<any>[]> {
         this._playButton.addEventListener('pointerup', startButtonHandler);
       });
 
-      return promise;
+      return await playButtonClicked;
     }
   }
 
@@ -303,22 +311,41 @@ export class Loader extends Class implements Loadable<Loadable<any>[]> {
 
   data: Loadable<any>[];
 
+  private _loadingFuture = new Future<void>();
+  public areResourcesLoaded() {
+    return this._loadingFuture.promise;
+  }
+
   /**
    * Begin loading all of the supplied resources, returning a promise
-   * that resolves when loading of all is complete
+   * that resolves when loading of all is complete AND the user has clicked the "Play button"
    */
   public async load(): Promise<Loadable<any>[]> {
+    await this._image?.decode(); // decode logo if it exists
+    this.canvas.flagDirty();
+
     await Promise.all(
-      this._resourceList.map((r) =>
-        r.load().finally(() => {
+      this._resourceList.map(async (r) => {
+        await r.load().finally(() => {
           // capture progress
           this._numLoaded++;
-        })
-      )
+          this.canvas.flagDirty();
+        });
+      })
     );
+    // Wire all sound to the engine
+    for (const resource of this._resourceList) {
+      if (resource instanceof Sound) {
+        resource.wireEngine(this._engine);
+      }
+    }
+
+    this._loadingFuture.resolve();
 
     // short delay in showing the button for aesthetics
-    await delay(200);
+    await delay(200, this._engine?.clock);
+    this.canvas.flagDirty();
+
     await this.showPlayButton();
     // Unlock browser AudioContext in after user gesture
     // See: https://github.com/excaliburjs/Excalibur/issues/262
@@ -333,26 +360,28 @@ export class Loader extends Class implements Loadable<Loadable<any>[]> {
   }
 
   /**
-   * Returns the progess of the loader as a number between [0, 1] inclusive.
+   * Returns the progress of the loader as a number between [0, 1] inclusive.
    */
   public get progress(): number {
     return this._resourceCount > 0 ? clamp(this._numLoaded, 0, this._resourceCount) / this._resourceCount : 1;
   }
 
   private _positionPlayButton() {
-    const screenHeight = this._engine.screen.viewport.height;
-    const screenWidth = this._engine.screen.viewport.width;
-    if (this._playButtonRootElement) {
-      const left = this._engine.canvas.offsetLeft;
-      const top = this._engine.canvas.offsetTop;
-      const buttonWidth = this._playButton.clientWidth;
-      const buttonHeight = this._playButton.clientHeight;
-      if (this.playButtonPosition) {
-        this._playButtonRootElement.style.left = `${this.playButtonPosition.x}px`;
-        this._playButtonRootElement.style.top = `${this.playButtonPosition.y}px`;
-      } else {
-        this._playButtonRootElement.style.left = `${left + screenWidth / 2 - buttonWidth / 2}px`;
-        this._playButtonRootElement.style.top = `${top + screenHeight / 2 - buttonHeight / 2 + 100}px`;
+    if (this._engine) {
+      const screenHeight = this._engine.screen.viewport.height;
+      const screenWidth = this._engine.screen.viewport.width;
+      if (this._playButtonRootElement) {
+        const left = this._engine.canvas.offsetLeft;
+        const top = this._engine.canvas.offsetTop;
+        const buttonWidth = this._playButton.clientWidth;
+        const buttonHeight = this._playButton.clientHeight;
+        if (this.playButtonPosition) {
+          this._playButtonRootElement.style.left = `${this.playButtonPosition.x}px`;
+          this._playButtonRootElement.style.top = `${this.playButtonPosition.y}px`;
+        } else {
+          this._playButtonRootElement.style.left = `${left + screenWidth / 2 - buttonWidth / 2}px`;
+          this._playButtonRootElement.style.top = `${top + screenHeight / 2 - buttonHeight / 2 + 100}px`;
+        }
       }
     }
   }

@@ -26,6 +26,18 @@ describe('DebugSystem', () => {
     expect(ex.DebugSystem).toBeDefined();
   });
 
+  it('can use a test clock', () => {
+    engine.debug.useTestClock();
+    expect(engine.clock).toBeInstanceOf(ex.TestClock);
+    expect(engine.clock.isRunning());
+  });
+
+  it('can use a standard clock', () => {
+    engine.debug.useStandardClock();
+    expect(engine.clock).toBeInstanceOf(ex.StandardClock);
+    expect(engine.clock.isRunning());
+  });
+
   it('does not crash with an empty collider', async () => {
     const debugSystem = new ex.DebugSystem();
     engine.currentScene.world.add(debugSystem);
@@ -59,7 +71,7 @@ describe('DebugSystem', () => {
 
     engine.graphicsContext.flush();
 
-    await expectAsync(engine.canvas).toEqualImage('src/spec/images/DebugSystemSpec/transform.png');
+    await expectAsync(TestUtils.flushWebGLCanvasTo2D(engine.canvas)).toEqualImage('src/spec/images/DebugSystemSpec/transform.png');
   });
 
   it('can show motion info', async () => {
@@ -79,7 +91,7 @@ describe('DebugSystem', () => {
 
     engine.graphicsContext.flush();
 
-    await expectAsync(engine.canvas).toEqualImage('src/spec/images/DebugSystemSpec/motion.png');
+    await expectAsync(TestUtils.flushWebGLCanvasTo2D(engine.canvas)).toEqualImage('src/spec/images/DebugSystemSpec/motion.png');
   });
 
   it('can show body info', async () => {
@@ -99,7 +111,7 @@ describe('DebugSystem', () => {
 
     engine.graphicsContext.flush();
 
-    await expectAsync(engine.canvas).toEqualImage('src/spec/images/DebugSystemSpec/body.png');
+    await expectAsync(TestUtils.flushWebGLCanvasTo2D(engine.canvas)).toEqualImage('src/spec/images/DebugSystemSpec/body.png');
   });
 
   it('can show collider info', async () => {
@@ -117,7 +129,7 @@ describe('DebugSystem', () => {
 
     engine.graphicsContext.flush();
 
-    await expectAsync(engine.canvas).toEqualImage('src/spec/images/DebugSystemSpec/collider.png');
+    await expectAsync(TestUtils.flushWebGLCanvasTo2D(engine.canvas)).toEqualImage('src/spec/images/DebugSystemSpec/collider.png');
   });
 
   it('can show composite collider info', async () => {
@@ -136,7 +148,7 @@ describe('DebugSystem', () => {
 
     engine.graphicsContext.flush();
 
-    await expectAsync(engine.canvas).toEqualImage('src/spec/images/DebugSystemSpec/composite-collider.png');
+    await expectAsync(TestUtils.flushWebGLCanvasTo2D(engine.canvas)).toEqualImage('src/spec/images/DebugSystemSpec/composite-collider.png');
   });
 
   it('can show graphics info', async () => {
@@ -158,6 +170,47 @@ describe('DebugSystem', () => {
 
     engine.graphicsContext.flush();
 
-    await expectAsync(engine.canvas).toEqualImage('src/spec/images/DebugSystemSpec/graphics.png');
+    await expectAsync(TestUtils.flushWebGLCanvasTo2D(engine.canvas)).toEqualImage('src/spec/images/DebugSystemSpec/graphics.png');
+  });
+
+  it('can show DebugGraphicsComponent', async () => {
+    const debugSystem = new ex.DebugSystem();
+    engine.currentScene.world.add(debugSystem);
+    debugSystem.initialize(engine.currentScene);
+
+    engine.graphicsContext.clear();
+
+    const entity = new ex.Entity([
+      new ex.TransformComponent(),
+      new ex.DebugGraphicsComponent(ctx => {
+        ctx.drawCircle(ex.vec(250, 250), 100, ex.Color.Blue);
+      })]);
+    debugSystem.update([entity], 100);
+
+    engine.graphicsContext.flush();
+    await expectAsync(TestUtils.flushWebGLCanvasTo2D(engine.canvas))
+      .toEqualImage('src/spec/images/DebugSystemSpec/debug-draw-component.png');
+  });
+
+  it('can debug draw a tilemap', async () => {
+    const debugSystem = new ex.DebugSystem();
+    engine.currentScene.world.add(debugSystem);
+    debugSystem.initialize(engine.currentScene);
+
+    engine.graphicsContext.clear();
+
+    const tilemap = new ex.TileMap({
+      pos: ex.vec(0, 0),
+      tileWidth: 50,
+      tileHeight: 50,
+      rows: 10,
+      columns: 10
+    });
+    tilemap.tiles[0].solid = true;
+    tilemap.update(engine, 1);
+    debugSystem.update([tilemap], 100);
+
+    engine.graphicsContext.flush();
+    await expectAsync(TestUtils.flushWebGLCanvasTo2D(engine.canvas)).toEqualImage('src/spec/images/DebugSystemSpec/tilemap-debug.png');
   });
 });

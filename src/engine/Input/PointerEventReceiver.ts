@@ -10,8 +10,9 @@ import { WheelDeltaMode } from './WheelDeltaMode';
 import { PointerSystem } from './PointerSystem';
 import { NativePointerButton } from './NativePointerButton';
 import { PointerButton } from './PointerButton';
-import { Util } from '..';
+import { fail } from '../Util/Util';
 import { PointerType } from './PointerType';
+import { isCrossOriginIframe } from '../Util/IFrame';
 
 
 export type NativePointerEvent = globalThis.PointerEvent;
@@ -19,14 +20,24 @@ export type NativeMouseEvent = globalThis.MouseEvent;
 export type NativeTouchEvent = globalThis.TouchEvent;
 export type NativeWheelEvent = globalThis.WheelEvent;
 
+/**
+ * Is this event a native touch event?
+ */
 function isTouchEvent(value: any): value is NativeTouchEvent {
-  // Gaurd for Safari <= 13.1
+  // Guard for Safari <= 13.1
   return globalThis.TouchEvent && value instanceof globalThis.TouchEvent;
 }
 
+/**
+ * Is this event a native pointer event
+ */
 function isPointerEvent(value: any): value is NativePointerEvent {
-  // Gaurd for Safari <= 13.1
+  // Guard for Safari <= 13.1
   return globalThis.PointerEvent && value instanceof globalThis.PointerEvent;
+}
+
+export interface PointerInitOptions {
+  grabWindowFocus?: boolean;
 }
 
 /**
@@ -36,8 +47,8 @@ export class PointerEventReceiver extends Class {
   public primary: PointerAbstraction = new PointerAbstraction();
 
   private _activeNativePointerIdsToNormalized = new Map<number, number>();
-  public lastFramePointerPosition = new Map<number, Vector>();
-  public currentFramePointerPositions = new Map<number, Vector>();
+  public lastFramePointerCoords = new Map<number, GlobalCoordinates>();
+  public currentFramePointerCoords = new Map<number, GlobalCoordinates>();
 
   public currentFramePointerDown = new Map<number, boolean>();
   public lastFramePointerDown = new Map<number, boolean>();
@@ -50,6 +61,19 @@ export class PointerEventReceiver extends Class {
 
   constructor(public readonly target: GlobalEventHandlers & EventTarget, public engine: Engine) {
     super();
+  }
+
+  /**
+   * Creates a new PointerEventReceiver with a new target and engine while preserving existing pointer event
+   * handlers.
+   * @param target
+   * @param engine
+   */
+  public recreate(target: GlobalEventHandlers & EventTarget, engine: Engine) {
+    const eventReceiver = new PointerEventReceiver(target, engine);
+    eventReceiver.primary = this.primary;
+    eventReceiver._pointers = this._pointers;
+    return eventReceiver;
   }
 
   private _pointers: PointerAbstraction[] = [this.primary];
@@ -144,7 +168,7 @@ export class PointerEventReceiver extends Class {
    */
   public update() {
     this.lastFramePointerDown = new Map(this.currentFramePointerDown);
-    this.lastFramePointerPosition = new Map(this.currentFramePointerPositions);
+    this.lastFramePointerCoords = new Map(this.currentFramePointerCoords);
 
     for (const event of this.currentFrameDown) {
       this.emit('down', event);
@@ -182,7 +206,7 @@ export class PointerEventReceiver extends Class {
    */
   public clear() {
     for (const event of this.currentFrameUp) {
-      this.currentFramePointerPositions.delete(event.pointerId);
+      this.currentFramePointerCoords.delete(event.pointerId);
       const ids = this._activeNativePointerIdsToNormalized.entries();
       for (const [native, normalized] of ids) {
         if (normalized === event.pointerId) {
@@ -203,9 +227,15 @@ export class PointerEventReceiver extends Class {
    * Initializes the pointer event receiver so that it can start listening to native
    * browser events.
    */
-  public init() {
+  public init(options?: PointerInitOptions) {
     // Disabling the touch action avoids browser/platform gestures from firing on the canvas
-    this.engine.canvas.style.touchAction = 'none';
+    // It is important on mobile to have touch action 'none'
+    // https://stackoverflow.com/questions/48124372/pointermove-event-not-working-with-touch-why-not
+    if (this.target === this.engine.canvas) {
+      this.engine.canvas.style.touchAction = 'none';
+    } else {
+      document.body.style.touchAction = 'none';
+    }
     // Preferred pointer events
     if (window.PointerEvent) {
       this.target.addEventListener('pointerdown', this._boundHandle);
@@ -241,6 +271,24 @@ export class PointerEventReceiver extends Class {
     } else {
       // Remaining browser and older Firefox
       this.target.addEventListener('MozMousePixelScroll', this._boundWheel, wheelOptions);
+    }
+
+    const grabWindowFocus = options?.grabWindowFocus ?? true;
+    // Handle cross origin iframe
+    if (grabWindowFocus && isCrossOriginIframe()) {
+      const grabFocus = () => {
+        window.focus();
+      };
+      // Preferred pointer events
+      if (window.PointerEvent) {
+        this.target.addEventListener('pointerdown', grabFocus);
+      } else {
+        // Touch Events
+        this.target.addEventListener('touchstart', grabFocus);
+
+        // Mouse Events
+        this.target.addEventListener('mousedown', grabFocus);
+      }
     }
   }
 
@@ -279,7 +327,6 @@ export class PointerEventReceiver extends Class {
   /**
    * Take native pointer id and map it to index in active pointers
    * @param nativePointerId
-   * @returns
    */
   private _normalizePointerId(nativePointerId: number) {
     // Add to the the native pointer set id
@@ -315,7 +362,7 @@ export class PointerEventReceiver extends Class {
         const coordinates = GlobalCoordinates.fromPagePosition(touch.pageX, touch.pageY, this.engine);
         const nativePointerId = i + 1;
         const pointerId = this._normalizePointerId(nativePointerId);
-        this.currentFramePointerPositions.set(pointerId, coordinates.worldPos);
+        this.currentFramePointerCoords.set(pointerId, coordinates);
         eventCoords.set(pointerId, coordinates);
       }
     } else {
@@ -328,7 +375,7 @@ export class PointerEventReceiver extends Class {
         pointerType = this._stringToPointerType(ev.pointerType);
       }
       const pointerId = this._normalizePointerId(nativePointerId);
-      this.currentFramePointerPositions.set(pointerId, coordinates.worldPos);
+      this.currentFramePointerCoords.set(pointerId, coordinates);
       eventCoords.set(pointerId, coordinates);
     }
 
@@ -352,7 +399,7 @@ export class PointerEventReceiver extends Class {
           this.currentFrameMove.push(new PointerEvent('move', pointerId, button, pointerType, coord, ev));
           break;
         case 'touchcancel':
-        case 'pointercance':
+        case 'pointercancel':
           this.currentFrameCancel.push(new PointerEvent('cancel', pointerId, button, pointerType, coord, ev));
           break;
       }
@@ -423,6 +470,7 @@ export class PointerEventReceiver extends Class {
     // Force update pointer system
     const pointerSystem = this.engine.currentScene.world.systemManager.get(PointerSystem);
     const transformEntities = this.engine.currentScene.world.queryManager.createQuery(pointerSystem.types);
+    pointerSystem.preupdate();
     pointerSystem.update(transformEntities.getEntities());
   }
 
@@ -439,7 +487,7 @@ export class PointerEventReceiver extends Class {
       case NativePointerButton.Unknown:
         return PointerButton.Unknown;
       default:
-        return Util.fail(s);
+        return fail(s);
     }
   }
 

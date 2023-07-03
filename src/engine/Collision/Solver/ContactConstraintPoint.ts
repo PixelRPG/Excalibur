@@ -21,8 +21,8 @@ export class ContactConstraintPoint {
       const normal = this.contact.normal;
       const tangent = this.contact.tangent;
 
-      this.aToContact = this.point.sub(bodyA.pos);
-      this.bToContact = this.point.sub(bodyB.pos);
+      this.aToContact = this.point.sub(bodyA.globalPos);
+      this.bToContact = this.point.sub(bodyB.globalPos);
 
       const aToContactNormal = this.aToContact.cross(normal);
       const bToContactNormal = this.bToContact.cross(normal);
@@ -47,7 +47,7 @@ export class ContactConstraintPoint {
   }
 
   /**
-   * Returns the relative velocity betwen bodyA and bodyB
+   * Returns the relative velocity between bodyA and bodyB
    */
   public getRelativeVelocity() {
     const bodyA = this.contact.colliderA.owner?.get(BodyComponent);
@@ -91,4 +91,9 @@ export class ContactConstraintPoint {
    * Direction from center of mass of bodyB to contact point
    */
   public bToContact: Vector = new Vector(0, 0);
+
+  /**
+   * Original contact velocity combined with bounciness
+   */
+  public originalVelocityAndRestitution: number = 0;
 }

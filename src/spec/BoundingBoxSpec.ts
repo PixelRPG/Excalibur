@@ -32,6 +32,19 @@ describe('A Bounding Box', function () {
     expect(zero.hasZeroDimensions()).withContext('zero width/height bb should have zero dimensions').toBe(true);
   });
 
+  it('can be cloned', () => {
+    const bb = new ex.BoundingBox({
+      left: 12,
+      right: 34,
+      top: 0,
+      bottom: 100
+    });
+
+    const sut = bb.clone();
+    expect(sut).toEqual(bb);
+    expect(sut).not.toBe(bb);
+  });
+
   /**
    *
    */
@@ -103,6 +116,62 @@ function runBoundingBoxTests(creationType: string, createBoundingBox: Function) 
       expect(bb.contains(new ex.Vector(10, 20))).toBe(true);
     });
 
+    it('can overlap with other bounding boxes', () => {
+      const b1 = new ex.BoundingBox({left: 100, right: 110, top: 100, bottom: 110});
+      const b2 = new ex.BoundingBox(2, 0, 20, 10);
+      const b3 = new ex.BoundingBox(12, 0, 28, 10);
+      expect(b2.overlaps(b3)).toBe(true);
+      expect(b3.overlaps(b2)).toBe(true);
+      expect(b1.overlaps(b2)).toBe(false);
+      expect(b1.overlaps(b3)).toBe(false);
+    });
+
+    it('can overlap bounding boxes with zero dimensions', () => {
+      const bb1 = new ex.BoundingBox({
+        left: 0,
+        top: 0,
+        bottom: 100,
+        right: 100
+      });
+      const bb2 = new ex.BoundingBox();
+
+      expect(bb1.overlaps(bb2)).toBe(true);
+      expect(bb2.overlaps(bb1)).toBe(true);
+
+      const bbMid = new ex.BoundingBox({
+        left: 50,
+        top: 50,
+        right: 50,
+        bottom: 50
+      });
+      expect(bb1.overlaps(bbMid)).toBe(true);
+      expect(bbMid.overlaps(bb1)).toBe(true);
+
+      const bb3 = new ex.BoundingBox({left: -1, top: 0, bottom: 0, right: -1});
+      expect(bb3.overlaps(bb1)).toBe(false);
+      expect(bb1.overlaps(bb3)).toBe(false);
+
+    });
+
+    it('can overlap with a margin for floating point rounding to consider no longer overlap', () => {
+      const bb1 = new ex.BoundingBox({
+        left: 0,
+        right: 100,
+        top: 0,
+        bottom: 100
+      });
+
+      // bb2 is very technically overlapping, but very slightly and we want to consider it not really overlapping
+      const bb2 = new ex.BoundingBox({
+        left: 100  - 0.00001,
+        right: 200 - 0.00001,
+        top: 0,
+        bottom: 100
+      });
+      expect(bb1.overlaps(bb2, 0.0001)).toBe(false);
+      expect(bb1.overlaps(bb2)).toBe(true);
+    });
+
     it('can collide with other bounding boxes', () => {
       const b2 = new ex.BoundingBox(2, 0, 20, 10);
       const b3 = new ex.BoundingBox(12, 0, 28, 10);
@@ -136,7 +205,7 @@ function runBoundingBoxTests(creationType: string, createBoundingBox: Function) 
 
     it('can be transformed be a matrix', () => {
       const bb = ex.BoundingBox.fromDimension(10, 10);
-      const matrix = ex.Matrix.identity()
+      const matrix = ex.AffineMatrix.identity()
         .scale(2, 2)
         .rotate(Math.PI / 4);
       const newBB = bb.transform(matrix);

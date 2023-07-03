@@ -3,7 +3,7 @@ import { CollisionContact } from '../Detection/CollisionContact';
 import { PolygonCollider } from './PolygonCollider';
 import { EdgeCollider } from './EdgeCollider';
 import { SeparatingAxis, SeparationInfo } from './SeparatingAxis';
-import { Line } from '../../Math/line';
+import { LineSegment } from '../../Math/line-segment';
 import { Vector } from '../../Math/vector';
 import { TransformComponent } from '../../EntityComponentSystem';
 import { Pair } from '../Detection/Pair';
@@ -200,7 +200,7 @@ export const CollisionJumpTable = {
     linePoly.owner = edge.owner;
     const tx = edge.owner?.get(TransformComponent);
     if (tx) {
-      linePoly.update(edge.owner.get(TransformComponent));
+      linePoly.update(edge.owner.get(TransformComponent).get());
     }
     // Gross hack but poly-poly works well
     const contact = this.CollidePolygonPolygon(polygon, linePoly);
@@ -208,7 +208,6 @@ export const CollisionJumpTable = {
       // Fudge the contact back to edge
       contact[0].colliderB = edge;
       (contact[0].id as any) = Pair.calculatePairHash(polygon.id, edge.id);
-      // contact[0].info.collider
     }
     return contact;
   },
@@ -234,7 +233,7 @@ export const CollisionJumpTable = {
 
     // The incident side is the most opposite from the axes of collision on the other collider
     const other = separation.collider === polyA ? polyB : polyA;
-    const incident = other.findSide(separation.axis.negate()) as Line;
+    const incident = other.findSide(separation.axis.negate()) as LineSegment;
 
     // Clip incident side by the perpendicular lines at each end of the reference side
     // https://en.wikipedia.org/wiki/Sutherland%E2%80%93Hodgman_algorithm
@@ -243,7 +242,7 @@ export const CollisionJumpTable = {
 
     // Find our contact points by clipping the incident by the collision side
     const clipRight = incident.clip(refDir.negate(), -refDir.dot(reference.begin));
-    let clipLeft: Line | null = null;
+    let clipLeft: LineSegment | null = null;
     if (clipRight) {
       clipLeft = clipRight.clip(refDir, refDir.dot(reference.end));
     }
@@ -258,7 +257,7 @@ export const CollisionJumpTable = {
       let normal = separation.axis;
       let tangent = normal.perpendicular();
       // Point Contact A -> B
-      if (polyB.worldPos.sub(polyA.worldPos).dot(normal) < 0) {
+      if (polyB.center.sub(polyA.center).dot(normal) < 0) {
         normal = normal.negate();
         tangent = normal.perpendicular();
       }
@@ -294,13 +293,13 @@ export const CollisionJumpTable = {
     // both are polygons
     if (shapeA instanceof PolygonCollider && shapeB instanceof PolygonCollider) {
       if (contact.info.localSide) {
-        let side: Line;
+        let side: LineSegment;
         let worldPoint: Vector;
         if (contact.info.collider === shapeA) {
-          side = new Line(txA.apply(contact.info.localSide.begin), txA.apply(contact.info.localSide.end));
+          side = new LineSegment(txA.apply(contact.info.localSide.begin), txA.apply(contact.info.localSide.end));
           worldPoint = txB.apply(localPoint);
         } else {
-          side = new Line(txB.apply(contact.info.localSide.begin), txB.apply(contact.info.localSide.end));
+          side = new LineSegment(txB.apply(contact.info.localSide.begin), txB.apply(contact.info.localSide.end));
           worldPoint = txA.apply(localPoint);
         }
 

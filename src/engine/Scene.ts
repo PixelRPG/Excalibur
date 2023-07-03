@@ -1,4 +1,4 @@
-import { ScreenElement } from './ScreenElement';
+import { isScreenElement, ScreenElement } from './ScreenElement';
 import {
   InitializeEvent,
   ActivateEvent,
@@ -18,23 +18,23 @@ import { TileMap } from './TileMap';
 import { Camera } from './Camera';
 import { Actor } from './Actor';
 import { Class } from './Class';
-import { CanInitialize, CanActivate, CanDeactivate, CanUpdate, CanDraw } from './Interfaces/LifecycleEvents';
+import { CanInitialize, CanActivate, CanDeactivate, CanUpdate, CanDraw, SceneActivationContext } from './Interfaces/LifecycleEvents';
 import * as Util from './Util/Util';
 import * as Events from './Events';
-import * as ActorUtils from './Util/Actors';
 import { Trigger } from './Trigger';
 import { SystemType } from './EntityComponentSystem/System';
-import { obsolete } from './Util/Decorators';
 import { World } from './EntityComponentSystem/World';
 import { MotionSystem } from './Collision/MotionSystem';
 import { CollisionSystem } from './Collision/CollisionSystem';
 import { Entity } from './EntityComponentSystem/Entity';
 import { GraphicsSystem } from './Graphics/GraphicsSystem';
-import { CanvasDrawingSystem } from './Drawing/CanvasDrawingSystem';
-import { Flags, Legacy } from './Flags';
 import { DebugSystem } from './Debug/DebugSystem';
 import { PointerSystem } from './Input/PointerSystem';
 import { ActionsSystem } from './Actions/ActionsSystem';
+import { IsometricEntitySystem } from './TileMap/IsometricEntitySystem';
+import { OffscreenSystem } from './Graphics/OffscreenSystem';
+import { ExcaliburGraphicsContext } from './Graphics';
+import { PhysicsWorld } from './Collision/PhysicsWorld';
 /**
  * [[Actor|Actors]] are composed together into groupings called Scenes in
  * Excalibur. The metaphor models the same idea behind real world
@@ -42,7 +42,9 @@ import { ActionsSystem } from './Actions/ActionsSystem';
  *
  * Typical usages of a scene include: levels, menus, loading screens, etc.
  */
-export class Scene extends Class implements CanInitialize, CanActivate, CanDeactivate, CanUpdate, CanDraw {
+export class Scene<TActivationData = unknown>
+  extends Class
+  implements CanInitialize, CanActivate<TActivationData>, CanDeactivate, CanUpdate, CanDraw {
   private _logger: Logger = Logger.getInstance();
   /**
    * Gets or sets the current camera for the scene
@@ -55,9 +57,17 @@ export class Scene extends Class implements CanInitialize, CanActivate, CanDeact
   public world = new World(this);
 
   /**
+   * The Excalibur physics world for the scene. Used to interact
+   * with colliders included in the scene.
+   *
+   * Can be used to perform scene ray casts, track colliders, broadphase, and narrowphase.
+   */
+  public physics = new PhysicsWorld();
+
+  /**
    * The actors in the current scene
    */
-  public get actors(): Actor[] {
+  public get actors(): readonly Actor[] {
     return this.world.entityManager.entities.filter((e) => {
       return e instanceof Actor;
     }) as Actor[];
@@ -66,14 +76,14 @@ export class Scene extends Class implements CanInitialize, CanActivate, CanDeact
   /**
    * The entities in the current scene
    */
-  public get entities(): Entity[] {
+  public get entities(): readonly Entity[] {
     return this.world.entityManager.entities;
   }
 
   /**
    * The triggers in the current scene
    */
-  public get triggers(): Trigger[] {
+  public get triggers(): readonly Trigger[] {
     return this.world.entityManager.entities.filter((e) => {
       return e instanceof Trigger;
     }) as Trigger[];
@@ -82,7 +92,7 @@ export class Scene extends Class implements CanInitialize, CanActivate, CanDeact
   /**
    * The [[TileMap]]s in the scene, if any
    */
-  public get tileMaps(): TileMap[] {
+  public get tileMaps(): readonly TileMap[] {
     return this.world.entityManager.entities.filter((e) => {
       return e instanceof TileMap;
     }) as TileMap[];
@@ -93,34 +103,26 @@ export class Scene extends Class implements CanInitialize, CanActivate, CanDeact
    */
   public engine: Engine;
 
-  /**
-   * The [[ScreenElement]]s in a scene, if any; these are drawn last
-   * @deprecated Use [[Scene.actors]]
-   */
-  @obsolete({
-    message: 'Will be removed in excalibur v0.26.0',
-    alternateMethod: 'ScreenElements now are normal actors with a Transform Coordinate Plane of Screen'
-  })
-  public get screenElements(): ScreenElement[] {
-    return this.actors.filter((a) => a instanceof ScreenElement) as ScreenElement[];
-  }
-
   private _isInitialized: boolean = false;
   private _timers: Timer[] = [];
+  public get timers(): readonly Timer[] {
+    return this._timers;
+  }
   private _cancelQueue: Timer[] = [];
 
   constructor() {
     super();
     // Initialize systems
+
+    // Update
     this.world.add(new ActionsSystem());
     this.world.add(new MotionSystem());
-    this.world.add(new CollisionSystem());
+    this.world.add(new CollisionSystem(this.physics));
     this.world.add(new PointerSystem());
-    if (Flags.isEnabled(Legacy.LegacyDrawing)) {
-      this.world.add(new CanvasDrawingSystem());
-    } else {
-      this.world.add(new GraphicsSystem());
-    }
+    this.world.add(new IsometricEntitySystem());
+    // Draw
+    this.world.add(new OffscreenSystem());
+    this.world.add(new GraphicsSystem());
     this.world.add(new DebugSystem());
   }
 
@@ -178,7 +180,7 @@ export class Scene extends Class implements CanInitialize, CanActivate, CanDeact
    * This is called when the scene is made active and started. It is meant to be overridden,
    * this is where you should setup any DOM UI or event handlers needed for the scene.
    */
-  public onActivate(_oldScene: Scene, _newScene: Scene): void {
+  public onActivate(_context: SceneActivationContext<TActivationData>): void {
     // will be overridden
   }
 
@@ -186,7 +188,7 @@ export class Scene extends Class implements CanInitialize, CanActivate, CanDeact
    * This is called when the scene is made transitioned away from and stopped. It is meant to be overridden,
    * this is where you should cleanup any DOM UI or event handlers needed for the scene.
    */
-  public onDeactivate(_oldScene: Scene, _newScene: Scene): void {
+  public onDeactivate(_context: SceneActivationContext): void {
     // will be overridden
   }
 
@@ -212,8 +214,9 @@ export class Scene extends Class implements CanInitialize, CanActivate, CanDeact
    * Safe to override onPreDraw lifecycle event handler. Synonymous with `.on('preupdate', (evt) =>{...})`
    *
    * `onPreDraw` is called directly before a scene is drawn.
+   *
    */
-  public onPreDraw(_ctx: CanvasRenderingContext2D, _delta: number): void {
+  public onPreDraw(_ctx: ExcaliburGraphicsContext, _delta: number): void {
     // will be overridden
   }
 
@@ -221,8 +224,9 @@ export class Scene extends Class implements CanInitialize, CanActivate, CanDeact
    * Safe to override onPostDraw lifecycle event handler. Synonymous with `.on('preupdate', (evt) =>{...})`
    *
    * `onPostDraw` is called directly after a scene is drawn.
+   *
    */
-  public onPostDraw(_ctx: CanvasRenderingContext2D, _delta: number): void {
+  public onPostDraw(_ctx: ExcaliburGraphicsContext, _delta: number): void {
     // will be overridden
   }
 
@@ -255,6 +259,8 @@ export class Scene extends Class implements CanInitialize, CanActivate, CanDeact
       // Initialize camera first
       this.camera._initialize(engine);
 
+      this.world.systemManager.initialize();
+
       // This order is important! we want to be sure any custom init that add actors
       // fire before the actor init
       this.onInitialize.call(this, engine);
@@ -272,9 +278,9 @@ export class Scene extends Class implements CanInitialize, CanActivate, CanDeact
    * Activates the scene with the base behavior, then calls the overridable `onActivate` implementation.
    * @internal
    */
-  public _activate(oldScene: Scene, newScene: Scene): void {
+  public _activate(context: SceneActivationContext<TActivationData>): void {
     this._logger.debug('Scene.onActivate', this);
-    this.onActivate(oldScene, newScene);
+    this.onActivate(context);
   }
 
   /**
@@ -283,9 +289,9 @@ export class Scene extends Class implements CanInitialize, CanActivate, CanDeact
    * Deactivates the scene with the base behavior, then calls the overridable `onDeactivate` implementation.
    * @internal
    */
-  public _deactivate(oldScene: Scene, newScene: Scene): void {
+  public _deactivate(context: SceneActivationContext<never>): void {
     this._logger.debug('Scene.onDeactivate', this);
-    this.onDeactivate(oldScene, newScene);
+    this.onDeactivate(context);
   }
 
   /**
@@ -317,7 +323,7 @@ export class Scene extends Class implements CanInitialize, CanActivate, CanDeact
    *
    * @internal
    */
-  public _predraw(_ctx: CanvasRenderingContext2D, _delta: number): void {
+  public _predraw(_ctx: ExcaliburGraphicsContext, _delta: number): void {
     this.emit('predraw', new PreDrawEvent(_ctx, _delta, this));
     this.onPreDraw(_ctx, _delta);
   }
@@ -329,7 +335,7 @@ export class Scene extends Class implements CanInitialize, CanActivate, CanDeact
    *
    * @internal
    */
-  public _postdraw(_ctx: CanvasRenderingContext2D, _delta: number): void {
+  public _postdraw(_ctx: ExcaliburGraphicsContext, _delta: number): void {
     this.emit('postdraw', new PostDrawEvent(_ctx, _delta, this));
     this.onPostDraw(_ctx, _delta);
   }
@@ -341,9 +347,7 @@ export class Scene extends Class implements CanInitialize, CanActivate, CanDeact
    */
   public update(engine: Engine, delta: number) {
     this._preupdate(engine, delta);
-    if (this.camera) {
-      this.camera.update(engine, delta);
-    }
+
     // TODO differed entity removal for timers
     let i: number, len: number;
     // Remove timers in the cancel queue before updating them
@@ -359,6 +363,11 @@ export class Scene extends Class implements CanInitialize, CanActivate, CanDeact
 
     this.world.update(SystemType.Update, delta);
 
+    // Camera last keeps renders smooth that are based on entity/actor
+    if (this.camera) {
+      this.camera.update(engine, delta);
+    }
+
     this._collectActorStats(engine);
 
     this._postupdate(engine, delta);
@@ -366,10 +375,11 @@ export class Scene extends Class implements CanInitialize, CanActivate, CanDeact
 
   /**
    * Draws all the actors in the Scene. Called by the [[Engine]].
+   *
    * @param ctx    The current rendering context
    * @param delta  The number of milliseconds since the last draw
    */
-  public draw(ctx: CanvasRenderingContext2D, delta: number) {
+  public draw(ctx: ExcaliburGraphicsContext, delta: number) {
     this._predraw(ctx, delta);
 
     this.world.update(SystemType.Draw, delta);
@@ -383,10 +393,9 @@ export class Scene extends Class implements CanInitialize, CanActivate, CanDeact
   /**
    * Draws all the actors' debug information in the Scene. Called by the [[Engine]].
    * @param ctx  The current rendering context
-   * @deprecated
    */
   /* istanbul ignore next */
-  public debugDraw(ctx: CanvasRenderingContext2D) {
+  public debugDraw(ctx: ExcaliburGraphicsContext) {
     this.emit('predebugdraw', new PreDebugDrawEvent(ctx, this));
     // pass
     this.emit('postdebugdraw', new PostDebugDrawEvent(ctx, this));
@@ -469,6 +478,9 @@ export class Scene extends Class implements CanInitialize, CanActivate, CanDeact
   public remove(entity: any): void {
     if (entity instanceof Entity) {
       this.emit('entityremoved', { target: entity } as any);
+      if (entity.active) {
+        entity.kill();
+      }
       this.world.remove(entity);
     }
     if (entity instanceof Timer) {
@@ -477,41 +489,18 @@ export class Scene extends Class implements CanInitialize, CanActivate, CanDeact
   }
 
   /**
-   * Adds (any) actor to act as a piece of UI, meaning it is always positioned
-   * in screen coordinates. UI actors do not participate in collisions.
-   * @todo Should this be `ScreenElement` only?
-   * @deprecated Use [[Scene.add]]
+   * Removes all entities and timers from the scene, optionally indicate whether deferred should or shouldn't be used.
+   *
+   * By default entities use deferred removal
+   * @param deferred
    */
-  @obsolete({ message: 'Will be removed in excalibur v0.26.0', alternateMethod: 'Use Scene.add' })
-  public addScreenElement(actor: Actor) {
-    this.add(actor);
-  }
-
-  /**
-   * Removes an actor as a piece of UI
-   * @deprecated Use [[Scene.remove]]
-   */
-  @obsolete({ message: 'Will be removed in excalibur v0.26.0', alternateMethod: 'Use Scene.remove' })
-  public removeScreenElement(actor: Actor) {
-    this.remove(actor);
-  }
-
-  /**
-   * Adds a [[TileMap]] to the scene, once this is done the TileMap will be drawn and updated.
-   * @deprecated Use [[Scene.add]]
-   */
-  @obsolete({ message: 'Will be removed in excalibur v0.26.0', alternateMethod: 'Use Scene.add' })
-  public addTileMap(tileMap: TileMap) {
-    this.world.add(tileMap);
-  }
-
-  /**
-   * Removes a [[TileMap]] from the scene, it will no longer be drawn or updated.
-   * @deprecated Use [[Scene.remove]]
-   */
-  @obsolete({ message: 'Will be removed in excalibur v0.26.0', alternateMethod: 'Use Scene.remove' })
-  public removeTileMap(tileMap: TileMap) {
-    this.world.remove(tileMap);
+  public clear(deferred: boolean = true): void {
+    for (const entity of this.entities) {
+      this.world.remove(entity, deferred);
+    }
+    for (const timer of this.timers) {
+      this.removeTimer(timer);
+    }
   }
 
   /**
@@ -569,7 +558,7 @@ export class Scene extends Class implements CanInitialize, CanActivate, CanDeact
     for (const actor of this.actors) {
       engine.stats.currFrame.actors.alive++;
       for (const child of actor.children) {
-        if (ActorUtils.isScreenElement(child as Actor)) {
+        if (isScreenElement(child as Actor)) {
           // TODO not true
           engine.stats.currFrame.actors.ui++;
         } else {

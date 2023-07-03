@@ -22,18 +22,17 @@ var ss = ex.SpriteSheet.fromImageSource({
 });
 
 var tm = new ex.TileMap({
-  x: -100,
-  y: -100,
-  cellWidth: 16,
-  cellHeight: 16,
-  cols: 40,
+  pos: ex.vec(-100, -100),
+  tileWidth: 16,
+  tileHeight: 16,
+  columns: 40,
   rows: 40
 });
 
 var tilesprite = ss.sprites[0];
 
-for (var i = 0; i < tm.rows * tm.cols; i++) {
-  tm.getCellByIndex(i).addGraphic(tilesprite);
+for (var i = 0; i < tm.columns * tm.rows; i++) {
+  tm.getTileByIndex(i).addGraphic(tilesprite);
 }
 
 game.add(tm);

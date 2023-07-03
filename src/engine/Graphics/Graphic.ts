@@ -1,6 +1,9 @@
 import { Vector, vec } from '../Math/vector';
 import { ExcaliburGraphicsContext } from './Context/ExcaliburGraphicsContext';
 import { BoundingBox } from '../Collision/BoundingBox';
+import { Color } from '../Color';
+import { watch } from '../Util/Watch';
+import { AffineMatrix } from '../Math/affine-matrix';
 
 export interface GraphicOptions {
   /**
@@ -12,7 +15,7 @@ export interface GraphicOptions {
    */
   height?: number;
   /**
-   * SHould the graphic be flipped horizontally
+   * Should the graphic be flipped horizontally
    */
   flipHorizontal?: boolean;
   /**
@@ -32,6 +35,10 @@ export interface GraphicOptions {
    */
   opacity?: number;
   /**
+   * The tint of the graphic, this color will be multiplied by the original pixel colors
+   */
+  tint?: Color;
+  /**
    * The origin of the drawing in pixels to use when applying transforms, by default it will be the center of the image
    */
   origin?: Vector;
@@ -49,40 +56,93 @@ export abstract class Graphic {
   private static _ID: number = 0;
   readonly id = Graphic._ID++;
 
+  public transform: AffineMatrix = AffineMatrix.identity();
+  public tint: Color = null;
+
+  private _transformStale = true;
+  public isStale() {
+    return this._transformStale;
+  }
+
   /**
    * Gets or sets wether to show debug information about the graphic
    */
   public showDebug: boolean = false;
 
+
+  private _flipHorizontal = false;
   /**
    * Gets or sets the flipHorizontal, which will flip the graphic horizontally (across the y axis)
    */
-  public flipHorizontal: boolean = false;
+  public get flipHorizontal(): boolean {
+    return this._flipHorizontal;
+  }
 
+  public set flipHorizontal(value: boolean) {
+    this._flipHorizontal = value;
+    this._transformStale = true;
+  }
+
+  private _flipVertical = false;
   /**
    * Gets or sets the flipVertical, which will flip the graphic vertically (across the x axis)
    */
-  public flipVertical: boolean = false;
+  public get flipVertical(): boolean {
+    return this._flipVertical;
+  }
 
+  public set flipVertical(value: boolean) {
+    this._flipVertical = value;
+    this._transformStale = true;
+  }
+
+  private _rotation = 0;
   /**
    * Gets or sets the rotation of the graphic
    */
-  public rotation: number = 0;
+  public get rotation(): number {
+    return this._rotation;
+  }
+
+  public set rotation(value: number) {
+    this._rotation = value;
+    this._transformStale = true;
+  }
 
   /**
    * Gets or sets the opacity of the graphic, 0 is transparent, 1 is solid (opaque).
    */
   public opacity: number = 1;
 
+  private _scale = Vector.One;
   /**
    * Gets or sets the scale of the graphic, this affects the width and
    */
-  public scale = Vector.One;
+  public get scale() {
+    return this._scale;
+  }
 
+  public set scale(value: Vector) {
+    this._scale = watch(value, () => {
+      this._transformStale = true;
+    });
+    this._transformStale = true;
+  }
+
+  private _origin: Vector | null = null;
   /**
    * Gets or sets the origin of the graphic, if not set the center of the graphic is the origin
    */
-  public origin: Vector | null = null;
+  public get origin(): Vector | null {
+    return this._origin;
+  }
+
+  public set origin(value: Vector | null) {
+    this._origin = watch(value, () => {
+      this._transformStale = true;
+    });
+    this._transformStale = true;
+  }
 
   constructor(options?: GraphicOptions) {
     if (options) {
@@ -126,10 +186,12 @@ export abstract class Graphic {
 
   public set width(value: number) {
     this._width = value;
+    this._transformStale = true;
   }
 
   public set height(value: number) {
     this._height = value;
+    this._transformStale = true;
   }
 
   /**
@@ -152,7 +214,7 @@ export abstract class Graphic {
   }
 
   /**
-   * Meant to be overriden by the graphic implementation to draw the underlying image (HTMLCanvasElement or HTMLImageElement)
+   * Meant to be overridden by the graphic implementation to draw the underlying image (HTMLCanvasElement or HTMLImageElement)
    * to the graphics context without transform. Transformations like position, rotation, and scale are handled by [[Graphic._preDraw]]
    * and [[Graphic._postDraw]]
    * @param ex The excalibur graphics context
@@ -170,14 +232,22 @@ export abstract class Graphic {
   protected _preDraw(ex: ExcaliburGraphicsContext, x: number, y: number): void {
     ex.save();
     ex.translate(x, y);
-    ex.scale(Math.abs(this.scale.x), Math.abs(this.scale.y));
-    this._rotate(ex);
-    this._flip(ex);
+    if (this._transformStale) {
+      this.transform.reset();
+      this.transform.scale(Math.abs(this.scale.x), Math.abs(this.scale.y));
+      this._rotate(this.transform);
+      this._flip(this.transform);
+      this._transformStale = false;
+    }
+    ex.multiply(this.transform);
     // it is important to multiply alphas so graphics respect the current context
     ex.opacity = ex.opacity * this.opacity;
+    if (this.tint) {
+      ex.tint = this.tint;
+    }
   }
 
-  protected _rotate(ex: ExcaliburGraphicsContext) {
+  protected _rotate(ex: ExcaliburGraphicsContext | AffineMatrix) {
     const scaleDirX = this.scale.x > 0 ? 1 : -1;
     const scaleDirY = this.scale.y > 0 ? 1 : -1;
     const origin = this.origin ?? vec(this.width / 2, this.height / 2);
@@ -188,7 +258,7 @@ export abstract class Graphic {
     ex.translate(-origin.x, -origin.y);
   }
 
-  protected _flip(ex: ExcaliburGraphicsContext) {
+  protected _flip(ex: ExcaliburGraphicsContext | AffineMatrix) {
     if (this.flipHorizontal) {
       ex.translate(this.width / this.scale.x, 0);
       ex.scale(-1, 1);
@@ -201,7 +271,7 @@ export abstract class Graphic {
   }
 
   /**
-   * Apply any addtional work after [[Graphic._drawImage]] and restore the context state.
+   * Apply any additional work after [[Graphic._drawImage]] and restore the context state.
    * @param ex
    */
   protected _postDraw(ex: ExcaliburGraphicsContext): void {

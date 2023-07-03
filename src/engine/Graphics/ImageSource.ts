@@ -1,12 +1,15 @@
 import { Resource } from '../Resources/Resource';
-import { Texture } from '../Drawing/Texture';
 import { Sprite } from './Sprite';
 import { Loadable } from '../Interfaces/Index';
 import { Logger } from '../Util/Log';
+import { ImageFiltering } from './Filtering';
+import { Future } from '../Util/Future';
+import { TextureLoader } from '../Graphics/Context/texture-loader';
 
 export class ImageSource implements Loadable<HTMLImageElement> {
   private _logger = Logger.getInstance();
   private _resource: Resource<Blob>;
+  public filtering: ImageFiltering;
 
   /**
    * The original size of the source image in pixels
@@ -22,40 +25,57 @@ export class ImageSource implements Loadable<HTMLImageElement> {
     return this.image.naturalHeight;
   }
 
+  private _src: string;
   /**
    * Returns true if the Texture is completely loaded and is ready
    * to be drawn.
    */
   public isLoaded(): boolean {
-    return !!this.data.src;
+    if (!this._src) {
+      // this boosts speed of access
+      this._src = this.data.src;
+    }
+    return !!this._src;
   }
 
   /**
-   * Access to the underlying html image elmeent
+   * Access to the underlying html image element
    */
   public data: HTMLImageElement = new Image();
   public get image(): HTMLImageElement {
     return this.data;
   }
 
+  private _readyFuture = new Future<HTMLImageElement>();
   /**
    * Promise the resolves when the image is loaded and ready for use, does not initiate loading
    */
-  public ready: Promise<HTMLImageElement>;
-  private _loadedResolve: (value?: HTMLImageElement | PromiseLike<HTMLImageElement>) => void;
+  public ready: Promise<HTMLImageElement> = this._readyFuture.promise;
 
   /**
    * The path to the image, can also be a data url like 'data:image/'
-   * @param path
+   * @param path {string} Path to the image resource relative from the HTML document hosting the game, or absolute
+   * @param bustCache {boolean} Should excalibur add a cache busting querystring?
+   * @param filtering {ImageFiltering} Optionally override the image filtering set by [[EngineOptions.antialiasing]]
    */
-  constructor(public readonly path: string, bustCache: boolean = false) {
+  constructor(public readonly path: string, bustCache: boolean = false, filtering?: ImageFiltering) {
     this._resource = new Resource(path, 'blob', bustCache);
+    this.filtering = filtering;
     if (path.endsWith('.svg') || path.endsWith('.gif')) {
       this._logger.warn(`Image type is not fully supported, you may have mixed results ${path}. Fully supported: jpg, bmp, and png`);
     }
-    this.ready = new Promise<HTMLImageElement>((resolve) => {
-      this._loadedResolve = resolve;
-    });
+  }
+
+  /**
+   * Should excalibur add a cache busting querystring? By default false.
+   * Must be set before loading
+   */
+  public get bustCache() {
+    return this._resource.bustCache;
+  }
+
+  public set bustCache(val: boolean) {
+    this._resource.bustCache = val;
   }
 
   /**
@@ -77,16 +97,32 @@ export class ImageSource implements Loadable<HTMLImageElement> {
 
       // Decode the image
       const image = new Image();
+      // Use Image.onload over Image.decode()
+      // https://bugs.chromium.org/p/chromium/issues/detail?id=1055828#c7
+      // Otherwise chrome will throw still Image.decode() failures for large textures
+      const loadedFuture = new Future<void>();
+      image.onload = () => loadedFuture.resolve();
       image.src = url;
-      await image.decode();
+      image.setAttribute('data-original-src', this.path);
+
+      await loadedFuture.promise;
 
       // Set results
+      // We defer loading the texture into webgl until the first draw that way we avoid a singleton
+      // and for the multi-engine case the texture needs to be created in EACH webgl context to work
+      // See image-renderer.ts draw()
       this.data = image;
+
+      // emit warning if potentially too big
+      TextureLoader.checkImageSizeSupportedAndLog(this.data);
     } catch (error) {
       throw `Error loading ImageSource from path '${this.path}' with error [${error.message}]`;
     }
+    // Do a bad thing to pass the filtering as an attribute
+    this.data.setAttribute('filtering', this.filtering);
+
     // todo emit complete
-    this._loadedResolve(this.data);
+    this._readyFuture.resolve(this.data);
     return this.data;
   }
 
@@ -95,22 +131,6 @@ export class ImageSource implements Loadable<HTMLImageElement> {
    */
   public toSprite(): Sprite {
     return Sprite.from(this);
-  }
-
-  /**
-   * Create a ImageSource from legacy texture
-   * @param tex
-   */
-  public static fromLegacyTexture(tex: Texture): ImageSource {
-    const image = new ImageSource(tex.path);
-    if (tex.isLoaded()) {
-      image.data = tex.data;
-    } else {
-      tex.loaded.then(() => {
-        image.data = tex.data;
-      });
-    }
-    return image;
   }
 
   /**

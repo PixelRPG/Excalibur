@@ -3,7 +3,7 @@ import { Scene, Util } from '..';
 import { World } from './World';
 
 export interface SystemCtor<T extends System> {
-  new (): T;
+  new (...args: any[]): T;
 }
 
 /**
@@ -22,7 +22,6 @@ export class SystemManager<ContextType> {
   /**
    * Get a system registered in the manager by type
    * @param systemType
-   * @returns
    */
   public get<T extends System>(systemType: SystemCtor<T>): T | null {
     return this.systems.find((s) => s instanceof systemType) as unknown as T;
@@ -42,6 +41,8 @@ export class SystemManager<ContextType> {
     this.systems.push(system);
     this.systems.sort((a, b) => a.priority - b.priority);
     query.register(system);
+    // If systems are added and the manager has already been init'd
+    // then immediately init the system
     if (this.initialized && system.initialize) {
       system.initialize(this._world.context);
     }
@@ -61,12 +62,11 @@ export class SystemManager<ContextType> {
   }
 
   /**
-   * Updates all systems
-   * @param type whether this is an update or draw system
-   * @param context context reference
-   * @param delta time in milliseconds
+   * Initialize all systems in the manager
+   *
+   * Systems added after initialize() will be initialized on add
    */
-  public updateSystems(type: SystemType, context: ContextType, delta: number) {
+  public initialize() {
     if (!this.initialized) {
       this.initialized = true;
       for (const s of this.systems) {
@@ -75,7 +75,15 @@ export class SystemManager<ContextType> {
         }
       }
     }
+  }
 
+  /**
+   * Updates all systems
+   * @param type whether this is an update or draw system
+   * @param context context reference
+   * @param delta time in milliseconds
+   */
+  public updateSystems(type: SystemType, context: ContextType, delta: number) {
     const systems = this.systems.filter((s) => s.systemType === type);
     for (const s of systems) {
       if (s.preupdate) {

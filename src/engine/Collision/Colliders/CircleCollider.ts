@@ -5,15 +5,16 @@ import { PolygonCollider } from './PolygonCollider';
 import { EdgeCollider } from './EdgeCollider';
 
 import { Projection } from '../../Math/projection';
-import { Line } from '../../Math/line';
+import { LineSegment } from '../../Math/line-segment';
 import { Vector } from '../../Math/vector';
 import { Ray } from '../../Math/ray';
 import { Color } from '../../Color';
 import { Collider } from './Collider';
 
 import { ClosestLineJumpTable } from './ClosestLineJumpTable';
-import { Transform, TransformComponent } from '../../EntityComponentSystem';
 import { ExcaliburGraphicsContext } from '../../Graphics/Context/ExcaliburGraphicsContext';
+import { Transform } from '../../Math/transform';
+import { AffineMatrix } from '../../Math/affine-matrix';
 
 export interface CircleColliderOptions {
   /**
@@ -35,14 +36,32 @@ export class CircleCollider extends Collider {
    */
   public offset: Vector = Vector.Zero;
 
+  private _globalMatrix: AffineMatrix = AffineMatrix.identity();
+
   public get worldPos(): Vector {
-    return this.offset.add(this._transform?.pos ?? Vector.Zero);
+    return this._globalMatrix.getPosition();
+  }
+
+  private _naturalRadius: number;
+  /**
+   * Get the radius of the circle
+   */
+  public get radius(): number {
+    const tx = this._transform;
+    const scale = tx?.globalScale ?? Vector.One;
+    // This is a trade off, the alternative is retooling circles to support ellipse collisions
+    return this._naturalRadius * Math.min(scale.x, scale.y);
   }
 
   /**
-   * This is the radius of the circle
+   * Set the radius of the circle
    */
-  public radius: number;
+  public set radius(val: number) {
+    const tx = this._transform;
+    const scale = tx?.globalScale ?? Vector.One;
+    // This is a trade off, the alternative is retooling circles to support ellipse collisions
+    this._naturalRadius = val / Math.min(scale.x, scale.y);
+  }
 
   private _transform: Transform;
 
@@ -50,6 +69,7 @@ export class CircleCollider extends Collider {
     super();
     this.offset = options.offset || Vector.Zero;
     this.radius = options.radius || 0;
+    this._globalMatrix.translate(this.offset.x, this.offset.y);
   }
 
   /**
@@ -66,7 +86,7 @@ export class CircleCollider extends Collider {
    * Get the center of the collider in world coordinates
    */
   public get center(): Vector {
-    return this.offset.add(this._transform?.pos ?? Vector.Zero);
+    return this._globalMatrix.getPosition();
   }
 
   /**
@@ -126,7 +146,7 @@ export class CircleCollider extends Collider {
     }
   }
 
-  public getClosestLineBetween(shape: Collider): Line {
+  public getClosestLineBetween(shape: Collider): LineSegment {
     if (shape instanceof CircleCollider) {
       return ClosestLineJumpTable.CircleCircleClosestLine(this, shape);
     } else if (shape instanceof PolygonCollider) {
@@ -173,14 +193,16 @@ export class CircleCollider extends Collider {
    * Get the axis aligned bounding box for the circle collider in world coordinates
    */
   public get bounds(): BoundingBox {
-    const tx = this._transform as TransformComponent;
-    const bodyPos = tx?.globalPos ?? Vector.Zero;
+    const tx = this._transform;
+    const scale = tx?.globalScale ?? Vector.One;
+    const rotation = tx?.globalRotation ?? 0;
+    const pos = (tx?.globalPos ?? Vector.Zero);
     return new BoundingBox(
-      this.offset.x + bodyPos.x - this.radius,
-      this.offset.y + bodyPos.y - this.radius,
-      this.offset.x + bodyPos.x + this.radius,
-      this.offset.y + bodyPos.y + this.radius
-    );
+      this.offset.x - this._naturalRadius,
+      this.offset.y - this._naturalRadius,
+      this.offset.x + this._naturalRadius,
+      this.offset.y + this._naturalRadius
+    ).rotate(rotation).scale(scale).translate(pos);
   }
 
   /**
@@ -188,10 +210,10 @@ export class CircleCollider extends Collider {
    */
   public get localBounds(): BoundingBox {
     return new BoundingBox(
-      this.offset.x - this.radius,
-      this.offset.y - this.radius,
-      this.offset.x + this.radius,
-      this.offset.y + this.radius
+      this.offset.x - this._naturalRadius,
+      this.offset.y - this._naturalRadius,
+      this.offset.x + this._naturalRadius,
+      this.offset.y + this._naturalRadius
     );
   }
 
@@ -213,6 +235,9 @@ export class CircleCollider extends Collider {
   /* istanbul ignore next */
   public update(transform: Transform): void {
     this._transform = transform;
+    const globalMat = transform.matrix ?? this._globalMatrix;
+    globalMat.clone(this._globalMatrix);
+    this._globalMatrix.translate(this.offset.x, this.offset.y);
   }
 
   /**
@@ -228,36 +253,16 @@ export class CircleCollider extends Collider {
     return new Projection(Math.min.apply(Math, scalars), Math.max.apply(Math, scalars));
   }
 
-  public draw(ctx: CanvasRenderingContext2D, color: Color = Color.Green, pos: Vector = Vector.Zero) {
-    const newPos = pos.add(this.offset);
-    ctx.beginPath();
-    ctx.fillStyle = color.toString();
-    ctx.arc(newPos.x, newPos.y, this.radius, 0, Math.PI * 2);
-    ctx.closePath();
-    ctx.fill();
-  }
-
   public debug(ex: ExcaliburGraphicsContext, color: Color) {
-    const tx = this._transform as TransformComponent;
-    const pos = tx?.globalPos ? tx?.globalPos.add(this.offset) : this.offset;
-    ex.drawCircle(pos, this.radius, color);
-  }
-
-  /* istanbul ignore next */
-  public debugDraw(ctx: CanvasRenderingContext2D, color: Color = Color.Green) {
-    const transform = this._transform;
-    const pos = transform ? transform.pos.add(this.offset) : this.offset;
-    const rotation = transform ? transform.rotation : 0;
-
-    ctx.beginPath();
-    ctx.strokeStyle = color.toString();
-    ctx.arc(pos.x, pos.y, this.radius, 0, Math.PI * 2);
-    ctx.closePath();
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(pos.x, pos.y);
-    ctx.lineTo(Math.cos(rotation) * this.radius + pos.x, Math.sin(rotation) * this.radius + pos.y);
-    ctx.closePath();
-    ctx.stroke();
+    const tx = this._transform;
+    const scale = tx?.globalScale ?? Vector.One;
+    const rotation = tx?.globalRotation ?? 0;
+    const pos = (tx?.globalPos ?? Vector.Zero);
+    ex.save();
+    ex.translate(pos.x, pos.y);
+    ex.rotate(rotation);
+    ex.scale(scale.x, scale.y);
+    ex.drawCircle((this.offset ?? Vector.Zero), this._naturalRadius, Color.Transparent, color, 2);
+    ex.restore();
   }
 }

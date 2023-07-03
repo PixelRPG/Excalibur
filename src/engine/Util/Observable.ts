@@ -20,7 +20,7 @@ export interface Observer<T> {
 export type MaybeObserver<T> = Partial<Observer<T>>;
 
 /**
- * Simple Observable implemenation
+ * Simple Observable implementation
  * @template T is the typescript Type that defines the data being observed
  */
 export class Observable<T> {
@@ -70,8 +70,14 @@ export class Observable<T> {
    * @param message
    */
   notifyAll(message: T) {
-    this.observers.forEach((o) => o.notify(message));
-    this.subscriptions.forEach(cb => cb(message));
+    const observersLength = this.observers.length;
+    for (let i = 0; i < observersLength; i++) {
+      this.observers[i].notify(message);
+    }
+    const subscriptionsLength = this.subscriptions.length;
+    for (let i = 0; i < subscriptionsLength; i++) {
+      this.subscriptions[i](message);
+    }
   }
 
   /**

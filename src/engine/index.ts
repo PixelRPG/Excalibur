@@ -19,15 +19,18 @@ export * from './Class';
 export * from './Configurable';
 export * from './Debug/index';
 export * from './EventDispatcher';
+export * from './EventEmitter';
 export * from './Events/MediaEvents';
 export * from './Events';
 export * from './Label';
 export { FontStyle, FontUnit, TextAlign, BaseAlign } from './Graphics/FontCommon';
 export * from './Loader';
-export { Particle, ParticleEmitter, ParticleArgs, ParticleEmitterArgs, EmitterType } from './Particles';
+export { Particle, ParticleTransform, ParticleEmitter, ParticleArgs, ParticleEmitterArgs, EmitterType } from './Particles';
 export * from './Collision/Physics';
 export * from './Scene';
-export { TileMap, Cell, TileMapArgs, CellArgs } from './TileMap';
+
+export * from './TileMap/index';
+
 export * from './Timer';
 export * from './Trigger';
 export * from './ScreenElement';
@@ -35,11 +38,7 @@ export * from './ScreenElement';
 export * from './Actions/Index';
 export * from './Collision/Index';
 
-// ex.LegacyDrawing namespace
-import * as legacyDrawing from './Drawing/Index';
-export { legacyDrawing as LegacyDrawing };
 export * from './Interfaces/Index';
-export * from './PostProcessing/Index';
 export * from './Resources/Index';
 
 export * from './EntityComponentSystem/index';
@@ -56,36 +55,28 @@ export { events as Events };
 import * as input from './Input/Index';
 export { input as Input };
 export { PointerComponent } from './Input/Index';
-
-// ex.Traits namespace
-import * as traits from './Traits/Index';
-export { traits as Traits };
+export { PointerSystem } from './Input/PointerSystem';
 
 // ex.Util namespaces
 import * as util from './Util/Index';
 export { util as Util };
-export {
-  clamp,
-  range,
-  toDegrees,
-  toRadians,
-  randomInRange,
-  randomIntInRange,
-  canonicalizeAngle
-} from './Util/Index';
 
 export * from './Util/Browser';
 export * from './Util/Decorators';
 export * from './Util/Detector';
-export * from './Util/CullingBox';
 export * from './Util/EasingFunctions';
 export * from './Util/Observable';
 export * from './Util/Log';
-export * from './Util/SortedList';
 export * from './Util/Pool';
+export * from './Util/Fps';
+export * from './Util/Clock';
+export * from './Util/WebAudio';
+export * from './Util/Toaster';
+export * from './Util/StateMachine';
+export * from './Util/Future';
+export * from './Util/Semaphore';
 
 // ex.Deprecated
-export * from './Promises';
 // import * as deprecated from './Deprecated';
 // export { deprecated as Deprecated };
 // export * from './Deprecated';

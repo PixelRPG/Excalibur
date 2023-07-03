@@ -18,7 +18,7 @@ Our user documentation is at https://excaliburjs.com/docs (and you can contribut
 
 - Follow our [Installation](https://excaliburjs.com/docs/installation) guide to learn how to install Excalibur.
 - Follow our [Getting Started](https://excaliburjs.com/docs/getting-started) guide if you're looking to get started.
-- Learn what [Features](https://excaliburjs.com/docs/features) are available for you to leverage in your games.
+- Learn what [Features](https://excaliburjs.com/docs) are available for you to leverage in your games.
 - View the [1.0 Release roadmap](https://github.com/excaliburjs/Excalibur/issues/1161) to see what's coming next.
 
 :exclamation: **_Note:_** Excalibur is still in version 0.x, which means this project and its associated plugins may be a little rough around the edges. We try to minimize API changes, but breaking changes **will occur** in new released versions. Excalibur is a labor of love and the product of many hours of spare time. Thanks for checking it out!
@@ -40,6 +40,14 @@ Compiled examples can be found [in the Excalibur Samples collection](http://exca
 # Contributing
 
 Please read our [Contributing Guidelines](.github/CONTRIBUTING.md) and our [Code of Conduct](.github/CODE_OF_CONDUCT.md). Whether you've spotted a bug, have a question, or think of a new feature, we thank you for your help!
+
+## Mac
+
+Prerequisites
+* Docker for Mac https://docs.docker.com/desktop/mac/install/
+* In the root, run `docker-compose build` (setup build environment and installs dependencies, only needed once)
+* To run tests in watch mode `docker-compose run --rm dev npm run test:watch`
+* To run a build `docker-compose run --rm dev npm run all`
 
 # Writing Documentation
 

@@ -8,12 +8,13 @@ import { Vector } from '../Math/vector';
 import { EasingFunction } from '../Util/EasingFunctions';
 import { ActionQueue } from './ActionQueue';
 import { RotationType } from './RotationType';
+import { Action } from './Action';
 
 export interface ActionContextMethods extends Pick<ActionContext, keyof ActionContext> { };
 
 export class ActionsComponent extends Component<'ex.actions'> implements ActionContextMethods {
   public readonly type = 'ex.actions';
-  dependencies = [TransformComponent, MotionComponent]
+  dependencies = [TransformComponent, MotionComponent];
   private _ctx: ActionContext;
 
   onAdd(entity: Entity) {
@@ -26,10 +27,14 @@ export class ActionsComponent extends Component<'ex.actions'> implements ActionC
 
   /**
    * Returns the internal action queue
-   * @returns action queu
+   * @returns action queue
    */
   public getQueue(): ActionQueue {
     return this._ctx?.getQueue();
+  }
+
+  public runAction(action: Action): ActionContext {
+    return this._ctx?.runAction(action);
   }
 
   /**
@@ -68,6 +73,12 @@ export class ActionsComponent extends Component<'ex.actions'> implements ActionC
   public easeTo(x: number, y: number, duration: number, easingFcn?: EasingFunction): ActionContext;
   public easeTo(...args: any[]): ActionContext {
     return this._ctx.easeTo.apply(this._ctx, args);
+  }
+
+  public easeBy(offset: Vector, duration: number, easingFcn?: EasingFunction): ActionContext;
+  public easeBy(offsetX: number, offsetY: number, duration: number, easingFcn?: EasingFunction): ActionContext;
+  public easeBy(...args: any[]): ActionContext {
+    return this._ctx.easeBy.apply(this._ctx, args);
   }
 
   /**
@@ -294,15 +305,6 @@ export class ActionsComponent extends Component<'ex.actions'> implements ActionC
    */
   public meet(entity: Actor, speed?: number): ActionContext {
     return this._ctx.meet(entity, speed);
-  }
-
-  /**
-   * Returns a promise that resolves when the current action queue up to now
-   * is finished.
-   * @deprecated Use `toPromise()` will be removed in v0.26.0
-   */
-  public asPromise(): Promise<void> {
-    return this.toPromise();
   }
 
   /**

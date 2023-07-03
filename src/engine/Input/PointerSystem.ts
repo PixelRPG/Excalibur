@@ -1,11 +1,20 @@
 import { ColliderComponent } from '../Collision/ColliderComponent';
 import { Engine } from '../Engine';
-import { System, TransformComponent, SystemType, Entity } from '../EntityComponentSystem';
+import {
+  System,
+  TransformComponent,
+  SystemType,
+  Entity,
+  AddedEntity,
+  RemovedEntity,
+  isAddedSystemEntity
+} from '../EntityComponentSystem';
 import { GraphicsComponent } from '../Graphics/GraphicsComponent';
 import { Scene } from '../Scene';
 import { PointerComponent } from './PointerComponent';
 import { PointerEventReceiver } from './PointerEventReceiver';
 import { PointerEvent } from './PointerEvent';
+import { CoordPlane } from '../Math/coord-plane';
 
 /**
  * The PointerSystem is responsible for dispatching pointer events to entities
@@ -22,17 +31,58 @@ export class PointerSystem extends System<TransformComponent | PointerComponent>
   private _engine: Engine;
   private _receiver: PointerEventReceiver;
 
+  /**
+   * Optionally override component configuration for all entities
+   */
+  public overrideUseColliderShape = false;
+  /**
+   * Optionally override component configuration for all entities
+   */
+  public overrideUseGraphicsBounds = false;
+
   public lastFrameEntityToPointers = new Map<number, number[]>();
   public currentFrameEntityToPointers = new Map<number, number[]>();
 
   public initialize(scene: Scene): void {
     this._engine = scene.engine;
-    this._receiver = this._engine.input.pointers;
   }
 
-  public sort(a: Entity, b: Entity) {
-    // Sort from high to low, because things on 'top' receive the pointer events first
-    return b.get(TransformComponent).z - a.get(TransformComponent).z;
+  private _sortedTransforms: TransformComponent[] = [];
+  private _sortedEntities: Entity[] = [];
+
+  private _zHasChanged = false;
+  private _zIndexUpdate = () => {
+    this._zHasChanged = true;
+  };
+
+  public preupdate(): void {
+    // event receiver might change per frame
+    this._receiver = this._engine.input.pointers;
+    if (this._zHasChanged) {
+      this._sortedTransforms.sort((a, b) => {
+        return b.z - a.z;
+      });
+      this._sortedEntities = this._sortedTransforms.map(t => t.owner);
+      this._zHasChanged = false;
+    }
+  }
+
+  public notify(entityAddedOrRemoved: AddedEntity | RemovedEntity): void {
+    if (isAddedSystemEntity(entityAddedOrRemoved)) {
+      const tx = entityAddedOrRemoved.data.get(TransformComponent);
+      this._sortedTransforms.push(tx);
+      this._sortedEntities.push(tx.owner);
+      tx.zIndexChanged$.subscribe(this._zIndexUpdate);
+      this._zHasChanged = true;
+    } else {
+      const tx = entityAddedOrRemoved.data.get(TransformComponent);
+      tx.zIndexChanged$.unsubscribe(this._zIndexUpdate);
+      const index = this._sortedTransforms.indexOf(tx);
+      if (index > -1) {
+        this._sortedTransforms.splice(index, 1);
+        this._sortedEntities.splice(index, 1);
+      }
+    }
   }
 
   public entityCurrentlyUnderPointer(entity: Entity, pointerId: number) {
@@ -64,12 +114,12 @@ export class PointerSystem extends System<TransformComponent | PointerComponent>
     this.currentFrameEntityToPointers.set(entity.id, pointers.concat(pointerId));
   }
 
-  public update(entities: Entity[]): void {
+  public update(_entities: Entity[]): void {
     // Locate all the pointer/entity mappings
-    this._processPointerToEntity(entities);
+    this._processPointerToEntity(this._sortedEntities);
 
     // Dispatch pointer events on entities
-    this._dispatchEvents(entities);
+    this._dispatchEvents(this._sortedEntities);
 
     // Clear last frame's events
     this._receiver.update();
@@ -86,17 +136,20 @@ export class PointerSystem extends System<TransformComponent | PointerComponent>
     let pointer: PointerComponent;
 
     // TODO probably a spatial partition optimization here to quickly query bounds for pointer
+    // doesn't seem to cause issues tho for perf
+
     // Pre-process find entities under pointers
     for (const entity of entities) {
       transform = entity.get(TransformComponent);
       pointer = entity.get(PointerComponent) ?? new PointerComponent;
       // Check collider contains pointer
       collider = entity.get(ColliderComponent);
-      if (collider && pointer.useColliderShape) {
+      if (collider && (pointer.useColliderShape || this.overrideUseColliderShape)) {
+        collider.update();
         const geom = collider.get();
         if (geom) {
-          for (const [pointerId, pos] of this._receiver.currentFramePointerPositions.entries()) {
-            if (geom.contains(pos)) {
+          for (const [pointerId, pos] of this._receiver.currentFramePointerCoords.entries()) {
+            if (geom.contains(transform.coordPlane === CoordPlane.World ? pos.worldPos : pos.screenPos)) {
               this.addPointerToEntity(entity, pointerId);
             }
           }
@@ -105,10 +158,10 @@ export class PointerSystem extends System<TransformComponent | PointerComponent>
 
       // Check graphics contains pointer
       graphics = entity.get(GraphicsComponent);
-      if (graphics && pointer.useGraphicsBounds) {
-        const graphicBounds = graphics.localBounds.transform(transform.getGlobalMatrix());
-        for (const [pointerId, pos] of this._receiver.currentFramePointerPositions.entries()) {
-          if (graphicBounds.contains(pos)) {
+      if (graphics && (pointer.useGraphicsBounds || this.overrideUseGraphicsBounds)) {
+        const graphicBounds = graphics.localBounds.transform(transform.get().matrix);
+        for (const [pointerId, pos] of this._receiver.currentFramePointerCoords.entries()) {
+          if (graphicBounds.contains(transform.coordPlane === CoordPlane.World ? pos.worldPos : pos.screenPos)) {
             this.addPointerToEntity(entity, pointerId);
           }
         }

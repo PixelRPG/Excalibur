@@ -4,7 +4,7 @@ import { TestUtils } from './util/TestUtils';
 import { BodyComponent } from '@excalibur';
 import { ColliderComponent } from '../engine/Collision/ColliderComponent';
 
-const drawWithTransform = (ctx: CanvasRenderingContext2D | ex.ExcaliburGraphicsContext, tm: ex.TileMap, delta: number = 1) => {
+const drawWithTransform = (ctx: ex.ExcaliburGraphicsContext, tm: ex.TileMap, delta: number = 1) => {
   ctx.save();
   ctx.translate(tm.pos.x, tm.pos.y);
   ctx.rotate(tm.rotation);
@@ -16,8 +16,8 @@ const drawWithTransform = (ctx: CanvasRenderingContext2D | ex.ExcaliburGraphicsC
 describe('A TileMap', () => {
   let engine: ex.Engine;
   let scene: ex.Scene;
-  let texture: ex.LegacyDrawing.Texture;
-  beforeEach(() => {
+  let texture: ex.ImageSource;
+  beforeEach(async () => {
     jasmine.addMatchers(ExcaliburMatchers);
     jasmine.addAsyncMatchers(ExcaliburAsyncMatchers);
     engine = TestUtils.engine({
@@ -27,8 +27,10 @@ describe('A TileMap', () => {
     scene = new ex.Scene();
     engine.addScene('root', scene);
     engine.start();
-
-    texture = new ex.LegacyDrawing.Texture('src/spec/images/TileMapSpec/Blocks.png', true);
+    const clock = engine.clock as ex.TestClock;
+    texture = new ex.ImageSource('src/spec/images/TileMapSpec/Blocks.png');
+    await texture.load();
+    clock.step(1);
   });
   afterEach(() => {
     engine.stop();
@@ -41,30 +43,28 @@ describe('A TileMap', () => {
 
   it('should have props set by the constructor', () => {
     const tm = new ex.TileMap({
-      x: 0,
-      y: 0,
-      cellWidth: 64,
-      cellHeight: 48,
+      pos: ex.vec(0, 0),
+      tileWidth: 64,
+      tileHeight: 48,
       rows: 4,
-      cols: 20
+      columns: 20
     });
 
     expect(tm.pos.x).toBe(0);
     expect(tm.pos.y).toBe(0);
-    expect(tm.cellWidth).toBe(64);
-    expect(tm.cellHeight).toBe(48);
+    expect(tm.tileWidth).toBe(64);
+    expect(tm.tileHeight).toBe(48);
     expect(tm.rows).toBe(4);
-    expect(tm.cols).toBe(20);
+    expect(tm.columns).toBe(20);
   });
 
   it('can set the z-index convenience prop', () => {
     const tm = new ex.TileMap({
-      x: 0,
-      y: 0,
-      cellWidth: 32,
-      cellHeight: 32,
+      pos: ex.vec(0, 0),
+      tileWidth: 32,
+      tileHeight: 32,
       rows: 3,
-      cols: 5
+      columns: 5
     });
 
     tm.z = 99;
@@ -75,63 +75,66 @@ describe('A TileMap', () => {
 
   it('can iterate over rows and cols', () => {
     const tm = new ex.TileMap({
-      x: 0,
-      y: 0,
-      cellWidth: 32,
-      cellHeight: 32,
+      pos: ex.vec(0, 0),
+      tileWidth: 32,
+      tileHeight: 32,
       rows: 3,
-      cols: 5
+      columns: 5
     });
 
     expect(tm.getRows().length).toBe(3);
     expect(tm.getRows()[0].length).toBe(5);
-    expect(tm.getRows()[0][4].x).toBe(4 * 32);
+    expect(tm.getRows()[0][4].pos.x).toBe(4 * 32);
+    expect(tm.getRows()[0][4].x).toBe(4);
     expect(tm.getRows()[0][4].y).toBe(0);
-    expect(tm.getRows()[2][4].x).toBe(4 * 32);
-    expect(tm.getRows()[2][4].y).toBe(2 * 32);
+    expect(tm.getRows()[2][4].pos.x).toBe(4 * 32);
+    expect(tm.getRows()[2][4].x).toBe(4);
+    expect(tm.getRows()[2][4].pos.y).toBe(2 * 32);
+    expect(tm.getRows()[2][4].y).toBe(2);
 
     expect(tm.getColumns().length).toBe(5);
     expect(tm.getColumns()[0].length).toBe(3);
-    expect(tm.getColumns()[4][0].x).toBe(4 * 32);
+    expect(tm.getColumns()[4][0].pos.x).toBe(4 * 32);
+    expect(tm.getColumns()[4][0].x).toBe(4);
     expect(tm.getColumns()[4][0].y).toBe(0);
-    expect(tm.getColumns()[4][2].x).toBe(4 * 32);
-    expect(tm.getColumns()[4][2].y).toBe(2 * 32);
+    expect(tm.getColumns()[4][2].pos.x).toBe(4 * 32);
+    expect(tm.getColumns()[4][2].pos.y).toBe(2 * 32);
+    expect(tm.getColumns()[4][2].x).toBe(4);
+    expect(tm.getColumns()[4][2].y).toBe(2);
   });
 
   it('can store arbitrary data in cells', () => {
     const tm = new ex.TileMap({
-      x: 0,
-      y: 0,
-      cellWidth: 32,
-      cellHeight: 32,
+      pos: ex.vec(0, 0),
+      tileWidth: 32,
+      tileHeight: 32,
       rows: 3,
-      cols: 5
+      columns: 5
     });
 
-    const cell = tm.getCell(4, 2);
+    const cell = tm.getTile(4, 2);
     cell.data.set('some_value', 'anything');
 
-    const otherCell = tm.getCell(4, 2);
+    const otherCell = tm.getTile(4, 2);
 
     expect(otherCell.data.get('some_value')).toBe('anything');
 
-    const otherCell2 = tm.getCell(0, 0);
+    const otherCell2 = tm.getTile(0, 0);
 
     expect(otherCell2.data.get('some_vale')).not.toBeDefined();
   });
 
   it('can use arbitrary graphics', async () => {
     const tm = new ex.TileMap({
-      x: 0,
-      y: 0,
-      cellWidth: 32,
-      cellHeight: 32,
+      pos: ex.vec(0, 0),
+      tileWidth: 32,
+      tileHeight: 32,
       rows: 3,
-      cols: 5
+      columns: 5
     });
     tm._initialize(engine);
 
-    const cell = tm.getCell(0, 0);
+    const cell = tm.getTile(0, 0);
     const rectangle = new ex.Rectangle({
       width: 32,
       height: 32,
@@ -151,50 +154,120 @@ describe('A TileMap', () => {
     cell.addGraphic(animation);
 
     drawWithTransform(engine.graphicsContext, tm, 99);
+    engine.graphicsContext.flush();
 
-    await expectAsync(engine.canvas).toEqualImage('src/spec/images/TileMapSpec/TileMapGraphicSquare.png');
+    await expectAsync(TestUtils.flushWebGLCanvasTo2D(engine.canvas)).toEqualImage('src/spec/images/TileMapSpec/TileMapGraphicSquare.png');
 
     tm.update(engine, 99);
 
     drawWithTransform(engine.graphicsContext, tm, 99);
+    engine.graphicsContext.flush();
 
-    await expectAsync(engine.canvas).toEqualImage('src/spec/images/TileMapSpec/TileMapGraphicCircle.png');
+    await expectAsync(TestUtils.flushWebGLCanvasTo2D(engine.canvas)).toEqualImage('src/spec/images/TileMapSpec/TileMapGraphicCircle.png');
   });
 
   it('should draw the correct proportions', async () => {
     await texture.load();
     const tm = new ex.TileMap({
-      x: 30,
-      y: 30,
-      cellWidth: 64,
-      cellHeight: 48,
+      pos: ex.vec(30, 30),
+      tileWidth: 64,
+      tileHeight: 48,
       rows: 3,
-      cols: 7
+      columns: 7
     });
-    const spriteTiles = new ex.LegacyDrawing.SpriteSheet(texture, 1, 1, 64, 48);
-    tm.data.forEach(function (cell: ex.Cell) {
+    const spriteTiles = ex.SpriteSheet.fromImageSource({
+      image:texture,
+      grid: {
+        rows: 1,
+        columns: 1,
+        spriteWidth: 64,
+        spriteHeight: 48
+      }
+    });
+    tm.tiles.forEach(function (cell: ex.Tile) {
       cell.solid = true;
       cell.addGraphic(spriteTiles.sprites[0]);
     });
     tm._initialize(engine);
 
     drawWithTransform(engine.graphicsContext, tm, 100);
+    engine.graphicsContext.flush();
 
-    await expectAsync(engine.canvas).toEqualImage('src/spec/images/TileMapSpec/TileMap.png');
+    await expectAsync(TestUtils.flushWebGLCanvasTo2D(engine.canvas)).toEqualImage('src/spec/images/TileMapSpec/TileMap.png');
+  });
+
+  it('should draw from the bottom', async () => {
+    const tm = new ex.TileMap({
+      pos: ex.vec(30, 30),
+      tileWidth: 64,
+      tileHeight: 48,
+      rows: 3,
+      columns: 7
+    });
+    const tileGraphic = new ex.Rectangle({
+      color: ex.Color.Red,
+      strokeColor: ex.Color.Black,
+      width: 64,
+      height: 64
+    });
+    tm.tiles.forEach(function (cell: ex.Tile) {
+      cell.solid = true;
+      cell.addGraphic(tileGraphic);
+    });
+    tm._initialize(engine);
+
+    drawWithTransform(engine.graphicsContext, tm, 100);
+    engine.graphicsContext.flush();
+
+    await expectAsync(TestUtils.flushWebGLCanvasTo2D(engine.canvas)).toEqualImage('src/spec/images/TileMapSpec/tilemap-from-bottom.png');
+  });
+
+  it('should draw from the top', async () => {
+    const tm = new ex.TileMap({
+      pos: ex.vec(30, 30),
+      tileWidth: 64,
+      tileHeight: 48,
+      rows: 3,
+      columns: 7,
+      renderFromTopOfGraphic: true
+    });
+    const tileGraphic = new ex.Rectangle({
+      color: ex.Color.Red,
+      strokeColor: ex.Color.Black,
+      width: 64,
+      height: 64
+    });
+    tm.tiles.forEach(function (cell: ex.Tile) {
+      cell.solid = true;
+      cell.addGraphic(tileGraphic);
+    });
+    tm._initialize(engine);
+
+    drawWithTransform(engine.graphicsContext, tm, 100);
+    engine.graphicsContext.flush();
+
+    await expectAsync(TestUtils.flushWebGLCanvasTo2D(engine.canvas)).toEqualImage('src/spec/images/TileMapSpec/tilemap-from-top.png');
   });
 
   it('should handle offscreen culling correctly with negative coords', async () => {
     await texture.load();
     const tm = new ex.TileMap({
-      x: -100,
-      y: -100,
-      cellWidth: 64,
-      cellHeight: 48,
+      pos: ex.vec(-100, -100),
+      tileWidth: 64,
+      tileHeight: 48,
       rows: 20,
-      cols: 20
+      columns: 20
     });
-    const spriteTiles = new ex.LegacyDrawing.SpriteSheet(texture, 1, 1, 64, 48);
-    tm.data.forEach(function (cell: ex.Cell) {
+    const spriteTiles = ex.SpriteSheet.fromImageSource({
+      image:texture,
+      grid: {
+        rows: 1,
+        columns: 1,
+        spriteWidth: 64,
+        spriteHeight: 48
+      }
+    });
+    tm.tiles.forEach(function (cell: ex.Tile) {
       cell.solid = true;
       cell.addGraphic(spriteTiles.sprites[0]);
     });
@@ -203,22 +276,142 @@ describe('A TileMap', () => {
     tm.update(engine, 100);
 
     drawWithTransform(engine.graphicsContext, tm, 100);
+    engine.graphicsContext.flush();
 
-    await expectAsync(engine.canvas).toEqualImage('src/spec/images/TileMapSpec/TileMapCulling.png');
+    await expectAsync(TestUtils.flushWebGLCanvasTo2D(engine.canvas)).toEqualImage('src/spec/images/TileMapSpec/TileMapCulling.png');
+  });
+
+  it('can return a tile by xy coord', () => {
+    const sut = new ex.TileMap({
+      pos: ex.vec(-100, -100),
+      tileWidth: 64,
+      tileHeight: 48,
+      rows: 20,
+      columns: 20
+    });
+
+    expect(sut.pos).toBeVector(ex.vec(-100, -100));
+    const tile = sut.getTile(19, 19);
+    expect(tile.x).toBe(19);
+    expect(tile.y).toBe(19);
+    expect(tile.pos).toBeVector(ex.vec(19 * 64 - 100, 19 * 48 - 100));
+
+    const nullTile = sut.getTile(20, 20);
+    expect(nullTile).toBeNull();
+
+    expect(sut.getTileByPoint(ex.vec(19 * 64 - 100, 19 * 48 - 100)).x).toBe(19);
+    expect(sut.getTileByPoint(ex.vec(19 * 64 - 100, 19 * 48 - 100)).y).toBe(19);
+    expect(sut.getTileByPoint(ex.vec(19 * 64, 19 * 48))).toBeNull();
+
+    expect(sut.getTileByIndex(20 * 20 - 1)).toBe(tile);
+  });
+
+  it('can add and remove graphics on a tile', async () => {
+    const image = new ex.ImageSource('src/spec/images/TileMapSpec/Blocks.png');
+    await image.load();
+    const sprite = image.toSprite();
+    const sut = new ex.TileMap({
+      pos: ex.vec(0, 0),
+      tileWidth: 64,
+      tileHeight: 48,
+      rows: 20,
+      columns: 20
+    });
+    const tile = sut.getTile(0, 0);
+
+    tile.addGraphic(sprite);
+    tile.addGraphic(sprite.clone());
+
+    expect(tile.getGraphics().length).toBe(2);
+
+    tile.removeGraphic(sprite);
+
+    expect(tile.getGraphics().length).toBe(1);
+
+    tile.clearGraphics();
+
+    expect(tile.getGraphics().length).toBe(0);
+  });
+
+  it('can add and remove colliders on a tile', () => {
+    const engine = TestUtils.engine();
+    const sut = new ex.TileMap({
+      pos: ex.vec(0, 0),
+      tileWidth: 64,
+      tileHeight: 48,
+      rows: 20,
+      columns: 20
+    });
+
+
+    const tile = sut.getTile(0, 0);
+    tile.solid = true;
+
+    const box = ex.Shape.Box(10, 10);
+
+    tile.addCollider(box);
+    tile.addCollider(box.clone());
+    sut.update(engine, 0);
+    const tileMapCollider = sut.get(ColliderComponent).get() as ex.CompositeCollider;
+
+    expect(tile.getColliders().length).toBe(2);
+    expect(tileMapCollider.getColliders().length).toBe(2);
+
+    tile.removeCollider(box);
+
+    expect(tile.getColliders().length).toBe(1);
+
+    tile.clearColliders();
+    tile.solid = false;
+    sut.update(engine, 0);
+
+    expect(tile.getColliders().length).toBe(0);
+    const tileMapCollider2 = sut.get(ColliderComponent).get() as ex.CompositeCollider;
+    expect(tileMapCollider2.getColliders().length).toBe(0);
+  });
+
+  it('can get the bounds of a tile', () => {
+    const sut = new ex.TileMap({
+      pos: ex.vec(100, 100),
+      tileWidth: 64,
+      tileHeight: 48,
+      rows: 20,
+      columns: 20
+    });
+
+    const tile = sut.getTile(0, 0);
+    expect(tile.bounds).toEqual(new ex.BoundingBox({
+      left: 100,
+      top: 100,
+      right: 164,
+      bottom: 148
+    }));
+  });
+
+  it('can get the center of a tile', () => {
+    const sut = new ex.TileMap({
+      pos: ex.vec(100, 100),
+      tileWidth: 64,
+      tileHeight: 48,
+      rows: 20,
+      columns: 20
+    });
+
+    const tile = sut.getTile(0, 0);
+    expect(tile.center).toBeVector(ex.vec(132, 124));
   });
 
   describe('with an actor', () => {
     let tm: ex.TileMap;
     beforeEach(() => {
       tm = new ex.TileMap({
-        x: 0,
-        y: 0,
-        cellWidth: 64,
-        cellHeight: 48,
+        pos: ex.vec(0, 0),
+        tileWidth: 64,
+        tileHeight: 48,
         rows: 10,
-        cols: 10
+        columns: 10
       });
-      tm.data.forEach(function (cell: ex.Cell) {
+      tm.tiles.forEach(function (cell: ex.Tile) {
         cell.solid = true;
       });
     });

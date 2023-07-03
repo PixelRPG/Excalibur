@@ -59,10 +59,9 @@ describe('A Matrix', () => {
 
   it('can transform a point', () => {
     const mat = ex.Matrix.rotation(Math.PI / 4);
-    const point: [number, number] = [0, 1];
-    const newPoint = mat.multv(point);
-    expect(newPoint[0]).toBeCloseTo(-Math.cos(Math.PI / 4));
-    expect(newPoint[1]).toBeCloseTo(Math.sin(Math.PI / 4));
+    const newPoint = mat.multiply(ex.vec(0, 1));
+    expect(newPoint.x).toBeCloseTo(-Math.cos(Math.PI / 4));
+    expect(newPoint.y).toBeCloseTo(Math.sin(Math.PI / 4));
   });
 
   it('can set a rotation and preserve scale', () => {
@@ -137,8 +136,60 @@ describe('A Matrix', () => {
       .scale(2, 4);
 
     const inv = mat.getAffineInverse();
-    expect(mat.multm(inv).isIdentity()).toBeTrue();
-    expect(inv.multm(mat).isIdentity()).toBeTrue();
+    expect(mat.multiply(inv).isIdentity()).toBeTrue();
+    expect(inv.multiply(mat).isIdentity()).toBeTrue();
+  });
+
+  it('can find the affine inverse and store it into a target', () => {
+    const target = ex.Matrix.identity();
+    const mat = ex.Matrix.identity()
+      .translate(100, -200)
+      .scale(2, 4);
+
+    spyOn(ex.Matrix, 'identity');
+    const inv = mat.getAffineInverse(target);
+    expect(mat.multiply(inv).isIdentity()).toBeTrue();
+    expect(inv.multiply(mat).isIdentity()).toBeTrue();
+    expect(target).toBe(inv);
+    expect(ex.Matrix.identity).withContext('using a target doesnt create a new mat')
+      .not.toHaveBeenCalledWith();
+  });
+
+  it('can be created from a float32array', () => {
+    const mat = ex.Matrix.identity().translate(1,2).rotate(Math.PI).scale(3, 4);
+    const newData = new Float32Array(mat.data);
+    const mat2 = ex.Matrix.fromFloat32Array(newData);
+    expect(mat.toString()).toEqual(mat2.toString());
+  });
+
+  it('can set position', () => {
+    const mat = new ex.Matrix();
+    expect(mat.getPosition()).toBeVector(ex.vec(0, 0));
+    mat.setPosition(10, 43);
+    expect(mat.getPosition()).toBeVector(ex.vec(10, 43));
+  });
+
+  it('can clone into a target matrix', () => {
+    const source = ex.Matrix.identity().scale(5, 5);
+    const destination = ex.Matrix.identity();
+
+    source.clone(destination);
+
+    expect(destination.data).toEqual(new Float32Array([
+      5, 0, 0, 0,
+      0, 5, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1
+    ]));
+  });
+
+  it('can reset to identity', () => {
+    const mat = ex.Matrix.identity()
+      .translate(100, -200)
+      .scale(2, 4);
+
+    mat.reset();
+    expect(mat.isIdentity()).toBe(true);
   });
 
   it('can print a matrix', () => {

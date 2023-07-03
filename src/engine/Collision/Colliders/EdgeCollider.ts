@@ -5,14 +5,15 @@ import { CircleCollider } from './CircleCollider';
 import { PolygonCollider } from './PolygonCollider';
 
 import { Projection } from '../../Math/projection';
-import { Line } from '../../Math/line';
+import { LineSegment } from '../../Math/line-segment';
 import { Vector } from '../../Math/vector';
 import { Ray } from '../../Math/ray';
 import { Color } from '../../Color';
 import { Collider } from './Collider';
 import { ClosestLineJumpTable } from './ClosestLineJumpTable';
-import { Transform, TransformComponent } from '../../EntityComponentSystem/Components/TransformComponent';
 import { ExcaliburGraphicsContext } from '../../Graphics/Context/ExcaliburGraphicsContext';
+import { Transform } from '../../Math/transform';
+import { AffineMatrix } from '../../Math/affine-matrix';
 
 export interface EdgeColliderOptions {
   /**
@@ -24,7 +25,7 @@ export interface EdgeColliderOptions {
    */
   end: Vector;
   /**
-   * Optionall specify an offset
+   * Optionally specify an offset
    */
   offset?: Vector;
 }
@@ -38,6 +39,7 @@ export class EdgeCollider extends Collider {
   end: Vector;
 
   private _transform: Transform;
+  private _globalMatrix: AffineMatrix = AffineMatrix.identity();
 
   constructor(options: EdgeColliderOptions) {
     super();
@@ -57,7 +59,7 @@ export class EdgeCollider extends Collider {
   }
 
   public get worldPos(): Vector {
-    const tx = this._transform as TransformComponent;
+    const tx = this._transform;
     return tx?.globalPos.add(this.offset) ?? this.offset;
   }
 
@@ -65,26 +67,18 @@ export class EdgeCollider extends Collider {
    * Get the center of the collision area in world coordinates
    */
   public get center(): Vector {
-    const pos = this.begin.average(this.end).add(this._getBodyPos());
+    const begin = this._getTransformedBegin();
+    const end = this._getTransformedEnd();
+    const pos = begin.average(end);
     return pos;
   }
 
-  private _getBodyPos(): Vector {
-    const tx = this._transform as TransformComponent;
-    const bodyPos = tx?.globalPos ?? Vector.Zero;
-    return bodyPos;
-  }
-
   private _getTransformedBegin(): Vector {
-    const tx = this._transform as TransformComponent;
-    const angle = tx ? tx.globalRotation : 0;
-    return this.begin.rotate(angle).add(this._getBodyPos());
+    return this._globalMatrix.multiply(this.begin);
   }
 
   private _getTransformedEnd(): Vector {
-    const tx = this._transform as TransformComponent;
-    const angle = tx ? tx.globalRotation : 0;
-    return this.end.rotate(angle).add(this._getBodyPos());
+    return this._globalMatrix.multiply(this.end);
   }
 
   /**
@@ -147,7 +141,7 @@ export class EdgeCollider extends Collider {
    * Returns the closes line between this and another collider, from this -> collider
    * @param shape
    */
-  public getClosestLineBetween(shape: Collider): Line {
+  public getClosestLineBetween(shape: Collider): LineSegment {
     if (shape instanceof CircleCollider) {
       return ClosestLineJumpTable.CircleEdgeClosestLine(shape, this);
     } else if (shape instanceof PolygonCollider) {
@@ -217,15 +211,15 @@ export class EdgeCollider extends Collider {
   /**
    * Returns this edge represented as a line in world coordinates
    */
-  public asLine(): Line {
-    return new Line(this._getTransformedBegin(), this._getTransformedEnd());
+  public asLine(): LineSegment {
+    return new LineSegment(this._getTransformedBegin(), this._getTransformedEnd());
   }
 
   /**
    * Return this edge as a line in local line coordinates (relative to the position)
    */
-  public asLocalLine(): Line {
-    return new Line(this.begin, this.end);
+  public asLocalLine(): LineSegment {
+    return new LineSegment(this.begin, this.end);
   }
 
   /**
@@ -257,6 +251,9 @@ export class EdgeCollider extends Collider {
    */
   public update(transform: Transform): void {
     this._transform = transform;
+    const globalMat = transform.matrix ?? this._globalMatrix;
+    globalMat.clone(this._globalMatrix);
+    this._globalMatrix.translate(this.offset.x, this.offset.y);
   }
 
   /**
@@ -274,17 +271,6 @@ export class EdgeCollider extends Collider {
     return new Projection(Math.min.apply(Math, scalars), Math.max.apply(Math, scalars));
   }
 
-  public draw(ctx: CanvasRenderingContext2D, color: Color = Color.Green, pos: Vector = Vector.Zero) {
-    const begin = this.begin.add(pos);
-    const end = this.end.add(pos);
-    ctx.strokeStyle = color.toString();
-    ctx.beginPath();
-    ctx.moveTo(begin.x, begin.y);
-    ctx.lineTo(end.x, end.y);
-    ctx.closePath();
-    ctx.stroke();
-  }
-
   public debug(ex: ExcaliburGraphicsContext, color: Color) {
     const begin = this._getTransformedBegin();
     const end = this._getTransformedEnd();
@@ -293,15 +279,4 @@ export class EdgeCollider extends Collider {
     ex.drawCircle(end, 2, color);
   }
 
-  /* istanbul ignore next */
-  public debugDraw(ctx: CanvasRenderingContext2D, color: Color = Color.Red) {
-    const begin = this._getTransformedBegin();
-    const end = this._getTransformedEnd();
-    ctx.strokeStyle = color.toString();
-    ctx.beginPath();
-    ctx.moveTo(begin.x, begin.y);
-    ctx.lineTo(end.x, end.y);
-    ctx.closePath();
-    ctx.stroke();
-  }
 }

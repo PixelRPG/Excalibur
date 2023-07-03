@@ -1,5 +1,5 @@
 import { Clonable } from '../Interfaces/Clonable';
-import { obsolete } from '../Util/Decorators';
+import { clamp } from './util';
 
 /**
  * A 2D vector on a plane.
@@ -89,6 +89,14 @@ export class Vector implements Clonable<Vector> {
     return Math.sqrt(Math.pow(vec1.x - vec2.x, 2) + Math.pow(vec1.y - vec2.y, 2));
   }
 
+  public static min(vec1: Vector, vec2: Vector) {
+    return new Vector(Math.min(vec1.x, vec2.x), Math.min(vec1.y, vec2.y));
+  }
+
+  public static max(vec1: Vector, vec2: Vector) {
+    return new Vector(Math.max(vec1.x, vec2.x), Math.max(vec1.y, vec2.y));
+  }
+
   /**
    * @param x  X component of the Vector
    * @param y  Y component of the Vector
@@ -155,25 +163,31 @@ export class Vector implements Clonable<Vector> {
    */
   public distance(v?: Vector): number {
     if (!v) {
-      v = Vector.Zero;
+      return Math.sqrt(this.x * this.x + this.y * this.y);
     }
-    return Math.sqrt(Math.pow(this.x - v.x, 2) + Math.pow(this.y - v.y, 2));
+    const deltaX = this.x - v.x;
+    const deltaY = this.y - v.y;
+    return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
   }
 
   public squareDistance(v?: Vector): number {
     if (!v) {
       v = Vector.Zero;
     }
-    return Math.pow(this.x - v.x, 2) + Math.pow(this.y - v.y, 2);
+    const deltaX = this.x - v.x;
+    const deltaY = this.y - v.y;
+    return deltaX * deltaX + deltaY * deltaY;
   }
 
   /**
-   * The magnitude (size) of the Vector
-   * @deprecated magnitude will be removed in favour of '.size' in version 0.25.0
+   * Clamps the current vector's magnitude mutating it
+   * @param magnitude
    */
-  @obsolete({ message: 'will be removed in favour of `.size` in version 0.25.0' })
-  public magnitude(): number {
-    return this.distance();
+  public clampMagnitude(magnitude: number): Vector {
+    const size = this.size;
+    const newSize = clamp(size, 0, magnitude);
+    this.size = newSize;
+    return this;
   }
 
   /**
@@ -215,22 +229,33 @@ export class Vector implements Clonable<Vector> {
   /**
    * Scales a vector's by a factor of size
    * @param size  The factor to scale the magnitude by
+   * @param dest  Optionally provide a destination vector for the result
    */
-  public scale(scale: Vector): Vector;
-  public scale(size: number): Vector;
-  public scale(sizeOrScale: number | Vector): Vector {
+  public scale(scale: Vector, dest?: Vector): Vector;
+  public scale(size: number, dest?: Vector): Vector;
+  public scale(sizeOrScale: number | Vector, dest?: Vector): Vector {
+    const result = dest || new Vector(0, 0);
     if (sizeOrScale instanceof Vector) {
-      return new Vector(this.x * sizeOrScale.x, this.y * sizeOrScale.y);
+      result.x = this.x * sizeOrScale.x;
+      result.y = this.y * sizeOrScale.y;
     } else {
-      return new Vector(this.x * sizeOrScale, this.y * sizeOrScale);
+      result.x = this.x * sizeOrScale;
+      result.y = this.y * sizeOrScale;
     }
+    return result;
   }
 
   /**
    * Adds one vector to another
    * @param v The vector to add
+   * @param dest Optionally copy the result into a provided vector
    */
-  public add(v: Vector): Vector {
+  public add(v: Vector, dest?: Vector): Vector {
+    if (dest) {
+      dest.x = this.x + v.x;
+      dest.y = this.y + v.y;
+      return dest;
+    }
     return new Vector(this.x + v.x, this.y + v.y);
   }
 
@@ -347,8 +372,11 @@ export class Vector implements Clonable<Vector> {
   /**
    * Creates new vector that has the same values as the previous.
    */
-  public clone(): Vector {
-    return new Vector(this.x, this.y);
+  public clone(dest?: Vector): Vector {
+    const v = dest ?? new Vector(0, 0);
+    v.x = this.x;
+    v.y = this.y;
+    return v;
   }
 
   /**
