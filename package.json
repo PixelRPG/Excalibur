@@ -34,7 +34,7 @@
     "browserstack": "karma start karma.conf.browsers.js",
     "nuget": ".\\src\\tools\\NuGet.exe pack Excalibur.nuspec -OutputDirectory .\\build\\dist -version",
     "start": "npm run core:watch",
-    "build": "npm run core",
+    "build": "npm run core && npm run build:esm",
     "build:esm": "npm run core:bundle:esm",
     "core": "npm run core:tsc && npm run core:copy && npm run core:bundle",
     "core:tsc": "tsc --project src/engine/tsconfig.json --incremental true --tsBuildInfoFile .tsbuildinfo && node ./scripts/excalibur-version.js",
