@@ -257,7 +257,7 @@ export interface ExcaliburGraphicsContext {
    * This allows customs shaders to be used but draw calls are no longer batched by default.
    * @param material
    */
-  material: Material;
+  material: Material | null;
 
   /**
    * Creates and initializes the material which compiles the internal shader
