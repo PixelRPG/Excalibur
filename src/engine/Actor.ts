@@ -54,7 +54,7 @@ export function isActor(x: any): x is Actor {
 }
 
 /**
- * Actor contructor options
+ * Actor constructor options
  */
 export interface ActorArgs {
   /**
