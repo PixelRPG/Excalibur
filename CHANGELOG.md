@@ -12,6 +12,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Deprecated
 
+- The `ex.Input.*` import site is deprecated, will be removed in v0.29.0. All the imports are still available on `ex.` now
 - [[ex.Input.Gamepad]] `isButtonPressed` has been renamed to `isButtonHeld`
 - `ex.EventDispatcher` is marked deprecated, will eventually be removed in v0.29.0
 
@@ -138,6 +139,7 @@ are returned
 
 ### Fixed
 
+- Fixed issue where scaling a `ex.TileMap` didn't properly offscreen cull due to the bounds not scaling properly.
 - Fixed issue where `ex.Text.flipHorizontal` or `ex.Text.flipVertical` would not work
 - Fixed issue where overriding existing components did not work properly because of deferred component removal
 - Fixed issue where `ex.ScreenElement` pointer events were not working by default.
