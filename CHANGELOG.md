@@ -8,7 +8,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Breaking Changes
 
--
+- Removed `ex.Class` base class type, this was a common base class for many excalibur types that provided old on/off event functionality. This functionality has been preserved on the types that had it before using `ex.EventEmitter`
 
 ### Deprecated
 
@@ -19,6 +19,17 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Added
 
+- Added new `ex.InputMapper` for mapping multiple input sources into actions! This can be useful for providing accessibility into your games and allowing users to map inputs to different game commands.
+  ```typescript
+   const moveRight = (amount: number) => { actor.vel.x = 100 * amount }
+   const moveLeft = (amount: number) => { actor.vel.x = -100 * amount }
+   const moveUp = (amount: number) => { actor.vel.y = -100 * amount }
+   const moveDown = (amount: number) => { actor.vel.y = 100 * amount }
+   engine.inputMapper.on(({keyboard}) => keyboard.isHeld(ex.Keys.ArrowRight) ? 1 : 0, moveRight);
+   engine.inputMapper.on(({gamepads}) => gamepads.at(0).isButtonPressed(ex.Buttons.DpadRight) ? 1 : 0, moveRight);
+   engine.inputMapper.on(({gamepads}) => gamepads.at(0).getAxes(ex.Axes.LeftStickX) > 0 ? gamepads.at(0).getAxes(ex.Axes.LeftStickX) : 0, moveRight);
+  ```
+- Added strongly typed events with `ex.EventEmitter<TEventMap>`
 - Added new convenience properties for flipping all the graphics on an Actor
   * `ex.Actor.graphics.flipHorizontal` - Flips all the graphics horizontally
   * `ex.Actor.graphics.flipVertical` - Flips all the graphics vertically
@@ -139,6 +150,8 @@ are returned
 
 ### Fixed
 
+- Fixed issue with `ex.TileMap` collider consolidation where custom colliders would prevent normal solid tile colliders from being included.
+- Fixed memory leak in the internal `ex.EntityManager`, it did not properly clear internal state when removing entities
 - Fixed issue where scaling a `ex.TileMap` didn't properly offscreen cull due to the bounds not scaling properly.
 - Fixed issue where `ex.Text.flipHorizontal` or `ex.Text.flipVertical` would not work
 - Fixed issue where overriding existing components did not work properly because of deferred component removal
@@ -176,6 +189,7 @@ stored `ex.Graphics` causing them to be shared across clones.
 
 ### Changed
 
+- Excalibur will now use `ex.EventEmitter` to broadcast events, Excalibur types that have events support will also have an `.events` member.
 - Excalibur resources by default no longer add cache busting query string to resources. All built in resources now expose a `bustCache` property to allow setting this before loading, for example `ex.Sound.bustCache`.
 
 

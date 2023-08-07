@@ -15,7 +15,6 @@ export * from './Screen';
 export { Actor, ActorArgs } from './Actor';
 export * from './Math/Index';
 export * from './Camera';
-export * from './Class';
 export * from './Configurable';
 export * from './Debug/index';
 export * from './EventDispatcher';
@@ -116,6 +115,7 @@ export {
   KeyboardInitOptions,
   Keyboard
 } from './Input/Keyboard';
+export * from './Input/InputMapper';
 
 // ex.Util namespaces
 import * as util from './Util/Index';
