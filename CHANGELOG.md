@@ -3,8 +3,40 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
-
 ## [Unreleased]
+
+### Breaking Changes
+
+-
+
+### Deprecated
+
+-
+
+### Added
+
+-
+
+### Fixed
+
+- Fixed issue with input mapper where `keyboard.wasPressed(...)` did not fire
+- Fixed issue issue where TileMaps would not properly draw Tiles when setup in screen space coordinates
+- Fixed issue where the ex.Line graphics bounds were incorrect causing erroneous offscreen culling
+- Fixed event type signature on `ex.Engine.input.pointers.primary.on('wheel', ...)` for wheel events
+
+### Updates
+
+- Improved performance in TileMaps when drawing tiles using QuadTree data structure
+
+### Changed
+
+- Allow entity names to be set after construction! Entities will now default to a name "Entity#1234" followed by an id.
+
+<!--------------------------------- DO NOT EDIT BELOW THIS LINE --------------------------------->
+<!--------------------------------- DO NOT EDIT BELOW THIS LINE --------------------------------->
+<!--------------------------------- DO NOT EDIT BELOW THIS LINE --------------------------------->
+
+## [v0.28.0]
 
 ### Breaking Changes
 
@@ -192,11 +224,6 @@ stored `ex.Graphics` causing them to be shared across clones.
 - Excalibur will now use `ex.EventEmitter` to broadcast events, Excalibur types that have events support will also have an `.events` member.
 - Excalibur resources by default no longer add cache busting query string to resources. All built in resources now expose a `bustCache` property to allow setting this before loading, for example `ex.Sound.bustCache`.
 
-
-
-<!--------------------------------- DO NOT EDIT BELOW THIS LINE --------------------------------->
-<!--------------------------------- DO NOT EDIT BELOW THIS LINE --------------------------------->
-<!--------------------------------- DO NOT EDIT BELOW THIS LINE --------------------------------->
 
 ## [0.27.0] - 2022-07-08
 

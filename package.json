@@ -61,7 +61,7 @@
     "release": "cross-env release=true npm run all"
   },
   "devDependencies": {
-    "@babel/core": "7.22.17",
+    "@babel/core": "7.23.0",
     "@fortawesome/fontawesome-free": "6.4.2",
     "@octokit/rest": "19.0.13",
     "@storybook/addon-actions": "6.5.16",
@@ -70,21 +70,21 @@
     "@storybook/builder-webpack5": "6.5.16",
     "@storybook/html": "6.5.16",
     "@storybook/manager-webpack5": "6.5.16",
-    "@types/jasmine": "4.3.5",
-    "@types/node": "20.6.0",
-    "@types/react-color": "3.0.6",
-    "@types/webpack-env": "1.18.1",
-    "@typescript-eslint/eslint-plugin": "6.6.0",
-    "@typescript-eslint/parser": "6.6.0",
+    "@types/jasmine": "4.3.6",
+    "@types/node": "20.8.0",
+    "@types/react-color": "3.0.7",
+    "@types/webpack-env": "1.18.2",
+    "@typescript-eslint/eslint-plugin": "6.7.3",
+    "@typescript-eslint/parser": "6.7.3",
     "babel-loader": "9.1.3",
     "copy-webpack-plugin": "11.0.0",
     "copyfiles": "2.4.1",
     "coveralls": "3.1.1",
     "cross-env": "7.0.3",
     "css-loader": "6.8.1",
-    "eslint": "8.49.0",
+    "eslint": "8.50.0",
     "eslint-config-prettier": "9.0.0",
-    "eslint-plugin-jsdoc": "46.6.0",
+    "eslint-plugin-jsdoc": "46.8.2",
     "excalibur-jasmine": "0.2.0",
     "istanbul": "0.4.5",
     "istanbul-instrumenter-loader": "3.0.1",
@@ -103,7 +103,7 @@
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "replace-in-file": "6.3.5",
-    "rimraf": "5.0.1",
+    "rimraf": "5.0.5",
     "semver": "7.5.4",
     "serve": "14.2.1",
     "source-map-support": "0.5.21",
@@ -118,7 +118,7 @@
     "webpack-cli": "5.1.4"
   },
   "dependencies": {
-    "core-js": "3.32.2"
+    "core-js": "3.33.0"
   },
   "overrides": {
     "typedoc": {
