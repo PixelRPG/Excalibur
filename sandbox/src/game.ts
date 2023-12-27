@@ -45,11 +45,10 @@ var game = new ex.Engine({
   height: 600 / 2,
   viewport: { width: 800, height: 600 },
   canvasElementId: 'game',
-  pixelRatio: 1,
-  suppressPlayButton: true,
+  // pixelRatio: 1,
+  // suppressPlayButton: true,
   pointerScope: ex.PointerScope.Canvas,
   displayMode: ex.DisplayMode.FitScreenAndFill,
-  antialiasing: false,
   snapToPixel: false,
   maxFps: 60,
   configurePerformanceCanvas2DFallback: {
@@ -57,6 +56,16 @@ var game = new ex.Engine({
     showPlayerMessage: true,
     threshold: { fps: 20, numberOfFrames: 100 }
   }
+});
+game.setAntialiasing(false);
+game.screen.events.on('fullscreen', (evt) => {
+  console.log('fullscreen', evt);
+});
+game.screen.events.on('resize', (evt) => {
+  console.log('resize', evt);
+});
+game.screen.events.on('pixelratio', (evt) => {
+  console.log('pixelratio', evt);
 });
 game.currentScene.onPreDraw = (ctx: ex.ExcaliburGraphicsContext) => {
   ctx.save();

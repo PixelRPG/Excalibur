@@ -251,7 +251,7 @@ export interface EngineOptions {
    */
   configurePerformanceCanvas2DFallback?: {
     /**
-     * By default `true`, this will switch the internal graphics context to Canvas2D which can improve performance on non hardware
+     * By default `false`, this will switch the internal graphics context to Canvas2D which can improve performance on non hardware
      * accelerated browsers.
      */
     allow: boolean;
@@ -279,6 +279,13 @@ export interface EngineOptions {
  * loading resources, and managing the scene.
  */
 export class Engine implements CanInitialize, CanUpdate, CanDraw {
+  /**
+   * Current Excalibur version string
+   *
+   * Useful for plugins or other tools that need to know what features are available
+   */
+  public readonly version = EX_VERSION;
+
   /**
    * Listen to and emit events on the Engine
    */
@@ -560,7 +567,7 @@ export class Engine implements CanInitialize, CanUpdate, CanDraw {
     enableCanvasTransparency: true,
     useDrawSorting: true,
     configurePerformanceCanvas2DFallback: {
-      allow: true,
+      allow: false,
       showPlayerMessage: false,
       threshold: { fps: 20, numberOfFrames: 100 }
     },
@@ -835,7 +842,7 @@ O|===|* >________________>\n\
     this.canvas.parentNode.replaceChild(newCanvas, this.canvas);
     this.canvas = newCanvas;
 
-    const options = this._originalOptions;
+    const options = { ...this._originalOptions, antialiasing: this.getAntialiasing() };
     const displayMode = this._originalDisplayMode;
 
     // New graphics context
