@@ -141,6 +141,22 @@ export class BoundingBox {
     return new Vector((this.left + this.right) / 2, (this.top + this.bottom) / 2);
   }
 
+  public get topLeft(): Vector {
+    return new Vector(this.left, this.top);
+  }
+
+  public get bottomRight(): Vector {
+    return new Vector(this.right, this.bottom);
+  }
+
+  public get topRight(): Vector {
+    return new Vector(this.right, this.top);
+  }
+
+  public get bottomLeft(): Vector {
+    return new Vector(this.left, this.bottom);
+  }
+
   public translate(pos: Vector): BoundingBox {
     return new BoundingBox(this.left + pos.x, this.top + pos.y, this.right + pos.x, this.bottom + pos.y);
   }
@@ -213,13 +229,34 @@ export class BoundingBox {
     return 2 * (wx + wy);
   }
 
+
+  // Cache bounding box point returns
+  private _points: Vector[] = [];
+  private _left?: number;
+  private _right?: number;
+  private _top?: number;
+  private _bottom?: number;
+
+  /**
+   * Returns the world space points that make up the corners of the bounding box as a polygon
+   */
   public getPoints(): Vector[] {
-    const results = [];
-    results.push(new Vector(this.left, this.top));
-    results.push(new Vector(this.right, this.top));
-    results.push(new Vector(this.right, this.bottom));
-    results.push(new Vector(this.left, this.bottom));
-    return results;
+    if (this._left !== this.left ||
+        this._right !== this.right ||
+        this._top !== this.top ||
+        this._bottom !== this.bottom
+    ) {
+      this._points.length = 0;
+      this._points.push(new Vector(this.left, this.top));
+      this._points.push(new Vector(this.right, this.top));
+      this._points.push(new Vector(this.right, this.bottom));
+      this._points.push(new Vector(this.left, this.bottom));
+      this._left = this.left;
+      this._right = this.right;
+      this._top = this.top;
+      this._bottom = this.bottom;
+    }
+    return this._points;
   }
 
   /**

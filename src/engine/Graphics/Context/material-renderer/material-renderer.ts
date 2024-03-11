@@ -38,11 +38,20 @@ export class MaterialRenderer implements RendererPlugin {
         ['a_position', 2],
         ['a_uv', 2],
         ['a_screenuv', 2]
-      ]
+      ],
+      suppressWarnings: true
     });
 
     // Setup index buffer
     this._quads = new QuadIndexBuffer(gl, 1, true);
+  }
+
+  public dispose() {
+    this._buffer.dispose();
+    this._quads.dispose();
+    this._textures.length = 0;
+    this._context = null;
+    this._gl = null;
   }
 
   draw(image: HTMLImageSource,
@@ -58,7 +67,6 @@ export class MaterialRenderer implements RendererPlugin {
 
     // Extract context info
     const material = this._context.material;
-    material.initialize(gl, this._context);
 
     const transform = this._context.getTransform();
     const opacity = this._context.opacity;
@@ -181,6 +189,9 @@ export class MaterialRenderer implements RendererPlugin {
     gl.activeTexture(gl.TEXTURE0 + 1);
     gl.bindTexture(gl.TEXTURE_2D, this._context.materialScreenTexture);
     shader.trySetUniformInt('u_screen_texture', 1);
+
+    // bind any additional textures in the material
+    material.uploadAndBind(gl);
 
     // bind quad index buffer
     this._quads.bind();

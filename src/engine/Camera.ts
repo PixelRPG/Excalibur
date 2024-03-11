@@ -12,6 +12,8 @@ import { ExcaliburGraphicsContext } from './Graphics/Context/ExcaliburGraphicsCo
 import { watchAny } from './Util/Watch';
 import { AffineMatrix } from './Math/affine-matrix';
 import { EventEmitter, EventKey, Handler, Subscription } from './EventEmitter';
+import { pixelSnapEpsilon } from './Graphics';
+import { sign } from './Math/util';
 
 /**
  * Interface that describes a custom camera strategy for tracking targets
@@ -100,7 +102,7 @@ export enum Axis {
  */
 export class LockCameraToActorStrategy implements CameraStrategy<Actor> {
   constructor(public target: Actor) {}
-  public action = (target: Actor, _cam: Camera, _eng: Engine, _delta: number) => {
+  public action = (target: Actor, camera: Camera, engine: Engine, delta: number) => {
     const center = target.center;
     return center;
   };
@@ -314,6 +316,14 @@ export class Camera implements CanUpdate, CanInitialize {
     this._pos = watchAny(vec, () => (this._posChanged = true));
     this._posChanged = true;
   }
+  /**
+   * Interpolated camera position if more draws are running than updates
+   *
+   * Enabled when `Engine.fixedUpdateFps` is enabled, in all other cases this will be the same as pos
+   */
+  public drawPos: Vector = this.pos.clone();
+
+  private _oldPos = this.pos.clone();
 
   /**
    * Get or set the camera's velocity
@@ -566,7 +576,7 @@ export class Camera implements CanUpdate, CanInitialize {
    *
    * `onPreUpdate` is called directly before a scene is updated.
    */
-  public onPreUpdate(_engine: Engine, _delta: number): void {
+  public onPreUpdate(engine: Engine, delta: number): void {
     // Overridable
   }
 
@@ -586,7 +596,7 @@ export class Camera implements CanUpdate, CanInitialize {
    *
    * `onPostUpdate` is called directly after a scene is updated.
    */
-  public onPostUpdate(_engine: Engine, _delta: number): void {
+  public onPostUpdate(engine: Engine, delta: number): void {
     // Overridable
   }
 
@@ -597,10 +607,10 @@ export class Camera implements CanUpdate, CanInitialize {
     return this._isInitialized;
   }
 
-  public _initialize(_engine: Engine) {
+  public _initialize(engine: Engine) {
     if (!this.isInitialized) {
-      this._engine = _engine;
-      this._screen = _engine.screen;
+      this._engine = engine;
+      this._screen = engine.screen;
 
       const currentRes = this._screen.contentArea;
       let center = vec(currentRes.width / 2, currentRes.height / 2);
@@ -618,24 +628,26 @@ export class Camera implements CanUpdate, CanInitialize {
       if (!this._posChanged) {
         this.pos = center;
       }
+      this.pos.clone(this.drawPos);
       // First frame bootstrap
 
       // Ensure camera tx is correct
       // Run update twice to ensure properties are init'd
-      this.updateTransform();
+      this.updateTransform(this.pos);
 
       // Run strategies for first frame
-      this.runStrategies(_engine, _engine.clock.elapsed());
+      this.runStrategies(engine, engine.clock.elapsed());
 
       // Setup the first frame viewport
       this.updateViewport();
 
       // It's important to update the camera after strategies
       // This prevents jitter
-      this.updateTransform();
+      this.updateTransform(this.pos);
+      this.pos.clone(this._oldPos);
 
-      this.onInitialize(_engine);
-      this.events.emit('initialize', new InitializeEvent(_engine, this));
+      this.onInitialize(engine);
+      this.events.emit('initialize', new InitializeEvent(engine, this));
       this._isInitialized = true;
     }
   }
@@ -645,7 +657,7 @@ export class Camera implements CanUpdate, CanInitialize {
    *
    * `onPostUpdate` is called directly after a scene is updated.
    */
-  public onInitialize(_engine: Engine) {
+  public onInitialize(engine: Engine) {
     // Overridable
   }
 
@@ -681,7 +693,7 @@ export class Camera implements CanUpdate, CanInitialize {
   }
 
   public updateViewport() {
-    // recalc viewport
+    // recalculate viewport
     this._viewport = new BoundingBox(
       this.x - this._halfWidth,
       this.y - this._halfHeight,
@@ -690,9 +702,10 @@ export class Camera implements CanUpdate, CanInitialize {
     );
   }
 
-  public update(_engine: Engine, delta: number) {
-    this._initialize(_engine);
-    this._preupdate(_engine, delta);
+  public update(engine: Engine, delta: number) {
+    this._initialize(engine);
+    this._preupdate(engine, delta);
+    this.pos.clone(this._oldPos);
 
     // Update placements based on linear algebra
     this.pos = this.pos.add(this.vel.scale(delta / 1000));
@@ -754,30 +767,52 @@ export class Camera implements CanUpdate, CanInitialize {
       this._yShake = ((Math.random() * this._shakeMagnitudeY) | 0) + 1;
     }
 
-    this.runStrategies(_engine, delta);
+    this.runStrategies(engine, delta);
 
     this.updateViewport();
 
     // It's important to update the camera after strategies
     // This prevents jitter
-    this.updateTransform();
+    this.updateTransform(this.pos);
 
-    this._postupdate(_engine, delta);
+    this._postupdate(engine, delta);
   }
 
+  private _snapPos = vec(0, 0);
   /**
    * Applies the relevant transformations to the game canvas to "move" or apply effects to the Camera
    * @param ctx Canvas context to apply transformations
    */
   public draw(ctx: ExcaliburGraphicsContext): void {
+    // default to the current position
+    this.pos.clone(this.drawPos);
+
+    // interpolation if fixed update is on
+    // must happen on the draw, because more draws are potentially happening than updates
+    if (this._engine.fixedUpdateFps) {
+      const blend = this._engine.currentFrameLagMs / (1000 / this._engine.fixedUpdateFps);
+      const interpolatedPos = this.pos.scale(blend).add(
+        this._oldPos.scale(1.0 - blend)
+      );
+      interpolatedPos.clone(this.drawPos);
+      this.updateTransform(interpolatedPos);
+    }
+    // Snap camera to pixel
+    if (ctx.snapToPixel) {
+      const snapPos = this.drawPos.clone(this._snapPos);
+      snapPos.x = ~~(snapPos.x + pixelSnapEpsilon * sign(snapPos.x));
+      snapPos.y = ~~(snapPos.y + pixelSnapEpsilon * sign(snapPos.y));
+      snapPos.clone(this.drawPos);
+      this.updateTransform(snapPos);
+    }
     ctx.multiply(this.transform);
   }
 
-  public updateTransform() {
+  public updateTransform(pos: Vector) {
     // center the camera
     const newCanvasWidth = this._screen.resolution.width / this.zoom;
     const newCanvasHeight = this._screen.resolution.height / this.zoom;
-    const cameraPos = vec(-this.x + newCanvasWidth / 2 + this._xShake, -this.y + newCanvasHeight / 2 + this._yShake);
+    const cameraPos = vec(-pos.x + newCanvasWidth / 2 + this._xShake, -pos.y + newCanvasHeight / 2 + this._yShake);
 
     // Calculate camera transform
     this.transform.reset();

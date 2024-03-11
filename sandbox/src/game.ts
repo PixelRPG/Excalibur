@@ -38,7 +38,10 @@ var logger = ex.Logger.getInstance();
 logger.defaultLevel = ex.LogLevel.Debug;
 
 var fullscreenButton = document.getElementById('fullscreen') as HTMLButtonElement;
-
+// setup physics defaults
+// ex.Physics.useArcadePhysics();
+// ex.Physics.checkForFastBodies = true;
+// ex.Physics.acc = new ex.Vector(0, 10); // global accel
 // Create an the game container
 var game = new ex.Engine({
   width: 800 / 2,
@@ -48,16 +51,39 @@ var game = new ex.Engine({
   // pixelRatio: 1,
   // suppressPlayButton: true,
   pointerScope: ex.PointerScope.Canvas,
-  displayMode: ex.DisplayMode.FitScreenAndFill,
+  displayMode: ex.DisplayMode.FitScreenAndZoom,
   snapToPixel: false,
+  // fixedUpdateFps: 30,
+  pixelRatio: 2,
+  fixedUpdateFps: 60,
   maxFps: 60,
+  antialiasing: {
+    pixelArtSampler: true,
+    canvasImageRendering: 'auto',
+    nativeContextAntialiasing: false,
+    filtering: ex.ImageFiltering.Pixel,
+    multiSampleAntialiasing: true,
+  },
+  uvPadding: 0,
+  physics: {
+    colliders: {
+      compositeStrategy: 'together'
+    },
+    solver: ex.SolverStrategy.Arcade,
+    gravity: ex.vec(0, 20),
+    arcade: {
+      contactSolveBias: ex.ContactSolveBias.VerticalFirst
+    },
+    continuous: {
+      checkForFastBodies: true
+    }
+  },
   configurePerformanceCanvas2DFallback: {
     allow: true,
     showPlayerMessage: true,
     threshold: { fps: 20, numberOfFrames: 100 }
   }
 });
-game.setAntialiasing(false);
 game.screen.events.on('fullscreen', (evt) => {
   console.log('fullscreen', evt);
 });
@@ -127,24 +153,24 @@ cards2.draw(game.graphicsContext, 0, 0);
 
 jump.volume = 0.3;
 
-var loader = new ex.Loader();
-loader.addResource(heartImageSource);
-loader.addResource(heartTex);
-loader.addResource(imageRun);
-loader.addResource(imageJump);
-loader.addResource(imageBlocks);
-loader.addResource(spriteFontImage);
-loader.addResource(cards);
-loader.addResource(cloud);
-loader.addResource(jump);
+var boot = new ex.Loader({
+  fullscreenAfterLoad: true,
+  fullscreenContainer: document.getElementById('container')
+});
+boot.addResource(heartImageSource);
+boot.addResource(heartTex);
+boot.addResource(imageRun);
+boot.addResource(imageJump);
+boot.addResource(imageBlocks);
+boot.addResource(spriteFontImage);
+boot.addResource(cards);
+boot.addResource(cloud);
+boot.addResource(jump);
 
 // Set background color
 game.backgroundColor = new ex.Color(114, 213, 224);
 
-// setup physics defaults
-ex.Physics.useArcadePhysics();
-ex.Physics.checkForFastBodies = true;
-ex.Physics.acc = new ex.Vector(0, 10); // global accel
+
 
 // Add some UI
 //var heart = new ex.ScreenElement(0, 0, 20, 20);
@@ -302,35 +328,35 @@ var group = new ex.GraphicsGroup({
   members: [
     {
       graphic: newSprite,
-      pos: ex.vec(0, 0)
+      offset: ex.vec(0, 0)
     },
     {
       graphic: newSprite,
-      pos: ex.vec(50, 0)
+      offset: ex.vec(50, 0)
     },
     {
       graphic: newSprite,
-      pos: ex.vec(0, 50)
+      offset: ex.vec(0, 50)
     },
     {
       graphic: text,
-      pos: ex.vec(100, 20)
+      offset: ex.vec(100, 20)
     },
     {
       graphic: circle,
-      pos: ex.vec(50, 50)
+      offset: ex.vec(50, 50)
     },
     {
       graphic: anim,
-      pos: ex.vec(200, 200)
+      offset: ex.vec(200, 200)
     },
     {
       graphic: cardAnimation,
-      pos: ex.vec(0, 200)
+      offset: ex.vec(0, 200)
     },
     {
       graphic: spriteText,
-      pos: ex.vec(300, 200)
+      offset: ex.vec(300, 200)
     }
   ]
 });
@@ -540,9 +566,9 @@ player.onPostUpdate = (engine) => {
   });
   // console.log(hits);
 }
-player.graphics.onPostDraw = (ctx) => {
-  ctx.drawLine(ex.Vector.Zero, ex.Vector.Down.scale(100), ex.Color.Red, 2);
-}
+// player.graphics.onPostDraw = (ctx) => {
+//   ctx.drawLine(ex.Vector.Zero, ex.Vector.Down.scale(100), ex.Color.Red, 2);
+// }
 player.body.canSleep = false;
 player.graphics.copyGraphics = false;
 follower.actions
@@ -552,6 +578,13 @@ follower.actions
     console.log('Player met!!');
   });
 
+player.onCollisionStart = (_a,_b,_c, contact) => {
+  console.log('start', contact);
+}
+player.onCollisionEnd = (_a,_b) => {
+  console.log('end');
+}
+
 // follow player
 
 player.rotation = 0;
@@ -559,8 +592,8 @@ player.on('collisionstart', () => {
   console.log('collision start');
 });
 
-player.on('collisionend', () => {
-  console.log('collision end');
+player.on('collisionend', (e) => {
+  console.log('collision end', e.other.collider);
 });
 
 // Health bar example
@@ -572,6 +605,23 @@ var healthbar = new ex.Actor({
   height: 5,
   color: new ex.Color(0, 255, 0)});
 player.addChild(healthbar);
+player.onPostUpdate = () => {
+  ex.Debug.drawLine(
+    player.pos,
+    player.pos.add(ex.Vector.Down.scale(100)), {
+      color: ex.Color.Red
+    });
+  ex.Debug.drawPoint(player.pos, {
+    size: 1,
+    color: ex.Color.Violet
+  });
+  ex.Debug.drawCircle(player.pos, 100, {
+    color: ex.Color.Transparent,
+    strokeColor: ex.Color.Black,
+    width: 1
+  });
+  ex.Debug.drawBounds(player.collider.bounds, { color: ex.Color.Yellow });
+}
 // player.onPostDraw = (ctx: CanvasRenderingContext2D) => {
 //   ctx.fillStyle = 'red';
 //   ctx.fillRect(0, 0, 100, 100);
@@ -581,18 +631,35 @@ player.addChild(healthbar);
 //   // ctx.debug.drawPoint(ex.vec(0, 0), { size: 20, color: ex.Color.Black });
 // };
 
+class OtherActor extends ex.Actor {
+  constructor(args: ex.ActorArgs) {
+    super(args);
+  }
+  onCollisionStart(self: ex.Collider, other: ex.Collider, side: ex.Side, contact: ex.CollisionContact): void {
+    console.log('other collision start')
+  }
+  onCollisionEnd(self: ex.Collider, other: ex.Collider): void {
+    console.log('other collision end')
+  }
+}
+
+var other = new OtherActor({
+  name: 'other',
+  pos: new ex.Vector(200, -200),
+  width: 100,
+  height: 100,
+  color: ex.Color.Violet,
+  collisionType: ex.CollisionType.Active
+});
+
+game.add(other);
+
 var healthbar2 = new ex.Rectangle({
   width: 140,
   height: 5,
   color: new ex.Color(0, 255, 0)
 });
 
-var backroundLayer = player.graphics.layers.create({
-  name: 'background',
-  order: -1
-});
-
-backroundLayer.show(healthbar2, { offset: ex.vec(0, -70) });
 var playerText = new ex.Text({
   text: 'A long piece of text is long',
   font: new ex.Font({
@@ -600,8 +667,24 @@ var playerText = new ex.Text({
     family: 'Times New Roman'
   })
 });
-// playerText.showDebug = true;
-backroundLayer.show(playerText, { offset: ex.vec(0, -70) });
+
+var group = new ex.GraphicsGroup({
+  members: [
+    { graphic: healthbar2, offset: ex.vec(0, -70)},
+    { graphic: playerText, offset: ex.vec(0, -70)}
+  ]
+})
+healthbar.graphics.use(group);
+
+// var backgroundLayer = player.graphics.layers.create({
+//   name: 'background',
+//   order: -1
+// });
+
+// backgroundLayer.show(healthbar2, { offset: ex.vec(0, -70) });
+
+// // playerText.showDebug = true;
+// backgroundLayer.show(playerText, { offset: ex.vec(0, -70) });
 
 // Retrieve animations for player from sprite sheet
 var left = ex.Animation.fromSpriteSheet(spriteSheetRun, ex.range(1, 10), 50);
@@ -707,6 +790,7 @@ player.on('pointerwheel', () => {
 });
 
 var newScene = new ex.Scene();
+newScene.backgroundColor = ex.Color.Yellow;
 newScene.add(new ex.Label({text: 'MAH LABEL!', x: 200, y: 100}));
 newScene.on('activate', (evt?: ex.ActivateEvent) => {
   console.log('activate newScene');
@@ -850,10 +934,16 @@ var emitter = new ex.ParticleEmitter({
   acceleration: new ex.Vector(0, 460),
   beginColor: ex.Color.Red,
   endColor: ex.Color.Yellow,
-  // particleSprite: blockSpriteLegacy,
+  particleSprite: blockSprite,
   particleRotationalVelocity: Math.PI / 10,
   randomRotation: true
 });
+const original = (ex.ParticleEmitter.prototype as any)._createParticle;
+(ex.ParticleEmitter.prototype as any)._createParticle = function () {
+  const particle = original.call(this);
+  particle.graphics.onPostDraw = () => {};
+  return particle;
+}
 game.add(emitter);
 
 var exploding = false;
@@ -910,6 +1000,6 @@ game.currentScene.camera.strategy.lockToActorAxis(player, ex.Axis.X);
 game.currentScene.camera.y = 200;
 
 // Run the mainloop
-game.start(loader).then(() => {
+game.start(boot).then(() => {
   logger.info('All Resources have finished loading');
 });

@@ -11,7 +11,7 @@ import { Color } from '../../Color';
 import { StateStack } from './state-stack';
 import { GraphicsDiagnostics } from '../GraphicsDiagnostics';
 import { DebugText } from './debug-text';
-import { ScreenDimension } from '../../Screen';
+import { Resolution } from '../../Screen';
 import { PostProcessor } from '../PostProcessor/PostProcessor';
 import { AffineMatrix } from '../../Math/affine-matrix';
 import { Material, MaterialOptions } from './material';
@@ -79,6 +79,10 @@ class ExcaliburGraphicsContext2DCanvasDebug implements DebugDraw {
   }
 }
 
+export interface ExcaliburGraphicsContext2DOptions extends ExcaliburGraphicsContextOptions {
+  context?: CanvasRenderingContext2D;
+}
+
 export class ExcaliburGraphicsContext2DCanvas implements ExcaliburGraphicsContext {
   /**
    * Meant for internal use only. Access the internal context at your own risk and no guarantees this will exist in the future.
@@ -133,11 +137,14 @@ export class ExcaliburGraphicsContext2DCanvas implements ExcaliburGraphicsContex
     this.__ctx.imageSmoothingEnabled = value;
   }
 
-  constructor(options: ExcaliburGraphicsContextOptions) {
-    const { canvasElement, enableTransparency, snapToPixel, smoothing, backgroundColor } = options;
-    this.__ctx = canvasElement.getContext('2d', {
+  constructor(options: ExcaliburGraphicsContext2DOptions) {
+    const { canvasElement, context, enableTransparency, snapToPixel, antialiasing: smoothing, backgroundColor } = options;
+    this.__ctx = context ?? canvasElement.getContext('2d', {
       alpha: enableTransparency ?? true
     });
+    if (!this.__ctx) {
+      throw new Error('Cannot build new ExcaliburGraphicsContext2D for some reason!');
+    }
     this.backgroundColor = backgroundColor ?? this.backgroundColor;
     this.snapToPixel = snapToPixel ?? this.snapToPixel;
     this.smoothing = smoothing ?? this.smoothing;
@@ -147,7 +154,7 @@ export class ExcaliburGraphicsContext2DCanvas implements ExcaliburGraphicsContex
     this.__ctx.resetTransform();
   }
 
-  public updateViewport(_resolution: ScreenDimension): void {
+  public updateViewport(_resolution: Resolution): void {
     // pass
   }
 
@@ -320,7 +327,7 @@ export class ExcaliburGraphicsContext2DCanvas implements ExcaliburGraphicsContex
     // pass
   }
 
-  public updatePostProcessors(_delta: number) {
+  public updatePostProcessors(delta: number) {
     // pass
   }
 
@@ -332,7 +339,7 @@ export class ExcaliburGraphicsContext2DCanvas implements ExcaliburGraphicsContex
     // pass
   }
 
-  public set material(material: Material) {
+  public set material(material: Material | null) {
     this._state.current.material = material;
   }
 
@@ -340,7 +347,7 @@ export class ExcaliburGraphicsContext2DCanvas implements ExcaliburGraphicsContex
     return this._state.current.material;
   }
 
-  public createMaterial(_options: MaterialOptions): Material {
+  public createMaterial(options: Omit<MaterialOptions, 'graphicsContext'>): Material {
     // pass
     return null;
   }
@@ -358,5 +365,9 @@ export class ExcaliburGraphicsContext2DCanvas implements ExcaliburGraphicsContex
    */
   flush(): void {
     // pass
+  }
+
+  dispose(): void {
+    this.__ctx = null;
   }
 }

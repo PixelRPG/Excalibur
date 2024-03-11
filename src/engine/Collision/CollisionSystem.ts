@@ -1,9 +1,9 @@
-import { Entity } from '../EntityComponentSystem';
+import { ComponentCtor, Query, SystemPriority, World } from '../EntityComponentSystem';
 import { MotionComponent } from '../EntityComponentSystem/Components/MotionComponent';
 import { TransformComponent } from '../EntityComponentSystem/Components/TransformComponent';
-import { AddedEntity, isAddedSystemEntity, RemovedEntity, System, SystemType } from '../EntityComponentSystem/System';
+import { System, SystemType } from '../EntityComponentSystem/System';
 import { CollisionEndEvent, CollisionStartEvent, ContactEndEvent, ContactStartEvent } from '../Events';
-import { CollisionResolutionStrategy, Physics } from './Physics';
+import { SolverStrategy } from './SolverStrategy';
 import { ArcadeSolver } from './Solver/ArcadeSolver';
 import { Collider } from './Colliders/Collider';
 import { CollisionContact } from './Detection/CollisionContact';
@@ -11,68 +11,77 @@ import { RealisticSolver } from './Solver/RealisticSolver';
 import { CollisionSolver } from './Solver/Solver';
 import { ColliderComponent } from './ColliderComponent';
 import { CompositeCollider } from './Colliders/CompositeCollider';
-import { Engine, ExcaliburGraphicsContext, Scene } from '..';
+import { Engine } from '../Engine';
+import { ExcaliburGraphicsContext } from '../Graphics/Context/ExcaliburGraphicsContext';
+import { Scene } from '../Scene';
+import { Side } from '../Collision/Side';
 import { DynamicTreeCollisionProcessor } from './Detection/DynamicTreeCollisionProcessor';
 import { PhysicsWorld } from './PhysicsWorld';
-export class CollisionSystem extends System<TransformComponent | MotionComponent | ColliderComponent> {
-  public readonly types = ['ex.transform', 'ex.motion', 'ex.collider'] as const;
+export class CollisionSystem extends System {
   public systemType = SystemType.Update;
-  public priority = -1;
+  public priority = SystemPriority.Higher;
+  public query: Query<ComponentCtor<TransformComponent> | ComponentCtor<MotionComponent> | ComponentCtor<ColliderComponent>>;
 
   private _engine: Engine;
-  private _realisticSolver = new RealisticSolver();
-  private _arcadeSolver = new ArcadeSolver();
+  private _configDirty = false;
+  private _realisticSolver: RealisticSolver;
+  private _arcadeSolver: ArcadeSolver;
   private _lastFrameContacts = new Map<string, CollisionContact>();
   private _currentFrameContacts = new Map<string, CollisionContact>();
-  private _processor: DynamicTreeCollisionProcessor;
+  private get _processor(): DynamicTreeCollisionProcessor {
+    return this._physics.collisionProcessor;
+  };
 
   private _trackCollider: (c: Collider) => void;
   private _untrackCollider: (c: Collider) => void;
 
-  constructor(physics: PhysicsWorld) {
+  constructor(world: World, private _physics: PhysicsWorld) {
     super();
-    this._processor = physics.collisionProcessor;
+    this._arcadeSolver = new ArcadeSolver(_physics.config.arcade);
+    this._realisticSolver = new RealisticSolver(_physics.config.realistic);
+    this._physics.$configUpdate.subscribe(() => this._configDirty = true);
     this._trackCollider = (c: Collider) => this._processor.track(c);
     this._untrackCollider = (c: Collider) => this._processor.untrack(c);
-  }
-
-  notify(message: AddedEntity | RemovedEntity) {
-    if (isAddedSystemEntity(message)) {
-      const colliderComponent = message.data.get(ColliderComponent);
+    this.query = world.query([TransformComponent, MotionComponent, ColliderComponent]);
+    this.query.entityAdded$.subscribe(e => {
+      const colliderComponent = e.get(ColliderComponent);
       colliderComponent.$colliderAdded.subscribe(this._trackCollider);
       colliderComponent.$colliderRemoved.subscribe(this._untrackCollider);
       const collider = colliderComponent.get();
       if (collider) {
         this._processor.track(collider);
       }
-    } else {
-      const colliderComponent = message.data.get(ColliderComponent);
+    });
+    this.query.entityRemoved$.subscribe(e => {
+      const colliderComponent = e.get(ColliderComponent);
       const collider = colliderComponent.get();
       if (colliderComponent && collider) {
         this._processor.untrack(collider);
       }
-    }
+    });
   }
 
-  initialize(scene: Scene) {
+  initialize(world: World, scene: Scene) {
     this._engine = scene.engine;
-
   }
 
-  update(entities: Entity[], elapsedMs: number): void {
-    if (!Physics.enabled) {
+  update(elapsedMs: number): void {
+    if (!this._physics.config.enabled) {
       return;
     }
 
     // Collect up all the colliders and update them
     let colliders: Collider[] = [];
-    for (const entity of entities) {
+    for (const entity of this.query.entities) {
       const colliderComp = entity.get(ColliderComponent);
       const collider = colliderComp?.get();
       if (colliderComp && colliderComp.owner?.active && collider) {
         colliderComp.update();
         if (collider instanceof CompositeCollider) {
           const compositeColliders = collider.getColliders();
+          if (!collider.compositeStrategy) {
+            collider.compositeStrategy = this._physics.config.colliders.compositeStrategy;
+          }
           colliders = colliders.concat(compositeColliders);
         } else {
           colliders.push(collider);
@@ -100,6 +109,9 @@ export class CollisionSystem extends System<TransformComponent | MotionComponent
 
     // Record contacts for start/end
     for (const contact of contacts) {
+      if (contact.isCanceled()) {
+        continue;
+      }
       // Process composite ids, things with the same composite id are treated as the same collider for start/end
       const index = contact.id.indexOf('|');
       if (index > 0) {
@@ -118,10 +130,23 @@ export class CollisionSystem extends System<TransformComponent | MotionComponent
 
     // Keep track of collisions contacts that have started or ended
     this._lastFrameContacts = new Map(this._currentFrameContacts);
+
+    // Process deferred collider removals
+    for (const entity of this.query.entities) {
+      const collider = entity.get(ColliderComponent);
+      if (collider) {
+        collider.processColliderRemoval();
+      }
+    }
   }
 
   getSolver(): CollisionSolver {
-    return Physics.collisionResolutionStrategy === CollisionResolutionStrategy.Realistic ? this._realisticSolver : this._arcadeSolver;
+    if (this._configDirty) {
+      this._configDirty = false;
+      this._arcadeSolver = new ArcadeSolver(this._physics.config.arcade);
+      this._realisticSolver = new RealisticSolver(this._physics.config.realistic);
+    }
+    return this._physics.config.solver === SolverStrategy.Realistic ? this._realisticSolver : this._arcadeSolver;
   }
 
   debug(ex: ExcaliburGraphicsContext) {
@@ -129,16 +154,18 @@ export class CollisionSystem extends System<TransformComponent | MotionComponent
   }
 
   public runContactStartEnd() {
-    // Composite collider collisions may have a duplicate id because we want to treat those as a singular start/end
+    // If composite colliders are 'together' collisions may have a duplicate id because we want to treat those as a singular start/end
     for (const [id, c] of this._currentFrameContacts) {
       // find all new contacts
       if (!this._lastFrameContacts.has(id)) {
         const colliderA = c.colliderA;
         const colliderB = c.colliderB;
-        colliderA.events.emit('collisionstart', new CollisionStartEvent(colliderA, colliderB, c));
-        colliderA.events.emit('contactstart', new ContactStartEvent(colliderA, colliderB, c) as any);
-        colliderB.events.emit('collisionstart', new CollisionStartEvent(colliderB, colliderA, c));
-        colliderB.events.emit('contactstart', new ContactStartEvent(colliderB, colliderA, c) as any);
+        const side = Side.fromDirection(c.mtv);
+        const opposite = Side.getOpposite(side);
+        colliderA.events.emit('collisionstart', new CollisionStartEvent(colliderA, colliderB, side, c));
+        colliderA.events.emit('contactstart', new ContactStartEvent(colliderA, colliderB, side, c) as any);
+        colliderB.events.emit('collisionstart', new CollisionStartEvent(colliderB, colliderA, opposite, c));
+        colliderB.events.emit('contactstart', new ContactStartEvent(colliderB, colliderA, opposite, c) as any);
       }
     }
 
@@ -147,10 +174,12 @@ export class CollisionSystem extends System<TransformComponent | MotionComponent
       if (!this._currentFrameContacts.has(id)) {
         const colliderA = c.colliderA;
         const colliderB = c.colliderB;
-        colliderA.events.emit('collisionend', new CollisionEndEvent(colliderA, colliderB));
-        colliderA.events.emit('contactend', new ContactEndEvent(colliderA, colliderB) as any);
-        colliderB.events.emit('collisionend', new CollisionEndEvent(colliderB, colliderA));
-        colliderB.events.emit('contactend', new ContactEndEvent(colliderB, colliderA) as any);
+        const side = Side.fromDirection(c.mtv);
+        const opposite = Side.getOpposite(side);
+        colliderA.events.emit('collisionend', new CollisionEndEvent(colliderA, colliderB, side, c));
+        colliderA.events.emit('contactend', new ContactEndEvent(colliderA, colliderB, side, c) as any);
+        colliderB.events.emit('collisionend', new CollisionEndEvent(colliderB, colliderA, opposite, c));
+        colliderB.events.emit('contactend', new ContactEndEvent(colliderB, colliderA, opposite, c) as any);
       }
     }
   }

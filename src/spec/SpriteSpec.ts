@@ -16,7 +16,13 @@ describe('A Sprite Graphic', () => {
     canvasElement = document.createElement('canvas');
     canvasElement.width = 100;
     canvasElement.height = 100;
-    ctx = new ex.ExcaliburGraphicsContextWebGL({ canvasElement, smoothing: false, snapToPixel: false });
+    ctx = new ex.ExcaliburGraphicsContextWebGL({
+      canvasElement,
+      uvPadding: 0.01,
+      antialiasing: false,
+      snapToPixel: false,
+      pixelArtSampler: false
+    });
   });
 
   it('exists', () => {
@@ -106,7 +112,7 @@ describe('A Sprite Graphic', () => {
     expect(sut.destSize.height).toBe(55);
   });
 
-  it('can specify a source/dest viewof an image with default width and height', async () => {
+  it('can specify a source/dest view of an image with default width and height', async () => {
     const image = new ex.ImageSource('src/spec/images/GraphicsTextSpec/spritefont.png');
     const sut = new ex.Sprite({
       image,
@@ -132,7 +138,7 @@ describe('A Sprite Graphic', () => {
     sut.draw(ctx, 50 - sut.width / 2, 50 - sut.width / 2);
     ctx.flush();
 
-    await expectAsync(TestUtils.flushWebGLCanvasTo2D(canvasElement)).toEqualImage('src/spec/images/GraphicsSpriteSpec/source-view.png');
+    await expectAsync(canvasElement).toEqualImage('src/spec/images/GraphicsSpriteSpec/source-view.png');
   });
 
   it('can draw an sprite image with a tint', async () => {
@@ -147,7 +153,7 @@ describe('A Sprite Graphic', () => {
     sut.draw(ctx, 0, 0);
     ctx.flush();
 
-    await expectAsync(TestUtils.flushWebGLCanvasTo2D(canvasElement)).toEqualImage('src/spec/images/GraphicsSpriteSpec/icon-tint.png');
+    await expectAsync(canvasElement).toEqualImage('src/spec/images/GraphicsSpriteSpec/icon-tint.png');
   });
 
   it('can specify the width and height of a sprite after construction', async () => {
@@ -172,7 +178,7 @@ describe('A Sprite Graphic', () => {
     sut.draw(ctx, 50 - sut.width / 2, 50 - sut.width / 2);
     ctx.flush();
 
-    await expectAsync(TestUtils.flushWebGLCanvasTo2D(canvasElement)).toEqualImage('src/spec/images/GraphicsSpriteSpec/change-size.png');
+    await expectAsync(canvasElement).toEqualImage('src/spec/images/GraphicsSpriteSpec/change-size.png');
   });
 
   it('can specify the width and height and scale', async () => {
@@ -200,7 +206,7 @@ describe('A Sprite Graphic', () => {
     ctx.flush();
     expect(sut.width).toBe(128);
     expect(sut.height).toBe(128);
-    await expectAsync(TestUtils.flushWebGLCanvasTo2D(canvasElement))
+    await expectAsync(canvasElement)
       .toEqualImage('src/spec/images/GraphicsSpriteSpec/change-size-and-scale.png');
   });
 
@@ -234,7 +240,7 @@ describe('A Sprite Graphic', () => {
     sut.draw(ctx, 50 - sut.width / 2, 50 - sut.width / 2);
     ctx.flush();
 
-    await expectAsync(TestUtils.flushWebGLCanvasTo2D(canvasElement)).toEqualImage('src/spec/images/GraphicsSpriteSpec/source-view.png');
+    await expectAsync(canvasElement).toEqualImage('src/spec/images/GraphicsSpriteSpec/source-view.png');
   });
 
   it('can specify a source view of an image and a dest view dimension is destination', async () => {
@@ -271,7 +277,7 @@ describe('A Sprite Graphic', () => {
     sut.draw(ctx, 50 - sut.width / 2, 50 - sut.width / 2);
     ctx.flush();
 
-    await expectAsync(TestUtils.flushWebGLCanvasTo2D(canvasElement)).toEqualImage('src/spec/images/GraphicsSpriteSpec/dest-size.png');
+    await expectAsync(canvasElement).toEqualImage('src/spec/images/GraphicsSpriteSpec/dest-size.png');
   });
 
   it('can specify only a dest view dimension, infers native size for source view', async () => {
@@ -305,12 +311,12 @@ describe('A Sprite Graphic', () => {
     sut.draw(ctx, 50 - sut.width / 2, 50 - sut.width / 2);
     ctx.flush();
 
-    await expectAsync(TestUtils.flushWebGLCanvasTo2D(canvasElement)).toEqualImage('src/spec/images/GraphicsSpriteSpec/dest-view.png');
+    await expectAsync(canvasElement).toEqualImage('src/spec/images/GraphicsSpriteSpec/dest-view.png');
   });
 
   it('will log one warning if the imagesource is not loaded', () => {
     const logger = Logger.getInstance();
-    spyOn(logger, 'warn');
+    spyOn(logger, 'warnOnce');
     const image = new ex.ImageSource('path/to/non/existing/image');
 
     const sut = image.toSprite();
@@ -319,7 +325,7 @@ describe('A Sprite Graphic', () => {
     sut.draw(ctx, 0, 0);
     sut.draw(ctx, 0, 0);
 
-    expect(logger.warn).toHaveBeenCalledOnceWith(
+    expect(logger.warnOnce).toHaveBeenCalledWith(
       `ImageSource path/to/non/existing/image is not yet loaded and won't be drawn. Please call .load() or include in a Loader.\n\n` +
       'Read https://excaliburjs.com/docs/imagesource for more information.'
     );

@@ -18,10 +18,9 @@ describe('A camera', () => {
     // mock engine
     engine = TestUtils.engine({
       width: 500,
-      height: 500
+      height: 500,
+      antialiasing: false
     });
-
-    engine.setAntialiasing(false);
 
     engine.backgroundColor = ex.Color.Blue;
 
@@ -33,10 +32,13 @@ describe('A camera', () => {
     engine.addScene('root', scene);
 
     Camera = new ex.Camera();
+    Camera._initialize(engine);
   });
 
   afterEach(() => {
     engine.stop();
+    engine.dispose();
+    engine = null;
   });
 
   it('should be center screen by default (when loading not complete)', () => {
@@ -159,7 +161,7 @@ describe('A camera', () => {
     Camera._initialize(engine);
     Camera.rotation = Math.PI / 2;
 
-    Camera.updateTransform();
+    Camera.updateTransform(Camera.pos);
 
     expect(Camera.transform.getRotation()).toBe(Math.PI / 2);
   });
@@ -381,9 +383,15 @@ describe('A camera', () => {
 
   describe('lifecycle overrides', () => {
     let camera: ex.Camera;
+    let engine: ex.Engine;
 
     beforeEach(() => {
       camera = new ex.Camera();
+      engine = TestUtils.engine();
+    });
+    afterEach(() => {
+      engine.dispose();
+      engine = null;
     });
 
     it('can have onInitialize overridden safely', () => {

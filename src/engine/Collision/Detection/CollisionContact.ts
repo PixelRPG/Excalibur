@@ -1,5 +1,4 @@
 import { Vector } from '../../Math/vector';
-import { Physics } from '../Physics';
 import { Collider } from '../Colliders/Collider';
 import { CollisionType } from '../CollisionType';
 import { Pair } from './Pair';
@@ -77,11 +76,11 @@ export class CollisionContact {
     this.localPoints = localPoints;
     this.info = info;
     this.id = Pair.calculatePairHash(colliderA.id, colliderB.id);
-    if (colliderA.__compositeColliderId || colliderB.__compositeColliderId) {
-      // Add on the parent composite pair for start/end contact
-      this.id += '|' + Pair.calculatePairHash(
-        colliderA.__compositeColliderId ?? colliderA.id,
-        colliderB.__compositeColliderId ?? colliderB.id);
+    if (colliderA.composite || colliderB.composite) {
+      // Add on the parent composite pair for start/end contact if 'together
+      const colliderAId = colliderA.composite?.compositeStrategy === 'separate' ? colliderA.id : colliderA.composite?.id ?? colliderA.id;
+      const colliderBId = colliderB.composite?.compositeStrategy === 'separate' ? colliderB.id : colliderB.composite?.id ?? colliderB.id;
+      this.id += '|' + Pair.calculatePairHash(colliderAId, colliderBId);
     }
   }
 
@@ -93,10 +92,10 @@ export class CollisionContact {
     const bodyB = this.colliderB.owner.get(BodyComponent);
     if (bodyA && bodyB) {
       if (bodyA.sleeping !== bodyB.sleeping) {
-        if (bodyA.sleeping && bodyA.collisionType !== CollisionType.Fixed && bodyB.sleepMotion >= Physics.wakeThreshold) {
+        if (bodyA.sleeping && bodyA.collisionType !== CollisionType.Fixed && bodyB.sleepMotion >= bodyA.wakeThreshold) {
           bodyA.setSleeping(false);
         }
-        if (bodyB.sleeping && bodyB.collisionType !== CollisionType.Fixed && bodyA.sleepMotion >= Physics.wakeThreshold) {
+        if (bodyB.sleeping && bodyB.collisionType !== CollisionType.Fixed && bodyA.sleepMotion >= bodyB.wakeThreshold) {
           bodyB.setSleeping(false);
         }
       }

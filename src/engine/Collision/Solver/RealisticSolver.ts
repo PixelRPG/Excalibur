@@ -4,12 +4,14 @@ import { CollisionContact } from '../Detection/CollisionContact';
 import { CollisionType } from '../CollisionType';
 import { ContactConstraintPoint } from './ContactConstraintPoint';
 import { Side } from '../Side';
-import { Physics } from '../Physics';
 import { CollisionSolver } from './Solver';
 import { BodyComponent, DegreeOfFreedom } from '../BodyComponent';
 import { CollisionJumpTable } from '../Colliders/CollisionJumpTable';
+import { DeepRequired } from '../../Util/Required';
+import { PhysicsConfig } from '../PhysicsConfig';
 
 export class RealisticSolver implements CollisionSolver {
+  constructor(public config: DeepRequired<Pick<PhysicsConfig, 'realistic'>['realistic']>) {}
   lastFrameContacts: Map<string, CollisionContact> = new Map();
 
   // map contact id to contact points
@@ -48,14 +50,16 @@ export class RealisticSolver implements CollisionSolver {
       }
       // Publish collision events on both participants
       const side = Side.fromDirection(contact.mtv);
-      contact.colliderA.events.emit('precollision', new PreCollisionEvent(contact.colliderA, contact.colliderB, side, contact.mtv));
+      contact.colliderA.events.emit(
+        'precollision',
+        new PreCollisionEvent(contact.colliderA, contact.colliderB, side, contact.mtv, contact));
       contact.colliderA.events.emit(
         'beforecollisionresolve',
         new CollisionPreSolveEvent(contact.colliderA, contact.colliderB, side, contact.mtv, contact) as any
       );
       contact.colliderB.events.emit(
         'precollision',
-        new PreCollisionEvent(contact.colliderB, contact.colliderA, Side.getOpposite(side), contact.mtv.negate())
+        new PreCollisionEvent(contact.colliderB, contact.colliderA, Side.getOpposite(side), contact.mtv.negate(), contact)
       );
       contact.colliderB.events.emit(
         'beforecollisionresolve',
@@ -140,7 +144,7 @@ export class RealisticSolver implements CollisionSolver {
 
     // Warm contacts with accumulated impulse
     // Useful for tall stacks
-    if (Physics.warmStart) {
+    if (this.config.warmStart) {
       this.warmStart(contacts);
     } else {
       for (const contact of contacts) {
@@ -171,14 +175,17 @@ export class RealisticSolver implements CollisionSolver {
 
       // Publish collision events on both participants
       const side = Side.fromDirection(contact.mtv);
-      contact.colliderA.events.emit('postcollision', new PostCollisionEvent(contact.colliderA, contact.colliderB, side, contact.mtv));
+      contact.colliderA.events.emit(
+        'postcollision',
+        new PostCollisionEvent(contact.colliderA, contact.colliderB, side, contact.mtv, contact)
+      );
       contact.colliderA.events.emit(
         'aftercollisionresolve',
         new CollisionPostSolveEvent(contact.colliderA, contact.colliderB, side, contact.mtv, contact) as any
       );
       contact.colliderB.events.emit(
         'postcollision',
-        new PostCollisionEvent(contact.colliderB, contact.colliderA, Side.getOpposite(side), contact.mtv.negate())
+        new PostCollisionEvent(contact.colliderB, contact.colliderA, Side.getOpposite(side), contact.mtv.negate(), contact)
       );
       contact.colliderB.events.emit(
         'aftercollisionresolve',
@@ -204,7 +211,7 @@ export class RealisticSolver implements CollisionSolver {
       if (bodyA && bodyB) {
         const contactPoints = this.idToContactConstraint.get(contact.id) ?? [];
         for (const point of contactPoints) {
-          if (Physics.warmStart) {
+          if (this.config.warmStart) {
             const normalImpulse = contact.normal.scale(point.normalImpulse);
             const tangentImpulse = contact.tangent.scale(point.tangentImpulse);
             const impulse = normalImpulse.add(tangentImpulse);
@@ -225,7 +232,7 @@ export class RealisticSolver implements CollisionSolver {
    * @param contacts
    */
   solvePosition(contacts: CollisionContact[]) {
-    for (let i = 0; i < Physics.positionIterations; i++) {
+    for (let i = 0; i < this.config.positionIterations; i++) {
       for (const contact of contacts) {
         const bodyA = contact.colliderA.owner?.get(BodyComponent);
         const bodyB = contact.colliderB.owner?.get(BodyComponent);
@@ -241,9 +248,9 @@ export class RealisticSolver implements CollisionSolver {
             const normal = contact.normal;
             const separation = CollisionJumpTable.FindContactSeparation(contact, point.local);
 
-            const steeringConstant = Physics.steeringFactor; //0.2;
+            const steeringConstant = this.config.steeringFactor; //0.2;
             const maxCorrection = -5;
-            const slop = Physics.slop; //1;
+            const slop = this.config.slop; //1;
 
             // Clamp to avoid over-correction
             // Remember that we are shooting for 0 overlap in the end
@@ -289,7 +296,7 @@ export class RealisticSolver implements CollisionSolver {
   }
 
   solveVelocity(contacts: CollisionContact[]) {
-    for (let i = 0; i < Physics.velocityIterations; i++) {
+    for (let i = 0; i < this.config.velocityIterations; i++) {
       for (const contact of contacts) {
         const bodyA = contact.colliderA.owner?.get(BodyComponent);
         const bodyB = contact.colliderB.owner?.get(BodyComponent);

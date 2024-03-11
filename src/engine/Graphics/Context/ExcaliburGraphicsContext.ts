@@ -1,18 +1,125 @@
 import { Vector } from '../../Math/vector';
 import { Color } from '../../Color';
-import { ScreenDimension } from '../../Screen';
+import { Resolution } from '../../Screen';
 import { PostProcessor } from '../PostProcessor/PostProcessor';
 import { AffineMatrix } from '../../Math/affine-matrix';
 import { Material, MaterialOptions } from './material';
+import { ImageFiltering } from '../Filtering';
 
 export type HTMLImageSource = HTMLImageElement | HTMLCanvasElement;
 
+export interface AntialiasOptions {
+  /**
+   * Turns on the special pixel art sampler in excalibur's image shader for sub pixel
+   * anti-aliasing
+   *
+   * Default false
+   */
+  pixelArtSampler?: boolean;
+  /**
+   * Configures the webgl's getContext('webgl2', {antialias: true | false}) or configures
+   * Canvas2D imageSmoothing = true;
+   *
+   * **Note** this option is incompatible with `multiSampleAntialiasing`
+   *
+   * Default false
+   */
+  nativeContextAntialiasing?: boolean;
+  /**
+   * Configures the internal render buffer multi-sampling settings
+   *
+   * Default true, with max samples that the platform supports
+   */
+  multiSampleAntialiasing?: boolean | {
+    /**
+     * Optionally specify number of samples (will be clamped to the max the platform supports)
+     *
+     * Default most platforms are 16 samples
+     */
+    samples: number;
+  };
+  /**
+   * Sets the default image filtering for excalibur
+   *
+   * Default [[ImageFiltering.Blended]]
+   */
+  filtering?: ImageFiltering;
+  /**
+   * Sets the canvas image rendering CSS style
+   *
+   * Default 'auto'
+   */
+  canvasImageRendering?: 'pixelated' | 'auto';
+}
+
+export const DefaultAntialiasOptions: Required<AntialiasOptions> = {
+  pixelArtSampler: false,
+  nativeContextAntialiasing: false,
+  multiSampleAntialiasing: true,
+  filtering: ImageFiltering.Blended,
+  canvasImageRendering: 'auto'
+};
+
+export const DefaultPixelArtOptions: Required<AntialiasOptions> = {
+  pixelArtSampler: true,
+  nativeContextAntialiasing: false,
+  multiSampleAntialiasing: true,
+  filtering: ImageFiltering.Blended,
+  canvasImageRendering: 'auto'
+};
+
 export interface ExcaliburGraphicsContextOptions {
+  /**
+   * Target existing html canvas element
+   */
   canvasElement: HTMLCanvasElement;
-  smoothing?: boolean;
+  /**
+   * Enables antialiasing on the canvas context (smooths pixels with default canvas sampling)
+   */
+  antialiasing?: boolean;
+  /**
+   * Enable the sub pixel antialiasing pixel art sampler for nice looking pixel art
+   */
+  pixelArtSampler?: boolean;
+  /**
+   * Enable canvas transparency
+   */
   enableTransparency?: boolean;
+  /**
+   * Enable or disable multi-sample antialiasing in the internal render buffer.
+   *
+   * If true the max number of samples will be used
+   *
+   * By default enabled
+   */
+  multiSampleAntialiasing?: boolean | {
+    /**
+     * Specify number of samples to use during the multi sample anti-alias, if not specified the max will be used.
+     * Limited by the hardware (usually 16)
+     */
+    samples: number
+  },
+  /**
+   * UV padding in pixels to use in the internal image rendering
+   *
+   * Recommended .25 - .5 of a pixel
+   */
+  uvPadding?: number;
+  /**
+   * Hint the power preference to the graphics context
+   */
+  powerPreference?: 'default' | 'high-performance' | 'low-power';
+  /**
+   * Snaps the pixel to an integer value (floor)
+   */
   snapToPixel?: boolean;
+  /**
+   * Current clearing color of the context
+   */
   backgroundColor?: Color;
+  /**
+   * Feature flag that enables draw sorting will removed in v0.29
+   */
   useDrawSorting?: boolean;
 }
 
@@ -23,11 +130,11 @@ export interface ExcaliburGraphicsContextState {
   material: Material;
 }
 export interface LineGraphicsOptions {
-  color: Color;
+  color?: Color;
 }
 
 export interface RectGraphicsOptions {
-  color: Color;
+  color?: Color;
 }
 
 export interface PointGraphicsOptions {
@@ -95,7 +202,7 @@ export interface ExcaliburGraphicsContext {
   snapToPixel: boolean;
 
   /**
-   * Enable smoothed drawing (also known as anti-aliasing), by default false
+   * Enable smoothed drawing (also known as anti-aliasing), by default true
    */
   smoothing: boolean;
 
@@ -133,7 +240,7 @@ export interface ExcaliburGraphicsContext {
   /**
    * Update the context with the current viewport dimensions (used in resizing)
    */
-  updateViewport(resolution: ScreenDimension): void;
+  updateViewport(resolution: Resolution): void;
 
   /**
    * Access the debug drawing api
@@ -264,7 +371,7 @@ export interface ExcaliburGraphicsContext {
    * @param options
    * @returns
    */
-  createMaterial(options: MaterialOptions): Material;
+  createMaterial(options: Omit<MaterialOptions, 'graphicsContext'>): Material;
 
   /**
    * Clears the screen with the current background color
@@ -278,5 +385,7 @@ export interface ExcaliburGraphicsContext {
 
   beginDrawLifecycle(): void;
 
-  endDrawLifecycle(): void
+  endDrawLifecycle(): void;
+
+  dispose(): void;
 }

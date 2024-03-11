@@ -1,6 +1,5 @@
 import { ExcaliburMatchers, ensureImagesLoaded, ExcaliburAsyncMatchers } from 'excalibur-jasmine';
 import * as ex from '@excalibur';
-import { Mocks } from './util/Mocks';
 import { TestUtils } from './util/TestUtils';
 import { ScreenElement } from '@excalibur';
 
@@ -15,7 +14,7 @@ describe('A ScreenElement', () => {
     jasmine.addAsyncMatchers(ExcaliburAsyncMatchers);
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     screenElement = new ex.ScreenElement({
       pos: new ex.Vector(50, 50),
       width: 100,
@@ -28,7 +27,8 @@ describe('A ScreenElement', () => {
     scene = new ex.Scene();
     engine.addScene('test', scene);
     engine.goToScene('test');
-    engine.start();
+
+    await TestUtils.runToReady(engine);
 
     clock = engine.clock as ex.TestClock;
 
@@ -141,6 +141,7 @@ describe('A ScreenElement', () => {
     game.add(screenElement);
     game.currentScene.draw(game.graphicsContext, 100);
     game.graphicsContext.flush();
-    await expectAsync(TestUtils.flushWebGLCanvasTo2D(game.canvas)).toEqualImage('src/spec/images/ScreenElementSpec/emptyctor.png');
+    await expectAsync(game.canvas).toEqualImage('src/spec/images/ScreenElementSpec/emptyctor.png');
+    game.dispose();
   });
 });

@@ -100,47 +100,56 @@ export enum DisplayMode {
  */
 export class Resolution {
   /* istanbul ignore next */
-  public static get SVGA(): ScreenDimension {
+  public static get SVGA(): Resolution {
     return { width: 800, height: 600 };
   }
 
   /* istanbul ignore next */
-  public static get Standard(): ScreenDimension {
+  public static get Standard(): Resolution {
     return { width: 1920, height: 1080 };
   }
 
   /* istanbul ignore next */
-  public static get Atari2600(): ScreenDimension {
+  public static get Atari2600(): Resolution {
     return { width: 160, height: 192 };
   }
 
   /* istanbul ignore next */
-  public static get GameBoy(): ScreenDimension {
+  public static get GameBoy(): Resolution {
     return { width: 160, height: 144 };
   }
 
   /* istanbul ignore next */
-  public static get GameBoyAdvance(): ScreenDimension {
+  public static get GameBoyAdvance(): Resolution {
     return { width: 240, height: 160 };
   }
 
   /* istanbul ignore next */
-  public static get NintendoDS(): ScreenDimension {
+  public static get NintendoDS(): Resolution {
     return { width: 256, height: 192 };
   }
 
   /* istanbul ignore next */
-  public static get NES(): ScreenDimension {
+  public static get NES(): Resolution {
     return { width: 256, height: 224 };
   }
 
   /* istanbul ignore next */
-  public static get SNES(): ScreenDimension {
+  public static get SNES(): Resolution {
     return { width: 256, height: 244 };
   }
 }
 
-export interface ScreenDimension {
+export type ViewportUnit = 'pixel' | 'percent';
+
+export interface Resolution {
+  width: number;
+  height: number;
+}
+
+export interface ViewportDimension {
+  widthUnit?: ViewportUnit;
+  heightUnit?: ViewportUnit;
   width: number;
   height: number;
 }
@@ -164,6 +173,11 @@ export interface ScreenOptions {
    * Optionally set antialiasing, defaults to true. If set to true, images will be smoothed
    */
   antialiasing?: boolean;
+
+  /**
+   * Optionally set the image rendering CSS hint on the canvas element, default is auto
+   */
+  canvasImageRendering?: 'auto' | 'pixelated';
   /**
    * Optionally override the pixel ratio to use for the screen, otherwise calculated automatically from the browser
    */
@@ -173,11 +187,11 @@ export interface ScreenOptions {
    * resolution will be the same as the viewport. Resolution will be overridden by [[DisplayMode.FillContainer]] and
    * [[DisplayMode.FillScreen]].
    */
-  resolution?: ScreenDimension;
+  resolution?: Resolution;
   /**
    * Visual viewport size in css pixel, if resolution is not specified it will be the same as the viewport
    */
-  viewport: ScreenDimension;
+  viewport: ViewportDimension;
   /**
    * Set the display mode of the screen, by default DisplayMode.Fixed.
    */
@@ -191,11 +205,11 @@ export interface ScreenResizeEvent {
   /**
    * Current viewport in css pixels of the screen
    */
-  viewport: ScreenDimension;
+  viewport: ViewportDimension;
   /**
    * Current resolution in world pixels of the screen
    */
-  resolution: ScreenDimension;
+  resolution: Resolution;
 }
 
 /**
@@ -253,13 +267,14 @@ export class Screen {
   public events = new EventEmitter<ScreenEvents>();
   private _canvas: HTMLCanvasElement;
   private _antialiasing: boolean = true;
-  private _contentResolution: ScreenDimension;
+  private _canvasImageRendering: 'auto' | 'pixelated' = 'auto';
+  private _contentResolution: Resolution;
   private _browser: BrowserEvents;
   private _camera: Camera;
-  private _resolution: ScreenDimension;
-  private _resolutionStack: ScreenDimension[] = [];
-  private _viewport: ScreenDimension;
-  private _viewportStack: ScreenDimension[] = [];
+  private _resolution: Resolution;
+  private _resolutionStack: Resolution[] = [];
+  private _viewport: ViewportDimension;
+  private _viewportStack: ViewportDimension[] = [];
   private _pixelRatioOverride: number | null = null;
   private _displayMode: DisplayMode;
   private _isFullScreen = false;
@@ -276,6 +291,7 @@ export class Screen {
     this._canvas = options.canvas;
     this.graphicsContext = options.context;
     this._antialiasing = options.antialiasing ?? this._antialiasing;
+    this._canvasImageRendering = options.canvasImageRendering ?? this._canvasImageRendering;
     this._browser = options.browser;
     this._pixelRatioOverride = options.pixelRatio;
 
@@ -306,7 +322,9 @@ export class Screen {
     if (!this._isDisposed) {
       // Clean up handlers
       this._isDisposed = true;
+      this.events.clear();
       this._browser.window.off('resize', this._resizeHandler);
+      this._browser.window.clear();
       if (this._resizeObserver) {
         this._resizeObserver.disconnect();
       }
@@ -318,10 +336,14 @@ export class Screen {
         this._mediaQueryList.removeListener(this._pixelRatioChangeHandler);
       }
       this._canvas.removeEventListener('fullscreenchange', this._fullscreenChangeHandler);
+      this._canvas = null;
     }
   }
 
   private _fullscreenChangeHandler = () => {
+    if (this._isDisposed) {
+      return;
+    }
     this._isFullScreen = !this._isFullScreen;
     this._logger.debug('Fullscreen Change', this._isFullScreen);
     this.events.emit('fullscreen', {
@@ -330,6 +352,9 @@ export class Screen {
   };
 
   private _pixelRatioChangeHandler = () => {
+    if (this._isDisposed) {
+      return;
+    }
     this._logger.debug('Pixel Ratio Change', window.devicePixelRatio);
     this._listenForPixelRatio();
     this._devicePixelRatio = this._calculateDevicePixelRatio();
@@ -340,6 +365,9 @@ export class Screen {
   };
 
   private _resizeHandler = () => {
+    if (this._isDisposed) {
+      return;
+    }
     const parent = this.parent;
     this._logger.debug('View port resized');
     this._setResolutionAndViewportByDisplayMode(parent);
@@ -364,12 +392,28 @@ export class Screen {
   // Asking the window.devicePixelRatio is expensive we do it once
   private _devicePixelRatio = this._calculateDevicePixelRatio();
 
+  /**
+   * Returns the computed pixel ratio, first using any override, then the device pixel ratio
+   */
   public get pixelRatio(): number {
     if (this._pixelRatioOverride) {
       return this._pixelRatioOverride;
     }
 
     return this._devicePixelRatio;
+  }
+
+  /**
+   * Get or set the pixel ratio override
+   *
+   * You will need to call applyResolutionAndViewport() affect change on the screen
+   */
+  public get pixelRatioOverride(): number | undefined {
+    return this._pixelRatioOverride;
+  }
+
+  public set pixelRatioOverride(value: number | undefined) {
+    this._pixelRatioOverride = value;
   }
 
   public get isHiDpi() {
@@ -396,22 +440,25 @@ export class Screen {
     }
   }
 
-  public get resolution(): ScreenDimension {
+  public get resolution(): Resolution {
     return this._resolution;
   }
 
-  public set resolution(resolution: ScreenDimension) {
+  public set resolution(resolution: Resolution) {
     this._resolution = resolution;
   }
 
-  public get viewport(): ScreenDimension {
+  /**
+   * Returns screen dimensions in pixels or percentage
+   */
+  public get viewport(): ViewportDimension {
     if (this._viewport) {
       return this._viewport;
     }
     return this._resolution;
   }
 
-  public set viewport(viewport: ScreenDimension) {
+  public set viewport(viewport: ViewportDimension) {
     this._viewport = viewport;
   }
 
@@ -439,40 +486,60 @@ export class Screen {
     this.viewport = { ...this.viewport };
   }
 
-  public peekViewport(): ScreenDimension {
+  public peekViewport(): ViewportDimension {
     return this._viewportStack[this._viewportStack.length - 1];
   }
 
-  public peekResolution(): ScreenDimension {
+  public peekResolution(): Resolution {
     return this._resolutionStack[this._resolutionStack.length - 1];
   }
 
   public popResolutionAndViewport() {
-    this.resolution = this._resolutionStack.pop();
-    this.viewport = this._viewportStack.pop();
+    if (this._resolutionStack.length && this._viewportStack.length) {
+      this.resolution = this._resolutionStack.pop();
+      this.viewport = this._viewportStack.pop();
+    }
   }
 
-  private _alreadyWarned = false;
-  public applyResolutionAndViewport() {
-    this._canvas.width = this.scaledWidth;
-    this._canvas.height = this.scaledHeight;
 
+
+  public applyResolutionAndViewport() {
     if (this.graphicsContext instanceof ExcaliburGraphicsContextWebGL) {
-      const supported = this.graphicsContext.checkIfResolutionSupported({
+      const scaledResolutionSupported = this.graphicsContext.checkIfResolutionSupported({
         width: this.scaledWidth,
         height: this.scaledHeight
       });
-      if (!supported && !this._alreadyWarned) {
-        this._alreadyWarned = true; // warn once
-        this._logger.warn(
+      if (!scaledResolutionSupported) {
+        this._logger.warnOnce(
           `The currently configured resolution (${this.resolution.width}x${this.resolution.height}) and pixel ratio (${this.pixelRatio})` +
           ' are too large for the platform WebGL implementation, this may work but cause WebGL rendering to behave oddly.' +
           ' Try reducing the resolution or disabling Hi DPI scaling to avoid this' +
           ' (read more here https://excaliburjs.com/docs/screens#understanding-viewport--resolution).');
+
+        // Attempt to recover if the user hasn't configured a specific ratio for up scaling
+        if (!this.pixelRatioOverride) {
+          let currentPixelRatio = Math.max(1, this.pixelRatio - .5);
+          let newResolutionSupported = false;
+          while (currentPixelRatio > 1 && !newResolutionSupported) {
+            currentPixelRatio = Math.max(1, currentPixelRatio - .5);
+            const width = this._resolution.width * currentPixelRatio;
+            const height = this._resolution.height * currentPixelRatio;
+            newResolutionSupported = this.graphicsContext.checkIfResolutionSupported({ width, height });
+          }
+          this.pixelRatioOverride = currentPixelRatio;
+          this._logger.warnOnce(
+            'Scaled resolution too big attempted recovery!' +
+            ` Pixel ratio was automatically reduced to (${this.pixelRatio}) to avoid 4k texture limit.` +
+            ' Setting `ex.Engine({pixelRatio: ...}) will override any automatic recalculation, do so at your own risk.` ' +
+            ' (read more here https://excaliburjs.com/docs/screens#understanding-viewport--resolution).');
+        }
       }
     }
 
-    if (this._antialiasing) {
+    this._canvas.width = this.scaledWidth;
+    this._canvas.height = this.scaledHeight;
+
+    if (this._canvasImageRendering === 'auto') {
       this._canvas.style.imageRendering = 'auto';
     } else {
       this._canvas.style.imageRendering = 'pixelated';
@@ -482,8 +549,12 @@ export class Screen {
         this._canvas.style.imageRendering = 'crisp-edges';
       }
     }
-    this._canvas.style.width = this.viewport.width + 'px';
-    this._canvas.style.height = this.viewport.height + 'px';
+
+    const widthUnit = this.viewport.widthUnit === 'percent' ? '%' : 'px';
+    const heightUnit = this.viewport.heightUnit === 'percent' ? '%' : 'px';
+
+    this._canvas.style.width = this.viewport.width + widthUnit;
+    this._canvas.style.height = this.viewport.height + heightUnit;
 
     // After messing with the canvas width/height the graphics context is invalidated and needs to have some properties reset
     this.graphicsContext.updateViewport(this.resolution);
@@ -539,12 +610,20 @@ export class Screen {
     return document.exitFullscreen();
   }
 
+  private _viewportToPixels(viewport: ViewportDimension) {
+    return {
+      width: viewport.widthUnit === 'percent' ? this.canvas.offsetWidth : viewport.width,
+      height: viewport.heightUnit === 'percent' ? this.canvas.offsetHeight : viewport.height
+    } satisfies ViewportDimension;
+  }
+
   /**
    * Takes a coordinate in normal html page space, for example from a pointer move event, and translates it to
    * Excalibur screen space.
    *
    * Excalibur screen space starts at the top left (0, 0) corner of the viewport, and extends to the
-   * bottom right corner (resolutionX, resolutionY)
+   * bottom right corner (resolutionX, resolutionY). When using *AndFill suffixed display modes screen space
+   * (0, 0) is the top left of the safe content area bounding box not the viewport.
    * @param point
    */
   public pageToScreenCoordinates(point: Vector): Vector {
@@ -556,24 +635,30 @@ export class Screen {
       newY -= getPosition(this._canvas).y;
     }
 
+    const viewport = this._viewportToPixels(this.viewport);
+
     // if fullscreen api on it centers with black bars
     // we need to adjust the screen to world coordinates in this case
     if (this._isFullScreen) {
       if (window.innerWidth / this.aspectRatio < window.innerHeight) {
         const screenHeight = window.innerWidth / this.aspectRatio;
         const screenMarginY = (window.innerHeight - screenHeight) / 2;
-        newY = ((newY - screenMarginY) / screenHeight) * this.viewport.height;
-        newX = (newX / window.innerWidth) * this.viewport.width;
+        newY = ((newY - screenMarginY) / screenHeight) * viewport.height;
+        newX = (newX / window.innerWidth) * viewport.width;
       } else {
         const screenWidth = window.innerHeight * this.aspectRatio;
         const screenMarginX = (window.innerWidth - screenWidth) / 2;
-        newX = ((newX - screenMarginX) / screenWidth) * this.viewport.width;
-        newY = (newY / window.innerHeight) * this.viewport.height;
+        newX = ((newX - screenMarginX) / screenWidth) * viewport.width;
+        newY = (newY / window.innerHeight) * viewport.height;
       }
     }
 
-    newX = (newX / this.viewport.width) * this.resolution.width;
-    newY = (newY / this.viewport.height) * this.resolution.height;
+    newX = (newX / viewport.width) * this.resolution.width;
+    newY = (newY / viewport.height) * this.resolution.height;
+
+    // offset by content area
+    newX = newX - this.contentArea.left;
+    newY = newY - this.contentArea.top;
 
     return new Vector(newX, newY);
   }
@@ -590,20 +675,24 @@ export class Screen {
     let newX = point.x;
     let newY = point.y;
 
-    newX = (newX / this.resolution.width) * this.viewport.width;
-    newY = (newY / this.resolution.height) * this.viewport.height;
+    // no need to offset by content area, drawing is already offset by this
+
+    const viewport = this._viewportToPixels(this.viewport);
+
+    newX = (newX / this.resolution.width) * viewport.width;
+    newY = (newY / this.resolution.height) * viewport.height;
 
     if (this._isFullScreen) {
       if (window.innerWidth / this.aspectRatio < window.innerHeight) {
         const screenHeight = window.innerWidth / this.aspectRatio;
         const screenMarginY = (window.innerHeight - screenHeight) / 2;
-        newY = (newY / this.viewport.height) * screenHeight + screenMarginY;
-        newX = (newX / this.viewport.width) * window.innerWidth;
+        newY = (newY / viewport.height) * screenHeight + screenMarginY;
+        newX = (newX / viewport.width) * window.innerWidth;
       } else {
         const screenWidth = window.innerHeight * this.aspectRatio;
         const screenMarginX = (window.innerWidth - screenWidth) / 2;
-        newX = (newX / this.viewport.width) * screenWidth + screenMarginX;
-        newY = (newY / this.viewport.height) * window.innerHeight;
+        newX = (newX / viewport.width) * screenWidth + screenMarginX;
+        newY = (newY / viewport.height) * window.innerHeight;
       }
     }
 
@@ -623,6 +712,9 @@ export class Screen {
    * @param point  Screen coordinate to convert
    */
   public screenToWorldCoordinates(point: Vector): Vector {
+    // offset by content area
+    point = point.add(vec(this.contentArea.left, this.contentArea.top));
+
     // the only difference between screen & world is the camera transform
     if (this._camera) {
       return this._camera.inverse.multiply(point);
@@ -761,6 +853,16 @@ export class Screen {
     return this._contentArea;
   }
 
+  /**
+   * Returns the unsafe area in screen space, this is the full screen and some space may not be onscreen.
+   */
+  public get unsafeArea(): BoundingBox {
+    return this._unsafeArea;
+  }
+
+  private _contentArea: BoundingBox = new BoundingBox();
+  private _unsafeArea: BoundingBox = new BoundingBox();
+
   private _computeFit() {
     document.body.style.margin = '0px';
     document.body.style.overflow = 'hidden';
@@ -780,30 +882,47 @@ export class Screen {
       height: adjustedHeight
     };
     this._contentArea = BoundingBox.fromDimension(this.resolution.width, this.resolution.height, Vector.Zero);
+    this._unsafeArea = BoundingBox.fromDimension(this.resolution.width, this.resolution.height, Vector.Zero);
+    this.events.emit('resize', {
+      resolution: this.resolution,
+      viewport: this.viewport
+    } satisfies ScreenResizeEvent);
   }
 
-  private _contentArea: BoundingBox = new BoundingBox();
   private _computeFitScreenAndFill() {
     document.body.style.margin = '0px';
     document.body.style.overflow = 'hidden';
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     this._computeFitAndFill(vw, vh);
+    this.events.emit('resize', {
+      resolution: this.resolution,
+      viewport: this.viewport
+    } satisfies ScreenResizeEvent);
   }
 
 
 
   private _computeFitContainerAndFill() {
-    document.body.style.margin = '0px';
-    document.body.style.overflow = 'hidden';
-    const parent = this.canvas.parentElement;
-    const vw = parent.clientWidth;
-    const vh = parent.clientHeight;
-    this._computeFitAndFill(vw, vh);
+    this.canvas.style.width = '100%';
+    this.canvas.style.height = '100%';
+
+    this._computeFitAndFill(
+      this.canvas.offsetWidth,
+      this.canvas.offsetHeight, {
+        width: 100,
+        widthUnit: 'percent',
+        height: 100,
+        heightUnit: 'percent'
+      });
+    this.events.emit('resize', {
+      resolution: this.resolution,
+      viewport: this.viewport
+    } satisfies ScreenResizeEvent);
   }
 
-  private _computeFitAndFill(vw: number, vh: number) {
-    this.viewport = {
+  private _computeFitAndFill(vw: number, vh: number, viewport?: ViewportDimension) {
+    this.viewport = viewport ?? {
       width: vw,
       height: vh
     };
@@ -821,6 +940,12 @@ export class Screen {
         right: this._contentResolution.width,
         bottom: this.resolution.height - clip
       });
+      this._unsafeArea = new BoundingBox({
+        top: -clip,
+        left: 0,
+        right: this._contentResolution.width,
+        bottom: this.resolution.height + clip
+      });
     } else {
       this.resolution = {
         width: vh *  this._contentResolution.height / vh * vw / vh,
@@ -831,6 +956,12 @@ export class Screen {
         top: 0,
         left: clip,
         right: this.resolution.width - clip,
+        bottom: this._contentResolution.height
+      });
+      this._unsafeArea = new BoundingBox({
+        top: 0,
+        left: -clip,
+        right: this.resolution.width + clip,
         bottom: this._contentResolution.height
       });
     }
@@ -845,20 +976,25 @@ export class Screen {
     const vh = window.innerHeight;
 
     this._computeFitAndZoom(vw, vh);
+    this.events.emit('resize', {
+      resolution: this.resolution,
+      viewport: this.viewport
+    } satisfies ScreenResizeEvent);
   }
 
   private _computeFitContainerAndZoom() {
-    document.body.style.margin = '0px';
-    document.body.style.overflow = 'hidden';
-    this.canvas.style.position = 'absolute';
+    this.canvas.style.width = '100%';
+    this.canvas.style.height = '100%';
+    this.canvas.style.position = 'relative';
     const parent = this.canvas.parentElement;
-    parent.style.position = 'relative';
     parent.style.overflow = 'hidden';
-
-    const vw = parent.clientWidth;
-    const vh = parent.clientHeight;
+    const { offsetWidth: vw, offsetHeight: vh } = this.canvas;
 
     this._computeFitAndZoom(vw, vh);
+    this.events.emit('resize', {
+      resolution: this.resolution,
+      viewport: this.viewport
+    } satisfies ScreenResizeEvent);
   }
 
   private _computeFitAndZoom(vw: number, vh: number) {
@@ -923,20 +1059,32 @@ export class Screen {
     const aspect = this.aspectRatio;
     let adjustedWidth = 0;
     let adjustedHeight = 0;
+    let widthUnit: ViewportUnit = 'pixel';
+    let heightUnit: ViewportUnit = 'pixel';
     const parent = this.canvas.parentElement;
     if (parent.clientWidth / aspect < parent.clientHeight) {
-      adjustedWidth = parent.clientWidth;
-      adjustedHeight = parent.clientWidth / aspect;
+      this.canvas.style.width = '100%';
+      adjustedWidth = 100;
+      widthUnit = 'percent';
+      adjustedHeight = this.canvas.offsetWidth / aspect;
     } else {
-      adjustedWidth = parent.clientHeight * aspect;
-      adjustedHeight = parent.clientHeight;
+      this.canvas.style.height = '100%';
+      adjustedHeight = 100;
+      heightUnit = 'percent';
+      adjustedWidth = this.canvas.offsetHeight * aspect;
     }
 
     this.viewport = {
       width: adjustedWidth,
-      height: adjustedHeight
+      widthUnit,
+      height: adjustedHeight,
+      heightUnit
     };
     this._contentArea = BoundingBox.fromDimension(this.resolution.width, this.resolution.height, Vector.Zero);
+    this.events.emit('resize', {
+      resolution: this.resolution,
+      viewport: this.viewport
+    } satisfies ScreenResizeEvent);
   }
 
   private _applyDisplayMode() {
@@ -959,12 +1107,18 @@ export class Screen {
    */
   private _setResolutionAndViewportByDisplayMode(parent: HTMLElement | Window) {
     if (this.displayMode === DisplayMode.FillContainer) {
-      this.resolution = {
-        width: (<HTMLElement> parent).clientWidth,
-        height: (<HTMLElement> parent).clientHeight
+      this.canvas.style.width = '100%';
+      this.canvas.style.height = '100%';
+      this.viewport = {
+        width: 100,
+        widthUnit: 'percent',
+        height: 100,
+        heightUnit: 'percent'
       };
-
-      this.viewport = this.resolution;
+      this.resolution = {
+        width: this.canvas.offsetWidth,
+        height: this.canvas.offsetHeight
+      };
     }
 
     if (this.displayMode === DisplayMode.FillScreen) {

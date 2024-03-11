@@ -1,11 +1,6 @@
 // This import site is deprecated
 // TODO remove deprecated exports in v0.29.0
 
-/**
- * @module
- * Provides support for mice, keyboards, and controllers.
- */
-
 export {
   /**
    * @deprecated ex.Input.WheelEvent import site will be removed in v0.29.0, use ex.WheelEvent
@@ -48,12 +43,6 @@ export {
   CapturePointerConfig
 } from './CapturePointerConfig';
 
-export {
-  /**
-   * @deprecated ex.Input.EngineInput import site will be removed in v0.29.0, use ex.EngineInput
-   */
-  EngineInput
-} from './EngineInput';
 
 export {
   /**

@@ -6,7 +6,7 @@
 [![npm downloads](https://img.shields.io/npm/dt/excalibur.svg)](https://www.npmjs.com/package/excalibur)
 [![NuGet version](https://img.shields.io/nuget/v/Excalibur.svg)](https://www.nuget.org/packages/Excalibur/)
 
-![Sweep Stacks](http://excaliburjs.com/assets/images/homepage-xp.png)
+![Sweep Stacks](assets/homepage-xp.png)
 
 Excalibur is a free game engine written in TypeScript for making 2D games in HTML5 canvas. Our goal is to make it easier for you to create 2D HTML/JS games, whether you're new to game development or you're an experienced game developer. We take care of all of the boilerplate engine code, cross-platform targeting (using [browserstack](http://browserstack.com/) 😎), and more! Use as much or as little as you need!
 
@@ -14,7 +14,7 @@ Excalibur is an open source project licensed under the 2-clause BSD license (thi
 
 # Get Started
 
-Our user documentation is at https://excaliburjs.com/docs (and you can contribute to the docs at https://github.com/excaliburjs/excaliburjs.github.io)
+Our user documentation is at https://excaliburjs.com/docs (and you can contribute to the docs at https://github.com/excaliburjs/Excalibur/tree/main/site)
 
 - Follow our [Installation](https://excaliburjs.com/docs/installation) guide to learn how to install Excalibur.
 - Follow our [Getting Started](https://excaliburjs.com/docs/getting-started) guide if you're looking to get started.
@@ -25,13 +25,13 @@ Our user documentation is at https://excaliburjs.com/docs (and you can contribut
 
 # API Reference
 
-Visit the [API Reference](https://excaliburjs.com/docs/api/edge) section for fully-annotated documentation of the API.
+Visit the [API Reference](https://excaliburjs.com/docs/) section for fully-annotated documentation of the API.
 
 # Questions
 
 - :question: Ask us anything in the [GitHub Discussions area](https://github.com/excaliburjs/Excalibur/discussions).
 - :bug: If you find a bug, report it on the [GitHub issues page](https://github.com/excaliburjs/Excalibur/issues) (please review our [guidelines for reporting bugs](https://github.com/excaliburjs/Excalibur/blob/main/.github/CONTRIBUTING.md#reporting-bugs)).
-- :mega: You can also follow us on Twitter [@excaliburjs](http://twitter.com/excaliburjs) or [read the blog](http://blog.excaliburjs.com).
+- :mega: You can also follow us on Twitter [@excaliburjs](http://twitter.com/excaliburjs) or [read the blog](https://excaliburjs.com/blog).
 
 # Samples
 
@@ -41,7 +41,7 @@ Compiled examples can be found [in the Excalibur Samples collection](http://exca
 
 Please read our [Contributing Guidelines](.github/CONTRIBUTING.md) and our [Code of Conduct](.github/CODE_OF_CONDUCT.md). Whether you've spotted a bug, have a question, or think of a new feature, we thank you for your help!
 
-## Mac
+## Mac/Linux
 
 Prerequisites
 * Docker for Mac https://docs.docker.com/desktop/mac/install/
@@ -51,7 +51,7 @@ Prerequisites
 
 # Writing Documentation
 
-We love when people help improve our documentation. You can contribute to the docs in [this repository](https://github.com/excaliburjs/excaliburjs.github.io).
+We love when people help improve our documentation. You can contribute to the docs in this repo under [`/site`](https://github.com/excaliburjs/Excalibur/tree/main/site)
 
 ## Environment Setup
 
@@ -66,8 +66,7 @@ Excalibur is committed to supporting the latest 2 versions of popular desktop an
 
 ### Prerequisites
 
-- **Required:** [Node.js](https://nodejs.org/) 14.x & npm 6.x
-- _Recommended:_ [Prettier plugin for VS Code](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode)
+- **Required:** [Node.js](https://nodejs.org/) LTS Version
 - _Recommended:_ [ESLint plugin for VS Code](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint)
 
 After cloning the repository, run:
@@ -95,9 +94,6 @@ npm run test
 # Start Storybook-based sandbox
 # Used for creating interactive visual tests and examples for docs
 npm run sandbox
-
-# Compile API docs
-npm run apidocs
 
 # Build a nuget package and specify a version
 npm run nuget -- 1.1.1

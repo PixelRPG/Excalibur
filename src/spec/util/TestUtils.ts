@@ -16,9 +16,11 @@ export namespace TestUtils {
       suppressHiDPIScaling: true,
       suppressPlayButton: true,
       snapToPixel: false,
+      antialiasing: false,
       displayMode: ex.DisplayMode.Fixed,
       ...options
     };
+    ex.Debug.clear();
     ex.Flags._reset();
     ex.Flags.enable('suppress-obsolete-message');
     flags.forEach(f => ex.Flags.enable(f));
@@ -39,12 +41,14 @@ export namespace TestUtils {
   }
 
   /**
-   *
+   * Waits for the internal loader state to be ready by ticking the test clock
    */
-  export async function runToReady(engine: ex.Engine, loader?: ex.Loader) {
+  export async function runToReady(engine: ex.Engine, loader?: ex.DefaultLoader) {
+    if (!(engine.clock instanceof ex.TestClock)) {
+      throw Error('Engine does not have TestClock enabled');
+    }
     const clock = engine.clock as ex.TestClock;
     const start = engine.start(loader);
-    // If loader
     if (loader) {
       await loader.areResourcesLoaded();
       clock.step(200);
@@ -52,6 +56,17 @@ export namespace TestUtils {
         clock.step(500);
       });
       await engine.isReady();
+    }
+    await start;
+  }
+
+  /**
+   *
+   */
+  export async function flushMicrotasks(clock: ex.TestClock, times: number) {
+    for ( let i = 0; i < times; i++) {
+      clock.step(0);
+      await Promise.resolve();
     }
   }
 
@@ -65,5 +80,27 @@ export namespace TestUtils {
     const ctx = canvas.getContext('2d');
     ctx.drawImage(source, 0, 0);
     return canvas;
+  }
+
+  /**
+   *
+   */
+  export async function runOnWindows(ctx: () => Promise<any>): Promise<boolean> {
+    if (navigator.platform === 'Win32' || navigator.platform === 'Win64') {
+      await ctx();
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   *
+   */
+  export async function runOnLinux(ctx: () => Promise<any>): Promise<boolean> {
+    if (navigator.platform.includes('Linux')) {
+      await ctx();
+      return true;
+    }
+    return false;
   }
 }

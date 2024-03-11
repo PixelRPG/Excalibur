@@ -1,6 +1,5 @@
 import { Vector } from '../Math/vector';
 import { CollisionType } from './CollisionType';
-import { Physics } from './Physics';
 import { Clonable } from '../Interfaces/Clonable';
 import { TransformComponent } from '../EntityComponentSystem/Components/TransformComponent';
 import { MotionComponent } from '../EntityComponentSystem/Components/MotionComponent';
@@ -11,11 +10,14 @@ import { clamp } from '../Math/util';
 import { ColliderComponent } from './ColliderComponent';
 import { Transform } from '../Math/transform';
 import { EventEmitter } from '../EventEmitter';
+import { DefaultPhysicsConfig, PhysicsConfig } from './PhysicsConfig';
+import { DeepRequired } from '../Util/Required';
 
 export interface BodyComponentOptions {
   type?: CollisionType;
   group?: CollisionGroup;
   useGravity?: boolean;
+  config?: Pick<PhysicsConfig, 'bodies'>['bodies']
 }
 
 export enum DegreeOfFreedom {
@@ -28,14 +30,13 @@ export enum DegreeOfFreedom {
  * Body describes all the physical properties pos, vel, acc, rotation, angular velocity for the purpose of
  * of physics simulation.
  */
-export class BodyComponent extends Component<'ex.body'> implements Clonable<BodyComponent> {
-  public readonly type = 'ex.body';
+export class BodyComponent extends Component implements Clonable<BodyComponent> {
   public dependencies = [TransformComponent, MotionComponent];
   public static _ID = 0;
   public readonly id: Id<'body'> = createId('body', BodyComponent._ID++);
   public events = new EventEmitter();
 
-  private _oldTransform = new Transform();
+  public oldTransform = new Transform();
 
   /**
    * Indicates whether the old transform has been captured at least once for interpolation
@@ -48,17 +49,54 @@ export class BodyComponent extends Component<'ex.body'> implements Clonable<Body
    */
   public enableFixedUpdateInterpolate = true;
 
+  private _bodyConfig: DeepRequired<Pick<PhysicsConfig, 'bodies'>['bodies']>;
+  private static _DEFAULT_CONFIG: DeepRequired<Pick<PhysicsConfig, 'bodies'>['bodies']> = {
+    ...DefaultPhysicsConfig.bodies
+  };
+  public wakeThreshold: number;
+
   constructor(options?: BodyComponentOptions) {
     super();
     if (options) {
       this.collisionType = options.type ?? this.collisionType;
       this.group = options.group ?? this.group;
       this.useGravity = options.useGravity ?? this.useGravity;
+      this._bodyConfig = {
+        ...DefaultPhysicsConfig.bodies,
+        ...options.config
+      };
+    } else {
+      this._bodyConfig = {
+        ...DefaultPhysicsConfig.bodies
+      };
     }
+    this.updatePhysicsConfig(this._bodyConfig);
+    this._mass = BodyComponent._DEFAULT_CONFIG.defaultMass;
   }
 
   public get matrix() {
     return this.transform.get().matrix;
+  }
+
+  /**
+   * Called by excalibur to update physics config defaults if they change
+   * @param config
+   */
+  public updatePhysicsConfig(config: DeepRequired<Pick<PhysicsConfig, 'bodies'>['bodies']>) {
+    this._bodyConfig = {
+      ...DefaultPhysicsConfig.bodies,
+      ...config
+    };
+    this.canSleep = this._bodyConfig.canSleepByDefault;
+    this.sleepMotion =  this._bodyConfig.sleepEpsilon * 5;
+    this.wakeThreshold = this._bodyConfig.wakeThreshold;
+  }
+  /**
+   * Called by excalibur to update defaults
+   * @param config
+   */
+  public static updateDefaultPhysicsConfig(config: DeepRequired<Pick<PhysicsConfig, 'bodies'>['bodies']>) {
+    BodyComponent._DEFAULT_CONFIG = config;
   }
 
   /**
@@ -74,7 +112,7 @@ export class BodyComponent extends Component<'ex.body'> implements Clonable<Body
   /**
    * The amount of mass the body has
    */
-  private _mass: number = Physics.defaultMass;
+  private _mass: number;
   public get mass(): number {
     return this._mass;
   }
@@ -95,12 +133,12 @@ export class BodyComponent extends Component<'ex.body'> implements Clonable<Body
   /**
    * Amount of "motion" the body has before sleeping. If below [[Physics.sleepEpsilon]] it goes to "sleep"
    */
-  public sleepMotion: number = Physics.sleepEpsilon * 5;
+  public sleepMotion: number;
 
   /**
    * Can this body sleep, by default bodies do not sleep
    */
-  public canSleep: boolean = Physics.bodiesCanSleepByDefault;
+  public canSleep: boolean;;
 
   private _sleeping = false;
   /**
@@ -118,7 +156,7 @@ export class BodyComponent extends Component<'ex.body'> implements Clonable<Body
     this._sleeping = sleeping;
     if (!sleeping) {
       // Give it a kick to keep it from falling asleep immediately
-      this.sleepMotion = Physics.sleepEpsilon * 5;
+      this.sleepMotion = this._bodyConfig.sleepEpsilon * 5;
     } else {
       this.vel = Vector.Zero;
       this.acc = Vector.Zero;
@@ -135,10 +173,10 @@ export class BodyComponent extends Component<'ex.body'> implements Clonable<Body
       this.setSleeping(true);
     }
     const currentMotion = this.vel.size * this.vel.size + Math.abs(this.angularVelocity * this.angularVelocity);
-    const bias = Physics.sleepBias;
+    const bias = this._bodyConfig.sleepBias;
     this.sleepMotion = bias * this.sleepMotion + (1 - bias) * currentMotion;
-    this.sleepMotion = clamp(this.sleepMotion, 0, 10 * Physics.sleepEpsilon);
-    if (this.canSleep && this.sleepMotion < Physics.sleepEpsilon) {
+    this.sleepMotion = clamp(this.sleepMotion, 0, 10 * this._bodyConfig.sleepEpsilon);
+    if (this.canSleep && this.sleepMotion < this._bodyConfig.sleepEpsilon) {
       this.setSleeping(true);
     }
   }
@@ -250,7 +288,7 @@ export class BodyComponent extends Component<'ex.body'> implements Clonable<Body
    * The position of the actor last frame (x, y) in pixels
    */
   public get oldPos(): Vector {
-    return this._oldTransform.pos;
+    return this.oldTransform.pos;
   }
 
   /**
@@ -301,7 +339,7 @@ export class BodyComponent extends Component<'ex.body'> implements Clonable<Body
    * Gets/sets the rotation of the body from the last frame.
    */
   public get oldRotation(): number {
-    return this._oldTransform.rotation;
+    return this.oldTransform.rotation;
   }
 
   /**
@@ -330,7 +368,7 @@ export class BodyComponent extends Component<'ex.body'> implements Clonable<Body
    * The scale of the actor last frame
    */
   public get oldScale(): Vector {
-    return this._oldTransform.scale;
+    return this.oldTransform.scale;
   }
 
   /**
@@ -427,7 +465,9 @@ export class BodyComponent extends Component<'ex.body'> implements Clonable<Body
   public captureOldTransform() {
     // Capture old values before integration step updates them
     this.__oldTransformCaptured = true;
-    this.transform.get().clone(this._oldTransform);
+    const tx = this.transform.get();
+    tx.clone(this.oldTransform);
+    this.oldTransform.parent = tx.parent; // also grab parent
     this.oldVel.setTo(this.vel.x, this.vel.y);
     this.oldAcc.setTo(this.acc.x, this.acc.y);
   }

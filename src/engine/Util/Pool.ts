@@ -1,4 +1,4 @@
-import { Logger } from '..';
+import { Logger } from '../Util/Log';
 export class Pool<Type> {
   public totalAllocations = 0;
   public index = 0;
@@ -11,6 +11,10 @@ export class Pool<Type> {
     public recycler: (instance: Type, ...args: any[]) => Type,
     public maxObjects: number = 100
   ) {}
+
+  dispose() {
+    this.objects.length = 0;
+  }
 
   preallocate() {
     for (let i = 0; i < this.maxObjects; i++) {

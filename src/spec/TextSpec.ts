@@ -2,17 +2,6 @@ import * as ex from '@excalibur';
 import { ExcaliburAsyncMatchers, ExcaliburMatchers } from 'excalibur-jasmine';
 import { delay } from '../engine/Util/Util';
 
-/**
- *
- */
-function flushWebGLCanvasTo2D(source: HTMLCanvasElement): HTMLCanvasElement {
-  const canvas = document.createElement('canvas');
-  canvas.width = source.width;
-  canvas.height = source.height;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(source, 0, 0);
-  return canvas;
-}
 
 /**
  *
@@ -61,7 +50,7 @@ declare global {
 /**
  *
  */
-export async function waitForFontLoad(font: string, timeout = 2000, interval = 100) {
+export function waitForFontLoad(font: string, timeout = 2000, interval = 100): Promise<boolean> {
   return new Promise((resolve, reject) => {
     // repeatedly poll check
     const poller = setInterval(async () => {
@@ -145,7 +134,8 @@ describe('A Text Graphic', () => {
         family: 'Open Sans',
         size: 18,
         quality: 1,
-        padding: 0
+        padding: 0,
+        baseAlign: ex.BaseAlign.Alphabetic
       })
     });
 
@@ -174,7 +164,8 @@ describe('A Text Graphic', () => {
         family: 'Open Sans',
         size: 18,
         quality: 1,
-        padding: 0
+        padding: 0,
+        baseAlign: ex.BaseAlign.Alphabetic
       })
     });
 
@@ -237,7 +228,8 @@ describe('A Text Graphic', () => {
         family: 'Open Sans',
         size: 18,
         quality: 1,
-        padding: 0
+        padding: 0,
+        baseAlign: ex.BaseAlign.Alphabetic
       })
     });
 
@@ -268,7 +260,8 @@ describe('A Text Graphic', () => {
         family: 'Open Sans',
         size: 18,
         quality: 1,
-        padding: 0
+        padding: 0,
+        baseAlign: ex.BaseAlign.Alphabetic
       })
     });
 
@@ -299,7 +292,8 @@ describe('A Text Graphic', () => {
         family: 'Open Sans',
         size: 18,
         quality: 1,
-        padding: 0
+        padding: 0,
+        baseAlign: ex.BaseAlign.Alphabetic
       })
     });
 
@@ -330,7 +324,8 @@ describe('A Text Graphic', () => {
         family: 'Open Sans',
         size: 18,
         quality: 1,
-        padding: 0
+        padding: 0,
+        baseAlign: ex.BaseAlign.Alphabetic
       })
     });
 
@@ -361,7 +356,8 @@ describe('A Text Graphic', () => {
         family: 'Open Sans',
         size: 18,
         quality: 1,
-        padding: 0
+        padding: 0,
+        baseAlign: ex.BaseAlign.Alphabetic
       })
     });
 
@@ -393,7 +389,8 @@ describe('A Text Graphic', () => {
         bold: true,
         size: 18,
         quality: 1,
-        padding: 0
+        padding: 0,
+        baseAlign: ex.BaseAlign.Alphabetic
       })
     });
 
@@ -423,7 +420,8 @@ describe('A Text Graphic', () => {
         style: ex.FontStyle.Italic,
         size: 18,
         quality: 1,
-        padding: 0
+        padding: 0,
+        baseAlign: ex.BaseAlign.Alphabetic
       })
     });
 
@@ -444,6 +442,36 @@ describe('A Text Graphic', () => {
     });
   });
 
+  it('can have line height', async () => {
+    const sut = new ex.Text({
+      text: 'green text\nthat has multiple\nlines to it.',
+      color: ex.Color.Green,
+      font: new ex.Font({
+        family: 'Open Sans',
+        size: 18,
+        quality: 1,
+        lineHeight: 36,
+        baseAlign: ex.BaseAlign.Alphabetic
+      })
+    });
+
+    const canvasElement = document.createElement('canvas');
+    canvasElement.width = 100;
+    canvasElement.height = 100;
+    const ctx = new ex.ExcaliburGraphicsContext2DCanvas({ canvasElement });
+
+    ctx.clear();
+    sut.draw(ctx, 10, 10);
+
+    await runOnWindows(async () => {
+      await expectAsync(canvasElement).toEqualImage('src/spec/images/GraphicsTextSpec/line-height.png');
+    });
+
+    await runOnLinux(async () => {
+      await expectAsync(canvasElement).toEqualImage('src/spec/images/GraphicsTextSpec/line-height-linux.png');
+    });
+  });
+
   it('can have a shadow', async () => {
     const sut = new ex.Text({
       text: 'green text',
@@ -453,6 +481,7 @@ describe('A Text Graphic', () => {
         size: 18,
         quality: 1,
         padding: 0,
+        baseAlign: ex.BaseAlign.Alphabetic,
         shadow: {
           blur: 5,
           offset: ex.vec(4, 4),
@@ -640,7 +669,8 @@ describe('A Text Graphic', () => {
     const sut = new ex.Font({
       family: 'Open Sans',
       size: 18,
-      quality: 1
+      quality: 1,
+      baseAlign: ex.BaseAlign.Alphabetic
     });
 
     const text1 = new ex.Text({
@@ -790,7 +820,8 @@ describe('A Text Graphic', () => {
         family: 'Open Sans',
         size: 18,
         quality: 4,
-        padding: 0
+        padding: 0,
+        baseAlign: ex.BaseAlign.Alphabetic
       })
     });
 
@@ -803,11 +834,11 @@ describe('A Text Graphic', () => {
     ctx.flush();
 
     await runOnWindows(async () => {
-      await expectAsync(flushWebGLCanvasTo2D(canvasElement)).toEqualImage('src/spec/images/GraphicsTextSpec/long-text.png');
+      await expectAsync(canvasElement).toEqualImage('src/spec/images/GraphicsTextSpec/long-text.png');
     });
 
     await runOnLinux(async () => {
-      await expectAsync(flushWebGLCanvasTo2D(canvasElement)).toEqualImage('src/spec/images/GraphicsTextSpec/long-text-linux.png');
+      await expectAsync(canvasElement).toEqualImage('src/spec/images/GraphicsTextSpec/long-text-linux.png');
     });
   });
 
@@ -890,11 +921,50 @@ describe('A Text Graphic', () => {
 
       await expectAsync(canvasElement).toEqualImage('src/spec/images/GraphicsTextSpec/spritefont-text.png');
     });
+
+    it('can have a custom lineHeight', async () => {
+      const spriteFontImage = new ex.ImageSource('src/spec/images/GraphicsTextSpec/spritefont.png');
+
+      await spriteFontImage.load();
+
+      const spriteFontSheet = ex.SpriteSheet.fromImageSource({
+        image: spriteFontImage,
+        grid: {
+          rows: 3,
+          columns: 16,
+          spriteWidth: 16,
+          spriteHeight: 16
+        }
+      });
+
+      const spriteFont = new ex.SpriteFont({
+        alphabet: '0123456789abcdefghijklmnopqrstuvwxyz,!\'&."?- ',
+        caseInsensitive: true,
+        spacing: -5,
+        spriteSheet: spriteFontSheet,
+        lineHeight: 32
+      });
+
+      const sut = new ex.Text({
+        text: '111\n222\n333\n444',
+        font: spriteFont
+      });
+
+      const canvasElement = document.createElement('canvas');
+      canvasElement.width = 200;
+      canvasElement.height = 100;
+      const ctx = new ex.ExcaliburGraphicsContext2DCanvas({ canvasElement });
+
+      ctx.clear();
+      sut.draw(ctx, 0, 0);
+
+      await expectAsync(canvasElement).toEqualImage('src/spec/images/GraphicsTextSpec/sprite-font-line-height.png');
+    });
   });
 
   it('will log warnings when there are issues', async () => {
     const logger = ex.Logger.getInstance();
-    spyOn(logger, 'warn');
+    spyOn(logger, 'warnOnce');
 
     const spriteFontImage = new ex.ImageSource('src/spec/images/GraphicsTextSpec/spritefont.png');
 
@@ -929,21 +999,18 @@ describe('A Text Graphic', () => {
 
     sut.text = '~';
     sut.draw(ctx, 0, 0);
-    sut.draw(ctx, 0, 0);
-    const warnSpy = logger.warn as jasmine.Spy;
+    const warnSpy = logger.warnOnce as jasmine.Spy;
     expect(warnSpy.calls.argsFor(0)).toEqual([
       'SpriteFont - Cannot find letter \'~\' in configured alphabet \'0123456789abcdefghijklmnopqrstuvwxyz,!\'&."?- \'.']);
     expect(warnSpy.calls.argsFor(1)).toEqual([
       'There maybe be more issues in the SpriteFont configuration. No additional warnings will be logged.']);
-    expect(warnSpy.calls.argsFor(2)).toEqual([]); // warn only once
+    warnSpy.calls.reset();
     sut.text = '?';
     sut.draw(ctx, 0, 0);
-    sut.draw(ctx, 0, 0);
-    expect(warnSpy.calls.argsFor(2)).toEqual([
+    expect(warnSpy.calls.argsFor(0)).toEqual([
       'SpriteFont - Cannot find sprite for \'?\' at index \'42\' in configured SpriteSheet']);
-    expect(warnSpy.calls.argsFor(3)).toEqual([
+    expect(warnSpy.calls.argsFor(1)).toEqual([
       'There maybe be more issues in the SpriteFont configuration. No additional warnings will be logged.']);
-    expect(warnSpy.calls.argsFor(4)).toEqual([]); // warn only once
   });
 
   it('can do some simple shadowing', async () => {
@@ -1060,7 +1127,7 @@ describe('A Text Graphic', () => {
     await expectAsync(canvasElement).toEqualImage('src/spec/images/GraphicsTextSpec/spritefont-alignment.png');
   });
 
-  it('can draw mutliple lines of text (spritefont)', async () => {
+  it('can draw multiple lines of text (spritefont)', async () => {
     const spriteFontImage = new ex.ImageSource('src/spec/images/GraphicsTextSpec/spritefont.png');
     await spriteFontImage.load();
     const spriteFontSheet = ex.SpriteSheet.fromImageSource({
@@ -1166,7 +1233,8 @@ describe('A Text Graphic', () => {
     const sut = new ex.Font({
       family: 'Open Sans',
       size: 18,
-      quality: 1
+      quality: 1,
+      baseAlign: ex.BaseAlign.Alphabetic
     });
 
     const text1 = new ex.Text({

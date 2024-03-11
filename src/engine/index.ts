@@ -23,7 +23,6 @@ export * from './Events/MediaEvents';
 export * from './Events';
 export * from './Label';
 export { FontStyle, FontUnit, TextAlign, BaseAlign } from './Graphics/FontCommon';
-export * from './Loader';
 export { Particle, ParticleTransform, ParticleEmitter, ParticleArgs, ParticleEmitterArgs, EmitterType } from './Particles';
 export * from './Collision/Physics';
 export * from './Scene';
@@ -41,6 +40,8 @@ export * from './Interfaces/Index';
 export * from './Resources/Index';
 
 export * from './EntityComponentSystem/index';
+
+export * from './Director/index';
 
 export * from './Color';
 
@@ -79,9 +80,6 @@ export {
   CapturePointerConfig
 } from './Input/CapturePointerConfig';
 
-export {
-  EngineInput
-} from './Input/EngineInput';
 
 export {
   NativePointerEvent,
@@ -92,6 +90,7 @@ export {
   PointerEventReceiver
 } from './Input/PointerEventReceiver';
 
+export { PointerAbstraction } from './Input/PointerAbstraction';
 export { PointerComponent } from './Input/PointerComponent';
 export { PointerSystem } from './Input/PointerSystem';
 export { PointerType } from './Input/PointerType';
@@ -115,6 +114,7 @@ export {
   KeyboardInitOptions,
   Keyboard
 } from './Input/Keyboard';
+export * from './Input/InputHost';
 export * from './Input/InputMapper';
 
 // ex.Util namespaces
@@ -135,6 +135,7 @@ export * from './Util/Toaster';
 export * from './Util/StateMachine';
 export * from './Util/Future';
 export * from './Util/Semaphore';
+export * from './Util/Coroutine';
 
 // ex.Deprecated
 // import * as deprecated from './Deprecated';

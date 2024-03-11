@@ -2,6 +2,9 @@ import { Color, Logger, Vector } from '../..';
 import { Matrix } from '../../Math/matrix';
 import { getAttributeComponentSize, getAttributePointerType } from './webgl-util';
 
+/**
+ * List of the possible glsl uniform types
+ */
 export type UniformTypeNames =
   'uniform1f' |
   'uniform1i' |
@@ -107,6 +110,12 @@ export class Shader {
     this._gl = gl;
     this.vertexSource = vertexSource;
     this.fragmentSource = fragmentSource;
+  }
+
+  dispose() {
+    const gl = this._gl;
+    gl.deleteProgram(this.program);
+    this._gl = null;
   }
 
   /**

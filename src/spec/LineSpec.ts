@@ -88,7 +88,7 @@ describe('A Line', () => {
     sut.draw(ctx, 0, 0);
     ctx.flush();
 
-    await expectAsync(TestUtils.flushWebGLCanvasTo2D(canvasElement)).toEqualImage('src/spec/images/LineSpec/line.png');
+    await expectAsync(canvasElement).toEqualImage('src/spec/images/LineSpec/line.png');
   });
 
   it('can draw a line when added to a graphics component', async () => {
@@ -100,7 +100,7 @@ describe('A Line', () => {
 
     const testClock = game.clock as ex.TestClock;
 
-    TestUtils.runToReady(game);
+    await TestUtils.runToReady(game);
 
     const sut = new ex.Line({
       start: ex.vec(0, 0),
@@ -118,7 +118,7 @@ describe('A Line', () => {
 
     testClock.step(16);
 
-    await expectAsync(TestUtils.flushWebGLCanvasTo2D(game.canvas)).toEqualImage('src/spec/images/LineSpec/line.png');
+    await expectAsync(game.canvas).toEqualImage('src/spec/images/LineSpec/line.png');
 
   });
 });

@@ -194,6 +194,7 @@ export class Sound implements Audio, Loadable<AudioBuffer> {
 
       this._engine.on('visible', () => {
         if (engine.pauseAudioWhenHidden && this._wasPlayingOnHidden) {
+          // eslint-disable-next-line @typescript-eslint/no-floating-promises
           this.play();
           this._wasPlayingOnHidden = false;
         }
@@ -308,6 +309,11 @@ export class Sound implements Audio, Loadable<AudioBuffer> {
   }
 
   public getTotalPlaybackDuration() {
+    if (!this.isLoaded()) {
+      this.logger.warnOnce(`Sound from ${this.path} is not loaded, cannot return total playback duration.` +
+      `Did you forget to add Sound to a loader? https://excaliburjs.com/docs/loaders/`);
+      return 0;
+    }
     return this.data.duration;
   }
 
@@ -340,7 +346,6 @@ export class Sound implements Audio, Loadable<AudioBuffer> {
       // ensure we resume *current* tracks (if paused)
       for (const track of this._tracks) {
         resumed.push(track.play().then(() => {
-          this.events.emit('playbackend', new NativeSoundEvent(this, track as WebAudioInstance));
           this._tracks.splice(this.getTrackId(track), 1);
           return true;
         }));

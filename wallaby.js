@@ -3,6 +3,7 @@ const webpack = require('webpack');
 
 module.exports = function (wallaby) {
   return {
+    runMode: 'onsave',
     files: [
       { pattern: 'src/spec/util/*.ts', load: false },
       { pattern: 'src/engine/**/*.ts', load: false },
@@ -13,6 +14,7 @@ module.exports = function (wallaby) {
       { pattern: 'src/spec/images/**/*.gif' },
       { pattern: 'src/spec/images/**/*.txt' },
       { pattern: 'src/spec/images/**/*.css' },
+      { pattern: 'src/spec/fonts/**/*.ttf' },
       { pattern: 'src/spec/images/**/*.woff2' }
     ],
     tests: ['./src/spec/*Spec.ts'],
@@ -31,6 +33,9 @@ module.exports = function (wallaby) {
     postprocessor: wallaby.postprocessors.webpack({
       mode: 'none',
       devtool: 'source-map',
+      optimization: {
+        providedExports: true,
+      },
       resolve: {
         extensions: ['.ts', '.js'],
         alias: {

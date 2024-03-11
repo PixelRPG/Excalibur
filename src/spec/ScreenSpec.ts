@@ -164,8 +164,12 @@ describe('A Screen', () => {
     expect(sut.resolution.height).toBe(800);
     expect(sut.contentArea.width).toBe(800);
     expect(sut.contentArea.height).toBe(600);
-    expect(sut.viewport.width).toBe(1300);
-    expect(sut.viewport.height).toBe(1300);
+    expect(sut.viewport.width).toBe(100);
+    expect(sut.viewport.widthUnit).toBe('percent');
+    expect(sut.viewport.height).toBe(100);
+    expect(sut.viewport.heightUnit).toBe('percent');
+    expect(sut.canvas.offsetWidth).toBe(1300);
+    expect(sut.canvas.offsetHeight).toBe(1300);
 
   });
 
@@ -192,8 +196,12 @@ describe('A Screen', () => {
     expect(sut.resolution.height).toBe(600);
     expect(sut.contentArea.width).toBe(800);
     expect(sut.contentArea.height).toBe(600);
-    expect(sut.viewport.width).toBe(1300);
-    expect(sut.viewport.height).toBe(800);
+    expect(sut.viewport.width).toBe(100);
+    expect(sut.viewport.widthUnit).toBe('percent');
+    expect(sut.viewport.height).toBe(100);
+    expect(sut.viewport.heightUnit).toBe('percent');
+    expect(sut.canvas.offsetWidth).toBe(1300);
+    expect(sut.canvas.offsetHeight).toBe(800);
 
   });
 
@@ -317,7 +325,10 @@ describe('A Screen', () => {
       expect(sut.resolution.width).toBe(800);
       expect(sut.resolution.height).toBe(600);
       expect(sut.viewport.width).toBe(800 * sut.aspectRatio);
-      expect(sut.viewport.height).toBe(800);
+      expect(sut.viewport.height).toBe(100);
+      expect(sut.viewport.heightUnit).toBe('percent');
+      expect(sut.canvas.offsetHeight).toBe(800);
+      expect(sut.canvas.offsetWidth).toBe(Math.ceil(800 * sut.aspectRatio));
     });
 
     it('will adjust to width', () => {
@@ -340,8 +351,11 @@ describe('A Screen', () => {
       expect(sut.parent).toBe(parentEl);
       expect(sut.resolution.width).toBe(800);
       expect(sut.resolution.height).toBe(600);
-      expect(sut.viewport.width).toBe(1000);
+      expect(sut.viewport.width).toBe(100);
+      expect(sut.viewport.widthUnit).toBe('percent');
       expect(sut.viewport.height).toBe(1000 / sut.aspectRatio);
+      expect(sut.canvas.offsetHeight).toBe(1000 / sut.aspectRatio);
+      expect(sut.canvas.offsetWidth).toBe(1000);
     });
   });
 
@@ -558,6 +572,7 @@ describe('A Screen', () => {
     const sut = new ex.Screen({
       canvas,
       context,
+      canvasImageRendering: 'pixelated',
       browser,
       viewport: { width: 800, height: 600 },
       pixelRatio: 2,
@@ -596,6 +611,7 @@ describe('A Screen', () => {
       canvas: canvasStub,
       context,
       browser,
+      canvasImageRendering: 'pixelated',
       viewport: { width: 800, height: 600 },
       pixelRatio: 2,
       antialiasing: false
@@ -660,7 +676,7 @@ describe('A Screen', () => {
     sut.applyResolutionAndViewport();
 
     // The camera is always center screen
-    // The absense of a camera is treated like a camera at (0, 0) in world space
+    // The absence of a camera is treated like a camera at (0, 0) in world space
     expect(sut.screenToWorldCoordinates(ex.vec(400, 300))).toBeVector(ex.vec(0, 0));
     expect(sut.screenToWorldCoordinates(ex.vec(0, 0))).toBeVector(ex.vec(-400, -300));
     expect(sut.screenToWorldCoordinates(ex.vec(800, 0))).toBeVector(ex.vec(400, -300));
@@ -679,7 +695,7 @@ describe('A Screen', () => {
     sut.applyResolutionAndViewport();
 
     // The camera is always center screen
-    // The absense of a camera is treated like a camera at (0, 0) in world space
+    // The absence of a camera is treated like a camera at (0, 0) in world space
     expect(sut.worldToScreenCoordinates(ex.vec(0, 0))).toBeVector(ex.vec(400, 300));
     expect(sut.worldToScreenCoordinates(ex.vec(-400, -300))).toBeVector(ex.vec(0, 0));
     expect(sut.worldToScreenCoordinates(ex.vec(400, -300))).toBeVector(ex.vec(800, 0));
@@ -706,7 +722,7 @@ describe('A Screen', () => {
     camera._initialize({screen: sut, clock: { elapsed: () => 16}} as ex.Engine);
 
     // The camera is always center screen
-    // The absense of a camera is treated like a camera at (0, 0) in world space
+    // The absence of a camera is treated like a camera at (0, 0) in world space
     expect(sut.screenToWorldCoordinates(ex.vec(400, 300))).toBeVector(ex.vec(400, 300));
     expect(sut.screenToWorldCoordinates(ex.vec(0, 0))).toBeVector(ex.vec(200, 150));
     expect(sut.screenToWorldCoordinates(ex.vec(800, 0))).toBeVector(ex.vec(600, 150));
@@ -733,7 +749,7 @@ describe('A Screen', () => {
     camera._initialize({screen: sut, clock: { elapsed: () => 16}} as ex.Engine);
 
     // The camera is always center screen
-    // The absense of a camera is treated like a camera at (0, 0) in world space
+    // The absence of a camera is treated like a camera at (0, 0) in world space
     expect(sut.worldToScreenCoordinates(ex.vec(400, 300))).toBeVector(ex.vec(400, 300));
     expect(sut.worldToScreenCoordinates(ex.vec(200, 150))).toBeVector(ex.vec(0, 0));
     expect(sut.worldToScreenCoordinates(ex.vec(600, 150))).toBeVector(ex.vec(800, 0));
@@ -854,7 +870,7 @@ describe('A Screen', () => {
 
   it('will warn if the resolution is too large', () => {
     const logger = ex.Logger.getInstance();
-    spyOn(logger, 'warn');
+    spyOn(logger, 'warnOnce');
 
     const canvasElement = document.createElement('canvas');
     canvasElement.width = 100;
@@ -879,11 +895,52 @@ describe('A Screen', () => {
     sut.resolution = { width: 3000, height: 3000 };
     sut.applyResolutionAndViewport();
     expect(context.checkIfResolutionSupported).toHaveBeenCalled();
-    expect(logger.warn).toHaveBeenCalledOnceWith(
+    expect(logger.warnOnce).toHaveBeenCalledOnceWith(
       `The currently configured resolution (${sut.resolution.width}x${sut.resolution.height}) and pixel ratio (${sut.pixelRatio})` +
           ' are too large for the platform WebGL implementation, this may work but cause WebGL rendering to behave oddly.' +
           ' Try reducing the resolution or disabling Hi DPI scaling to avoid this' +
           ' (read more here https://excaliburjs.com/docs/screens#understanding-viewport--resolution).'
     );
+  });
+
+  it('will warn if the resolution is too large and attempt to recover', () => {
+    const logger = ex.Logger.getInstance();
+    const warnOnce = spyOn(logger, 'warnOnce');
+
+    const canvasElement = document.createElement('canvas');
+    canvasElement.width = 100;
+    canvasElement.height = 100;
+
+    const context = new ex.ExcaliburGraphicsContextWebGL({
+      canvasElement: canvasElement,
+      enableTransparency: false,
+      snapToPixel: true,
+      backgroundColor: ex.Color.White
+    });
+
+    const sut = new ex.Screen({
+      canvas,
+      context,
+      browser,
+      viewport: { width: 800, height: 600 }
+    });
+
+    spyOn(context, 'checkIfResolutionSupported').and.callThrough();
+    sut.resolution = { width: 2000, height: 2000 };
+    (sut as any)._devicePixelRatio = 3;
+    sut.applyResolutionAndViewport();
+    expect(context.checkIfResolutionSupported).toHaveBeenCalled();
+    expect(warnOnce.calls.argsFor(0)).toEqual([
+      `The currently configured resolution (${sut.resolution.width}x${sut.resolution.height}) and pixel ratio (3)` +
+          ' are too large for the platform WebGL implementation, this may work but cause WebGL rendering to behave oddly.' +
+          ' Try reducing the resolution or disabling Hi DPI scaling to avoid this' +
+          ' (read more here https://excaliburjs.com/docs/screens#understanding-viewport--resolution).'
+    ]);
+    expect(warnOnce.calls.argsFor(1)).toEqual([
+      'Scaled resolution too big attempted recovery!' +
+            ` Pixel ratio was automatically reduced to (2) to avoid 4k texture limit.` +
+            ' Setting `ex.Engine({pixelRatio: ...}) will override any automatic recalculation, do so at your own risk.` ' +
+            ' (read more here https://excaliburjs.com/docs/screens#understanding-viewport--resolution).'
+    ]);
   });
 });

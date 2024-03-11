@@ -2,22 +2,10 @@ import { ExcaliburMatchers, ExcaliburAsyncMatchers } from 'excalibur-jasmine';
 import * as ex from '@excalibur';
 import { TestUtils } from './util/TestUtils';
 
-/**
- *
- */
-function flushWebGLCanvasTo2D(source: HTMLCanvasElement): HTMLCanvasElement {
-  const canvas = document.createElement('canvas');
-  canvas.width = source.width;
-  canvas.height = source.height;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(source, 0, 0);
-  return canvas;
-}
-
 describe('A particle', () => {
   let engine: ex.Engine;
   let scene: ex.Scene;
-  beforeEach(() => {
+  beforeEach(async () => {
     jasmine.addMatchers(ExcaliburMatchers);
     jasmine.addAsyncMatchers(ExcaliburAsyncMatchers);
     engine = TestUtils.engine(
@@ -30,8 +18,7 @@ describe('A particle', () => {
     );
     scene = new ex.Scene();
     engine.addScene('root', scene);
-    engine.start();
-
+    await TestUtils.runToReady(engine);
     const clock = engine.clock as ex.TestClock;
     clock.step(1);
 
@@ -139,7 +126,7 @@ describe('A particle', () => {
     engine.currentScene.update(engine, 100);
     engine.currentScene.draw(engine.graphicsContext, 100);
     engine.graphicsContext.flush();
-    await expectAsync(flushWebGLCanvasTo2D(engine.canvas)).toEqualImage('src/spec/images/ParticleSpec/Particles.png');
+    await expectAsync(engine.canvas).toEqualImage('src/spec/images/ParticleSpec/Particles.png');
   });
 
   it('can be parented', async () => {
@@ -187,7 +174,7 @@ describe('A particle', () => {
     engine.currentScene.update(engine, 100);
     engine.currentScene.draw(engine.graphicsContext, 100);
     engine.graphicsContext.flush();
-    await expectAsync(flushWebGLCanvasTo2D(engine.canvas)).toEqualImage('src/spec/images/ParticleSpec/parented.png');
+    await expectAsync(engine.canvas).toEqualImage('src/spec/images/ParticleSpec/parented.png');
 
   });
 

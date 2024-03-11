@@ -13,7 +13,9 @@ import {
   PreDrawEvent,
   PostDrawEvent,
   PreDebugDrawEvent,
-  PostDebugDrawEvent
+  PostDebugDrawEvent,
+  ActionStartEvent,
+  ActionCompleteEvent
 } from './Events';
 import { Engine } from './Engine';
 import { Color } from './Color';
@@ -34,7 +36,7 @@ import { Rectangle } from './Graphics/Rectangle';
 import { ColliderComponent } from './Collision/ColliderComponent';
 import { Shape } from './Collision/Colliders/Shape';
 import { watch } from './Util/Watch';
-import { Collider, CollisionGroup } from './Collision/Index';
+import { Collider, CollisionContact, CollisionGroup, Side } from './Collision/Index';
 import { Circle } from './Graphics/Circle';
 import { PointerEvent } from './Input/PointerEvent';
 import { WheelEvent } from './Input/WheelEvent';
@@ -44,6 +46,7 @@ import { Raster } from './Graphics/Raster';
 import { Text } from './Graphics/Text';
 import { CoordPlane } from './Math/coord-plane';
 import { EventEmitter, EventKey, Handler, Subscription } from './EventEmitter';
+import { Component } from './EntityComponentSystem';
 
 /**
  * Type guard for checking if something is an Actor
@@ -119,6 +122,11 @@ export interface ActorArgs {
    */
   color?: Color;
   /**
+   * Optionally set the color of an actor, only used if no graphics are present
+   * If a width/height or a radius was set a default graphic will be added
+   */
+  opacity?: number;
+  /**
    * Optionally set the visibility of the actor
    */
   visible?: boolean;
@@ -126,6 +134,10 @@ export interface ActorArgs {
    * Optionally set the anchor for graphics in the actor
    */
   anchor?: Vector;
+  /**
+   * Optionally set the anchor for graphics in the actor
+   */
+  offset?: Vector;
   /**
    * Optionally set the collision type
    */
@@ -135,7 +147,7 @@ export interface ActorArgs {
    */
   collider?: Collider;
   /**
-   * Optionally suppy a [[CollisionGroup]]
+   * Optionally supply a [[CollisionGroup]]
    */
   collisionGroup?: CollisionGroup;
 }
@@ -150,6 +162,8 @@ export type ActorEvents = EntityEvents & {
   postkill: PostKillEvent;
   predraw: PreDrawEvent;
   postdraw: PostDrawEvent;
+  pretransformdraw: PreDrawEvent;
+  posttransformdraw: PostDrawEvent;
   predebugdraw: PreDebugDrawEvent;
   postdebugdraw: PostDebugDrawEvent;
   pointerup: PointerEvent;
@@ -166,6 +180,8 @@ export type ActorEvents = EntityEvents & {
   pointerdragmove: PointerEvent;
   enterviewport: EnterViewPortEvent;
   exitviewport: ExitViewPortEvent;
+  actionstart: ActionStartEvent;
+  actioncomplete: ActionCompleteEvent;
 }
 
 export const ActorEvents = {
@@ -178,6 +194,8 @@ export const ActorEvents = {
   PostKill: 'postkill',
   PreDraw: 'predraw',
   PostDraw: 'postdraw',
+  PreTransformDraw: 'pretransformdraw',
+  PostTransformDraw: 'posttransformdraw',
   PreDebugDraw: 'predebugdraw',
   PostDebugDraw: 'postdebugdraw',
   PointerUp: 'pointerup',
@@ -193,7 +211,9 @@ export const ActorEvents = {
   PointerDragLeave: 'pointerdragleave',
   PointerDragMove: 'pointerdragmove',
   EnterViewPort: 'enterviewport',
-  ExitViewPort: 'exitviewport'
+  ExitViewPort: 'exitviewport',
+  ActionStart: 'actionstart',
+  ActionComplete: 'actioncomplete'
 };
 
 /**
@@ -217,44 +237,32 @@ export class Actor extends Entity implements Eventable, PointerEvents, CanInitia
    * The physics body the is associated with this actor. The body is the container for all physical properties, like position, velocity,
    * acceleration, mass, inertia, etc.
    */
-  public get body(): BodyComponent {
-    return this.get(BodyComponent);
-  }
+  public body: BodyComponent;
 
   /**
    * Access the Actor's built in [[TransformComponent]]
    */
-  public get transform(): TransformComponent {
-    return this.get(TransformComponent);
-  }
+  public transform: TransformComponent;
 
   /**
    * Access the Actor's built in [[MotionComponent]]
    */
-  public get motion(): MotionComponent {
-    return this.get(MotionComponent);
-  }
+  public motion: MotionComponent;
 
   /**
    * Access to the Actor's built in [[GraphicsComponent]]
    */
-  public get graphics(): GraphicsComponent {
-    return this.get(GraphicsComponent);
-  }
+  public graphics: GraphicsComponent;
 
   /**
    * Access to the Actor's built in [[ColliderComponent]]
    */
-  public get collider(): ColliderComponent {
-    return this.get(ColliderComponent);
-  }
+  public collider: ColliderComponent;
 
   /**
    * Access to the Actor's built in [[PointerComponent]] config
    */
-  public get pointer(): PointerComponent {
-    return this.get(PointerComponent);
-  }
+  public pointer: PointerComponent;
 
   /**
    * Useful for quickly scripting actor behavior, like moving to a place, patrolling back and forth, blinking, etc.
@@ -262,9 +270,7 @@ export class Actor extends Entity implements Eventable, PointerEvents, CanInitia
    *  Access to the Actor's built in [[ActionsComponent]] which forwards to the
    * [[ActionContext|Action context]] of the actor.
    */
-  public get actions(): ActionsComponent {
-    return this.get(ActionsComponent);
-  }
+  public actions: ActionsComponent;
 
   /**
    * Gets the position vector of the actor in pixels
@@ -387,6 +393,7 @@ export class Actor extends Entity implements Eventable, PointerEvents, CanInitia
     this.get(TransformComponent).scale = scale;
   }
 
+  private _anchor: Vector = watch(Vector.Half, (v) => this._handleAnchorChange(v));
   /**
    * The anchor to apply all actor related transformations like rotation,
    * translation, and scaling. By default the anchor is in the center of
@@ -398,7 +405,6 @@ export class Actor extends Entity implements Eventable, PointerEvents, CanInitia
    * values between 0 and 1. For example, anchoring to the top-left would be
    * `Actor.anchor.setTo(0, 0)` and top-right would be `Actor.anchor.setTo(0, 1)`.
    */
-  private _anchor: Vector = watch(Vector.Half, (v) => this._handleAnchorChange(v));
   public get anchor(): Vector {
     return this._anchor;
   }
@@ -411,6 +417,27 @@ export class Actor extends Entity implements Eventable, PointerEvents, CanInitia
   private _handleAnchorChange(v: Vector) {
     if (this.graphics) {
       this.graphics.anchor = v;
+    }
+  }
+
+  private _offset: Vector = watch(Vector.Zero, (v) => this._handleOffsetChange(v));
+  /**
+   * The offset in pixels to apply to all actor graphics
+   *
+   * Default offset of (0, 0)
+   */
+  public get offset(): Vector {
+    return this._offset;
+  }
+
+  public set offset(vec: Vector) {
+    this._offset = watch(vec, (v) => this._handleOffsetChange(v));
+    this._handleOffsetChange(vec);
+  }
+
+  private _handleOffsetChange(v: Vector) {
+    if (this.graphics) {
+      this.graphics.offset = v;
     }
   }
 
@@ -482,8 +509,7 @@ export class Actor extends Entity implements Eventable, PointerEvents, CanInitia
   }
   public set color(v: Color) {
     this._color = v.clone();
-    const defaultLayer = this.graphics.layers.default;
-    const currentGraphic = defaultLayer.graphics[0]?.graphic;
+    const currentGraphic = this.graphics.current;
     if (currentGraphic instanceof Raster || currentGraphic instanceof Text) {
       currentGraphic.color = this._color;
     }
@@ -517,50 +543,65 @@ export class Actor extends Entity implements Eventable, PointerEvents, CanInitia
       z,
       color,
       visible,
+      opacity,
       anchor,
+      offset,
       collisionType,
       collisionGroup
     } = {
       ...config
     };
 
-    this._setName(name);
+    this.name = name ?? this.name;
     this.anchor = anchor ?? Actor.defaults.anchor.clone();
-    const tx = new TransformComponent();
-    this.addComponent(tx);
+    this.offset = offset ?? Vector.Zero;
+    this.transform = new TransformComponent();
+    this.addComponent(this.transform);
     this.pos = pos ?? vec(x ?? 0, y ?? 0);
     this.rotation = rotation ?? 0;
     this.scale = scale ?? vec(1, 1);
     this.z = z ?? 0;
-    tx.coordPlane = coordPlane ?? CoordPlane.World;
+    this.transform.coordPlane = coordPlane ?? CoordPlane.World;
 
-    this.addComponent(new PointerComponent);
+    this.pointer = new PointerComponent;
+    this.addComponent(this.pointer);
 
-    this.addComponent(new GraphicsComponent({
-      anchor: this.anchor
-    }));
-    this.addComponent(new MotionComponent());
+    this.graphics = new GraphicsComponent({
+      anchor: this.anchor,
+      offset: this.offset,
+      opacity: opacity
+    });
+    this.addComponent(this.graphics);
+
+    this.motion = new MotionComponent;
+    this.addComponent(this.motion);
     this.vel = vel ?? Vector.Zero;
     this.acc = acc ?? Vector.Zero;
     this.angularVelocity = angularVelocity ?? 0;
 
-    this.addComponent(new ActionsComponent());
+    this.actions = new ActionsComponent;
+    this.addComponent(this.actions);
 
-    this.addComponent(new BodyComponent());
+    this.body = new BodyComponent;
+    this.addComponent(this.body);
     this.body.collisionType = collisionType ?? CollisionType.Passive;
     if (collisionGroup) {
       this.body.group = collisionGroup;
     }
 
     if (collider) {
-      this.addComponent(new ColliderComponent(collider));
+      this.collider = new ColliderComponent(collider);
+      this.addComponent(this.collider);
     } else if (radius) {
-      this.addComponent(new ColliderComponent(Shape.Circle(radius)));
+      this.collider = new ColliderComponent(Shape.Circle(radius));
+      this.addComponent(this.collider);
     } else {
       if (width > 0 && height > 0) {
-        this.addComponent(new ColliderComponent(Shape.Box(width, height, this.anchor)));
+        this.collider = new ColliderComponent(Shape.Box(width, height, this.anchor));
+        this.addComponent(this.collider);
       } else {
-        this.addComponent(new ColliderComponent()); // no collider
+        this.collider = new ColliderComponent();
+        this.addComponent(this.collider); // no collider
       }
     }
 
@@ -590,15 +631,37 @@ export class Actor extends Entity implements Eventable, PointerEvents, CanInitia
   public clone(): Actor {
     const clone = new Actor({
       color: this.color.clone(),
-      anchor: this.anchor.clone()
+      anchor: this.anchor.clone(),
+      offset: this.offset.clone()
     });
     clone.clearComponents();
     clone.processComponentRemoval();
 
-    // Clone the current actors components
+    // Clone builtins, order is important, same as ctor
+    clone.addComponent(clone.transform = this.transform.clone() as TransformComponent, true);
+    clone.addComponent(clone.pointer = this.pointer.clone() as PointerComponent, true);
+    clone.addComponent(clone.graphics = this.graphics.clone() as GraphicsComponent, true);
+    clone.addComponent(clone.motion = this.motion.clone() as MotionComponent, true);
+    clone.addComponent(clone.actions = this.actions.clone() as ActionsComponent, true);
+    clone.addComponent(clone.body = this.body.clone() as BodyComponent, true);
+    clone.addComponent(clone.collider = this.collider.clone() as ColliderComponent, true);
+
+    const builtInComponents: Component[] = [
+      this.transform,
+      this.pointer,
+      this.graphics,
+      this.motion,
+      this.actions,
+      this.body,
+      this.collider
+    ];
+
+    // Clone non-builtin the current actors components
     const components = this.getComponents();
     for (const c of components) {
-      clone.addComponent(c.clone(), true);
+      if (!builtInComponents.includes(c)) {
+        clone.addComponent(c.clone(), true);
+      }
     }
     return clone;
   }
@@ -609,7 +672,7 @@ export class Actor extends Entity implements Eventable, PointerEvents, CanInitia
    *
    * Synonymous with the event handler `.on('initialize', (evt) => {...})`
    */
-  public onInitialize(_engine: Engine): void {
+  public onInitialize(engine: Engine): void {
     // Override me
   }
 
@@ -660,9 +723,9 @@ export class Actor extends Entity implements Eventable, PointerEvents, CanInitia
    * Internal _prekill handler for [[onPreKill]] lifecycle event
    * @internal
    */
-  public _prekill(_scene: Scene) {
+  public _prekill(scene: Scene) {
     this.events.emit('prekill', new PreKillEvent(this));
-    this.onPreKill(_scene);
+    this.onPreKill(scene);
   }
 
   /**
@@ -670,7 +733,7 @@ export class Actor extends Entity implements Eventable, PointerEvents, CanInitia
    *
    * `onPreKill` is called directly before an actor is killed and removed from its current [[Scene]].
    */
-  public onPreKill(_scene: Scene) {
+  public onPreKill(scene: Scene) {
     // Override me
   }
 
@@ -680,9 +743,9 @@ export class Actor extends Entity implements Eventable, PointerEvents, CanInitia
    * Internal _prekill handler for [[onPostKill]] lifecycle event
    * @internal
    */
-  public _postkill(_scene: Scene) {
+  public _postkill(scene: Scene) {
     this.events.emit('postkill', new PostKillEvent(this));
-    this.onPostKill(_scene);
+    this.onPostKill(scene);
   }
 
   /**
@@ -690,7 +753,7 @@ export class Actor extends Entity implements Eventable, PointerEvents, CanInitia
    *
    * `onPostKill` is called directly after an actor is killed and remove from its current [[Scene]].
    */
-  public onPostKill(_scene: Scene) {
+  public onPostKill(scene: Scene) {
     // Override me
   }
 
@@ -859,7 +922,7 @@ export class Actor extends Entity implements Eventable, PointerEvents, CanInitia
    *
    * `onPreUpdate` is called directly before an actor is updated.
    */
-  public onPreUpdate(_engine: Engine, _delta: number): void {
+  public onPreUpdate(engine: Engine, delta: number): void {
     // Override me
   }
 
@@ -868,7 +931,52 @@ export class Actor extends Entity implements Eventable, PointerEvents, CanInitia
    *
    * `onPostUpdate` is called directly after an actor is updated.
    */
-  public onPostUpdate(_engine: Engine, _delta: number): void {
+  public onPostUpdate(engine: Engine, delta: number): void {
+    // Override me
+  }
+
+  /**
+   * Fires before every collision resolution for a confirmed contact
+   * @param self
+   * @param other
+   * @param side
+   * @param contact
+   */
+  public onPreCollisionResolve(self: Collider, other: Collider, side: Side, contact: CollisionContact) {
+    // Override me
+  }
+
+  /**
+   * Fires after every resolution for a confirmed contact.
+   * @param self
+   * @param other
+   * @param side
+   * @param contact
+   */
+  public onPostCollisionResolve(self: Collider, other: Collider, side: Side, contact: CollisionContact) {
+    // Override me
+  }
+
+  /**
+   * Fires once when 2 entities with a ColliderComponent first start colliding or touching, if the Colliders stay in contact this
+   * does not continue firing until they separate and re-collide.
+   * @param self
+   * @param other
+   * @param side
+   * @param contact
+   */
+  public onCollisionStart(self: Collider, other: Collider, side: Side, contact: CollisionContact) {
+    // Override me
+  }
+
+  /**
+   * Fires once when 2 entities with a ColliderComponent separate after having been in contact.
+   * @param self
+   * @param other
+   * @param side
+   * @param lastContact
+   */
+  public onCollisionEnd(self: Collider, other: Collider, side: Side, lastContact: CollisionContact) {
     // Override me
   }
 

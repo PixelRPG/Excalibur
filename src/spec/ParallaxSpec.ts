@@ -74,16 +74,17 @@ describe('A Parallax Component', () => {
     tilemap.addComponent(new ex.ParallaxComponent(ex.vec(0.5, 0.5)));
 
     game.add(tilemap);
+    tilemap._initialize(game);
 
     clock.step(16);
 
-    await expectAsync(TestUtils.flushWebGLCanvasTo2D(game.canvas)).toEqualImage('src/spec/images/ParallaxSpec/tilemap.png');
+    await expectAsync(game.canvas).toEqualImage('src/spec/images/ParallaxSpec/tilemap.png');
 
     game.currentScene.camera.pos = ex.vec(250, -480);
 
     clock.step(16); // seems like there is an out of phase issue
     clock.step(16);
 
-    await expectAsync(TestUtils.flushWebGLCanvasTo2D(game.canvas)).toEqualImage('src/spec/images/ParallaxSpec/tilemap2.png');
+    await expectAsync(game.canvas).toEqualImage('src/spec/images/ParallaxSpec/tilemap2.png');
   });
 });
