@@ -87,9 +87,9 @@ export interface WebGLGraphicsContextInfo {
 }
 
 export interface ExcaliburGraphicsContextWebGLOptions extends ExcaliburGraphicsContextOptions {
-  context?: WebGL2RenderingContext,
-  handleContextLost?: (e: Event) => void,
-  handleContextRestored?: (e: Event) => void
+  context?: WebGL2RenderingContext;
+  handleContextLost?: (e: Event) => void;
+  handleContextRestored?: (e: Event) => void;
 }
 
 export class ExcaliburGraphicsContextWebGL implements ExcaliburGraphicsContext {
@@ -106,8 +106,12 @@ export class ExcaliburGraphicsContextWebGL implements ExcaliburGraphicsContext {
       instance.renderer = undefined;
       instance.args = undefined;
       return instance;
-    }, 4000);
-  private _drawCalls: DrawCall[] = [];
+    },
+    4000
+  );
+
+  private _drawCallIndex = 0;
+  private _drawCalls: DrawCall[] = new Array(4000).fill(null);
 
   // Main render target
   private _renderTarget: RenderTarget;
@@ -141,7 +145,6 @@ export class ExcaliburGraphicsContextWebGL implements ExcaliburGraphicsContext {
    */
   public readonly smoothing: boolean = false;
 
-
   /**
    * Whether the pixel art sampler is enabled for smooth sub pixel anti-aliasing
    */
@@ -151,7 +154,7 @@ export class ExcaliburGraphicsContextWebGL implements ExcaliburGraphicsContext {
    * UV padding in pixels to use in internal image rendering to prevent texture bleed
    *
    */
-  public uvPadding = .01;
+  public uvPadding = 0.01;
 
   public backgroundColor: Color = Color.ExcaliburBlue;
 
@@ -229,13 +232,15 @@ export class ExcaliburGraphicsContextWebGL implements ExcaliburGraphicsContext {
       handleContextLost,
       handleContextRestored
     } = options;
-    this.__gl = context ?? canvasElement.getContext('webgl2', {
-      antialias: antialiasing ?? this.smoothing,
-      premultipliedAlpha: false,
-      alpha: enableTransparency ?? this.transparency,
-      depth: false,
-      powerPreference: powerPreference ?? 'high-performance'
-    });
+    this.__gl =
+      context ??
+      canvasElement.getContext('webgl2', {
+        antialias: antialiasing ?? this.smoothing,
+        premultipliedAlpha: false,
+        alpha: enableTransparency ?? this.transparency,
+        depth: false,
+        powerPreference: powerPreference ?? 'high-performance'
+      });
     if (!this.__gl) {
       throw Error('Failed to retrieve webgl context from browser');
     }
@@ -305,16 +310,17 @@ export class ExcaliburGraphicsContextWebGL implements ExcaliburGraphicsContext {
     gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
     // Setup builtin renderers
-    this.register(new ImageRenderer({
-      uvPadding: this.uvPadding,
-      pixelArtSampler: this.pixelArtSampler
-    }));
+    this.register(
+      new ImageRenderer({
+        uvPadding: this.uvPadding,
+        pixelArtSampler: this.pixelArtSampler
+      })
+    );
     this.register(new MaterialRenderer());
     this.register(new RectangleRenderer());
     this.register(new CircleRenderer());
     this.register(new PointRenderer());
     this.register(new LineRenderer());
-
 
     this.materialScreenTexture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, this.materialScreenTexture);
@@ -389,7 +395,8 @@ export class ExcaliburGraphicsContextWebGL implements ExcaliburGraphicsContext {
     if (!this._isDrawLifecycle) {
       this._logger.warnOnce(
         `Attempting to draw outside the the drawing lifecycle (preDraw/postDraw) is not supported and is a source of bugs/errors.\n` +
-        `If you want to do custom drawing, use Actor.graphics, or any onPreDraw or onPostDraw handler.`);
+          `If you want to do custom drawing, use Actor.graphics, or any onPreDraw or onPostDraw handler.`
+      );
     }
     if (this._isContextLost) {
       this._logger.errorOnce(`Unable to draw ${rendererName}, the webgl context is lost`);
@@ -409,7 +416,7 @@ export class ExcaliburGraphicsContextWebGL implements ExcaliburGraphicsContext {
         drawCall.state.tint = this._state.current.tint;
         drawCall.state.material = this._state.current.material;
         drawCall.args = args;
-        this._drawCalls.push(drawCall);
+        this._drawCalls[this._drawCallIndex++] = drawCall;
       } else {
         // Set the current renderer if not defined
         if (!this._currentRenderer) {
@@ -445,6 +452,26 @@ export class ExcaliburGraphicsContextWebGL implements ExcaliburGraphicsContext {
     this._postProcessTargets[1].setResolution(gl.canvas.width, gl.canvas.height);
   }
 
+  private _imageToWidth = new Map<HTMLImageSource, number>();
+  private _getImageWidth(image: HTMLImageSource) {
+    let maybeWidth = this._imageToWidth.get(image);
+    if (maybeWidth === undefined) {
+      maybeWidth = image.width;
+      this._imageToWidth.set(image, maybeWidth);
+    }
+    return maybeWidth;
+  }
+
+  private _imageToHeight = new Map<HTMLImageSource, number>();
+  private _getImageHeight(image: HTMLImageSource) {
+    let maybeHeight = this._imageToHeight.get(image);
+    if (maybeHeight === undefined) {
+      maybeHeight = image.height;
+      this._imageToHeight.set(image, maybeHeight);
+    }
+    return maybeHeight;
+  }
+
   drawImage(image: HTMLImageSource, x: number, y: number): void;
   drawImage(image: HTMLImageSource, x: number, y: number, width: number, height: number): void;
   drawImage(
@@ -473,7 +500,7 @@ export class ExcaliburGraphicsContextWebGL implements ExcaliburGraphicsContext {
       return; // zero dimension dest exit early
     } else if (dwidth === 0 || dheight === 0) {
       return; // zero dimension dest exit early
-    } else if (image.width === 0 || image.height === 0) {
+    } else if (this._getImageWidth(image) === 0 || this._getImageHeight(image) === 0) {
       return; // zero dimension source exit early
     }
 
@@ -566,13 +593,13 @@ export class ExcaliburGraphicsContextWebGL implements ExcaliburGraphicsContext {
       const uniforms = shader.getUniforms();
       this._totalPostProcessorTime += delta;
 
-      if (uniforms.find(u => u.name ==='u_time_ms')) {
+      if (uniforms.find((u) => u.name === 'u_time_ms')) {
         shader.setUniformFloat('u_time_ms', this._totalPostProcessorTime);
       }
-      if (uniforms.find(u => u.name ==='u_elapsed_ms')) {
+      if (uniforms.find((u) => u.name === 'u_elapsed_ms')) {
         shader.setUniformFloat('u_elapsed_ms', delta);
       }
-      if (uniforms.find(u => u.name ==='u_resolution')) {
+      if (uniforms.find((u) => u.name === 'u_resolution')) {
         shader.setUniformFloatVector('u_resolution', vec(this.width, this.height));
       }
 
@@ -596,7 +623,7 @@ export class ExcaliburGraphicsContextWebGL implements ExcaliburGraphicsContext {
    * @returns Material
    */
   public createMaterial(options: Omit<MaterialOptions, 'graphicsContext'>): Material {
-    const material = new Material({...options, graphicsContext: this});
+    const material = new Material({ ...options, graphicsContext: this });
     return material;
   }
 
@@ -636,20 +663,34 @@ export class ExcaliburGraphicsContextWebGL implements ExcaliburGraphicsContext {
     currentTarget.use();
 
     if (this.useDrawSorting) {
+      // null out unused draw calls
+      for (let i = this._drawCallIndex; i < this._drawCalls.length; i++) {
+        this._drawCalls[i] = null;
+      }
       // sort draw calls
       // Find the original order of the first instance of the draw call
       const originalSort = new Map<string, number>();
       for (const [name] of this._renderers) {
-        const firstIndex = this._drawCalls.findIndex(dc => dc.renderer === name);
+        let firstIndex = 0;
+        for (firstIndex = 0; firstIndex < this._drawCallIndex; firstIndex++) {
+          if (this._drawCalls[firstIndex].renderer === name) {
+            break;
+          }
+        }
         originalSort.set(name, firstIndex);
       }
 
       this._drawCalls.sort((a, b) => {
+        if (a === null || b === null) {
+          return 0;
+        }
         const zIndex = a.z - b.z;
         const originalSortOrder = originalSort.get(a.renderer) - originalSort.get(b.renderer);
         const priority = a.priority - b.priority;
-        if (zIndex === 0) { // sort by z first
-          if (priority === 0) { // sort by priority
+        if (zIndex === 0) {
+          // sort by z first
+          if (priority === 0) {
+            // sort by priority
             return originalSortOrder; // use the original order to inform draw call packing to maximally preserve painter order
           }
           return priority;
@@ -660,10 +701,10 @@ export class ExcaliburGraphicsContextWebGL implements ExcaliburGraphicsContext {
       const oldTransform = this._transform.current;
       const oldState = this._state.current;
 
-      if (this._drawCalls.length) {
+      if (this._drawCalls.length && this._drawCallIndex) {
         let currentRendererName = this._drawCalls[0].renderer;
         let currentRenderer = this._renderers.get(currentRendererName);
-        for (let i = 0; i < this._drawCalls.length; i++) {
+        for (let i = 0; i < this._drawCallIndex; i++) {
           // hydrate the state for renderers
           this._transform.current = this._drawCalls[i].transform;
           this._state.current = this._drawCalls[i].state;
@@ -694,7 +735,9 @@ export class ExcaliburGraphicsContextWebGL implements ExcaliburGraphicsContext {
 
       // reclaim draw calls
       this._drawCallPool.done();
-      this._drawCalls.length = 0;
+      this._drawCallIndex = 0;
+      this._imageToHeight.clear();
+      this._imageToWidth.clear();
     } else {
       // This is the final flush at the moment to draw any leftover pending draw
       for (const renderer of this._renderers.values()) {

@@ -15,12 +15,18 @@ describe('A label', () => {
     });
   });
 
+  afterEach(() => {
+    engine.stop();
+    engine.dispose();
+    engine = null;
+  });
+
   it('exists', () => {
     expect(ex.Label).toBeDefined();
   });
 
   it('can be constructed', () => {
-    const sut = new ex.Label({text: 'some text'});
+    const sut = new ex.Label({ text: 'some text' });
     expect(sut).not.toBeNull();
   });
 

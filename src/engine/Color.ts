@@ -1,4 +1,3 @@
-
 /**
  * Provides standard colors (e.g. [[Color.Black]])
  * but you can also create custom colors using RGB, HSL, or Hex. Also provides
@@ -222,7 +221,8 @@ export class Color {
    * @see https://stackoverflow.com/questions/5623838/rgb-to-hex-and-hex-to-rgb
    */
   private _componentToHex(c: number) {
-    const hex = c.toString(16);
+    // Handle negative and fractional numbers
+    const hex = Math.max(Math.round(c), 0).toString(16);
     return hex.length === 1 ? '0' + hex : hex;
   }
 
@@ -230,7 +230,11 @@ export class Color {
    * Return Hex representation of a color.
    */
   public toHex() {
-    return '#' + this._componentToHex(this.r) + this._componentToHex(this.g) + this._componentToHex(this.b);
+    let hexRepresentation = '#' + this._componentToHex(this.r) + this._componentToHex(this.g) + this._componentToHex(this.b);
+    if (this.a !== 1) {
+      hexRepresentation += this._componentToHex(this.a * 255);
+    }
+    return hexRepresentation;
   }
 
   /**
@@ -413,7 +417,12 @@ export class Color {
  * http://axonflux.com/handy-rgb-to-hsl-and-rgb-to-hsv-color-model-c
  */
 class HSLColor {
-  constructor(public h: number, public s: number, public l: number, public a: number) {}
+  constructor(
+    public h: number,
+    public s: number,
+    public l: number,
+    public a: number
+  ) {}
 
   public static hue2rgb(p: number, q: number, t: number): number {
     if (t < 0) {

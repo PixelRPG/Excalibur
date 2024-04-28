@@ -34,6 +34,7 @@ describe('A TileMap', () => {
   });
   afterEach(() => {
     engine.stop();
+    engine.dispose();
     engine = null;
   });
 
@@ -232,7 +233,7 @@ describe('A TileMap', () => {
       columns: 7
     });
     const spriteTiles = ex.SpriteSheet.fromImageSource({
-      image:texture,
+      image: texture,
       grid: {
         rows: 1,
         columns: 1,
@@ -315,7 +316,7 @@ describe('A TileMap', () => {
       columns: 20
     });
     const spriteTiles = ex.SpriteSheet.fromImageSource({
-      image:texture,
+      image: texture,
       grid: {
         rows: 1,
         columns: 1,
@@ -348,7 +349,7 @@ describe('A TileMap', () => {
     });
     tm.scale = ex.vec(2, 2);
     const spriteTiles = ex.SpriteSheet.fromImageSource({
-      image:texture,
+      image: texture,
       grid: {
         rows: 1,
         columns: 1,
@@ -478,7 +479,6 @@ describe('A TileMap', () => {
       columns: 20
     });
 
-
     const tile = sut.getTile(0, 0);
     tile.solid = true;
 
@@ -503,6 +503,7 @@ describe('A TileMap', () => {
     expect(tile.getColliders().length).toBe(0);
     const tileMapCollider2 = sut.get(ColliderComponent).get() as ex.CompositeCollider;
     expect(tileMapCollider2.getColliders().length).toBe(0);
+    engine.dispose();
   });
 
   it('can get the bounds of a tile', () => {
@@ -515,12 +516,14 @@ describe('A TileMap', () => {
     });
 
     const tile = sut.getTile(0, 0);
-    expect(tile.bounds).toEqual(new ex.BoundingBox({
-      left: 100,
-      top: 100,
-      right: 164,
-      bottom: 148
-    }));
+    expect(tile.bounds).toEqual(
+      new ex.BoundingBox({
+        left: 100,
+        top: 100,
+        right: 164,
+        bottom: 148
+      })
+    );
   });
 
   it('can get the center of a tile', () => {
@@ -534,6 +537,41 @@ describe('A TileMap', () => {
 
     const tile = sut.getTile(0, 0);
     expect(tile.center).toBeVector(ex.vec(132, 124));
+  });
+
+  it('can respond to pointer events', async () => {
+    const engine = TestUtils.engine({ width: 100, height: 100 });
+    await TestUtils.runToReady(engine);
+    const sut = new ex.TileMap({
+      pos: ex.vec(100, 100),
+      tileWidth: 64,
+      tileHeight: 48,
+      rows: 20,
+      columns: 20
+    });
+    engine.add(sut);
+
+    const tile = sut.getTile(0, 0);
+
+    const pointerdown = jasmine.createSpy('pointerdown');
+    const pointerup = jasmine.createSpy('pointerup');
+    const pointermove = jasmine.createSpy('pointermove');
+    const pointercancel = jasmine.createSpy('pointercancel');
+    tile.on('pointerdown', pointerdown);
+    tile.on('pointerup', pointerup);
+    tile.on('pointermove', pointermove);
+    tile.on('pointercancel', pointercancel);
+
+    engine.input.pointers.triggerEvent('down', ex.vec(110, 110));
+    engine.input.pointers.triggerEvent('up', ex.vec(110, 110));
+    engine.input.pointers.triggerEvent('move', ex.vec(110, 110));
+    engine.input.pointers.triggerEvent('cancel', ex.vec(110, 110));
+    expect(pointerdown).toHaveBeenCalledTimes(1);
+    expect(pointerup).toHaveBeenCalledTimes(1);
+    expect(pointermove).toHaveBeenCalledTimes(1);
+    expect(pointercancel).toHaveBeenCalledTimes(1);
+
+    engine.dispose();
   });
 
   describe('with an actor', () => {

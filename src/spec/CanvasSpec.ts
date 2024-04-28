@@ -109,7 +109,7 @@ describe('A Canvas Graphic', () => {
   });
 
   it('can be centered with the specified dimensions in an actor', async () => {
-    const engine = TestUtils.engine({width: 100, height: 100});
+    const engine = TestUtils.engine({ width: 100, height: 100 });
     const clock = engine.clock as ex.TestClock;
     await TestUtils.runToReady(engine);
     const sut = new ex.Canvas({
@@ -136,6 +136,6 @@ describe('A Canvas Graphic', () => {
     expect(sut.width).toBe(50);
     expect(sut.height).toBe(50);
     await expectAsync(engine.canvas).toEqualImage('src/spec/images/GraphicsCanvasSpec/centered.png');
-
+    engine.dispose();
   });
 });

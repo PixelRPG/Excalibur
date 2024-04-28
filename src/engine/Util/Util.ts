@@ -7,8 +7,11 @@ import { Future } from './Future';
  */
 export function getPosition(el: HTMLElement): Vector {
   // do we need the scroll too? technically the offset method before did that
-  const rect = el.getBoundingClientRect();
-  return vec(rect.x + window.scrollX, rect.y + window.scrollY);
+  if (el) {
+    const rect = el.getBoundingClientRect();
+    return vec(rect.x + window.scrollX, rect.y + window.scrollY);
+  }
+  return Vector.Zero;
 }
 
 /**
@@ -78,7 +81,7 @@ export function delay(milliseconds: number, clock?: Clock): Promise<void> {
  * @param object
  * @param keys
  */
-export function omit<TObject extends Object, Keys extends (keyof TObject)>(object: TObject, keys: Keys[]) {
+export function omit<TObject extends Object, Keys extends keyof TObject>(object: TObject, keys: Keys[]) {
   const newObj: Omit<TObject, Keys> = {} as any;
   for (const key in object) {
     if (!keys.includes(key as any)) {

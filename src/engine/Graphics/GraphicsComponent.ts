@@ -8,6 +8,7 @@ import { Material } from './Context/material';
 import { Logger } from '../Util/Log';
 import { WatchVector } from '../Math/watch-vector';
 import { TransformComponent } from '../EntityComponentSystem';
+import { GraphicsGroup } from '../Graphics/GraphicsGroup';
 
 /**
  * Type guard for checking if a Graphic HasTick (used for graphics that change over time like animations)
@@ -56,7 +57,7 @@ export interface GraphicsComponentOptions {
   /**
    * List of graphics and optionally the options per graphic
    */
-  graphics?: { [graphicName: string]: Graphic | { graphic: Graphic, options: GraphicsShowOptions } };
+  graphics?: { [graphicName: string]: Graphic | { graphic: Graphic; options: GraphicsShowOptions } };
 
   /**
    * Optional offset in absolute pixels to shift all graphics in this component from each graphic's anchor (default is top left corner)
@@ -110,7 +111,6 @@ export class GraphicsComponent extends Component {
    * Sets or gets wither all drawings should have an opacity applied
    */
   public opacity: number = 1;
-
 
   private _offset: Vector = Vector.Zero;
 
@@ -268,7 +268,7 @@ export class GraphicsComponent extends Component {
     }
 
     this._graphics[name] = this.copyGraphics ? graphicToSet.clone() : graphicToSet;
-    this._options[name] = this.copyGraphics ? {...optionsToSet} : optionsToSet;
+    this._options[name] = this.copyGraphics ? { ...optionsToSet } : optionsToSet;
     if (name === 'default') {
       this.use('default');
     }
@@ -319,7 +319,8 @@ export class GraphicsComponent extends Component {
       this._options[this._current] = options;
       if (!(this._current in this._graphics)) {
         this._logger.warn(
-          `Graphic ${this._current} is not registered with the graphics component owned by ${this.owner?.name}. Nothing will be drawn.`);
+          `Graphic ${this._current} is not registered with the graphics component owned by ${this.owner?.name}. Nothing will be drawn.`
+        );
       }
     }
     this.recalculateBounds();
@@ -357,9 +358,13 @@ export class GraphicsComponent extends Component {
       offset = options.offset;
     }
     const bounds = graphic.localBounds;
-    const offsetX = -bounds.width *  anchor.x + offset.x;
-    const offsetY = -bounds.height *  anchor.y + offset.y;
-    bb = graphic?.localBounds.translate(vec(offsetX, offsetY)).combine(bb);
+    const offsetX = -bounds.width * anchor.x + offset.x;
+    const offsetY = -bounds.height * anchor.y + offset.y;
+    if (graphic instanceof GraphicsGroup && !graphic.useAnchor) {
+      bb = graphic?.localBounds.combine(bb);
+    } else {
+      bb = graphic?.localBounds.translate(vec(offsetX, offsetY)).combine(bb);
+    }
     this._localBounds = bb;
   }
 
@@ -399,11 +404,10 @@ export class GraphicsComponent extends Component {
     }
   }
 
-
   public clone(): GraphicsComponent {
     const graphics = new GraphicsComponent();
     graphics._graphics = { ...this._graphics };
-    graphics._options = {... this._options};
+    graphics._options = { ...this._options };
     graphics.offset = this.offset.clone();
     graphics.opacity = this.opacity;
     graphics.anchor = this.anchor.clone();

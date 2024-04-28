@@ -1,6 +1,8 @@
 import { Logger } from '../Util/Log';
 import { FpsSampler } from './Fps';
 
+export type ScheduledCallbackTiming = 'preframe' | 'postframe' | 'preupdate' | 'postupdate' | 'predraw' | 'postdraw';
+
 export interface ClockOptions {
   /**
    * Define the function you'd like the clock to tick when it is started
@@ -16,7 +18,6 @@ export interface ClockOptions {
   maxFps?: number;
 }
 
-
 /**
  * Abstract Clock is the base type of all Clocks
  *
@@ -29,13 +30,15 @@ export interface ClockOptions {
  */
 export abstract class Clock {
   protected tick: (elapsedMs: number) => any;
-  private _onFatalException: (e: unknown) => any = () => { /* default nothing */ };
+  private _onFatalException: (e: unknown) => any = () => {
+    /* default nothing */
+  };
   private _maxFps: number = Infinity;
   private _lastTime: number = 0;
   public fpsSampler: FpsSampler;
   private _options: ClockOptions;
   private _elapsed: number = 1;
-  private _scheduledCbs: [cb: (elapsedMs: number) => any, scheduledTime: number][] = [];
+  private _scheduledCbs: [cb: (elapsedMs: number) => any, scheduledTime: number, timing: ScheduledCallbackTiming][] = [];
   private _totalElapsed: number = 0;
   constructor(options: ClockOptions) {
     this._options = options;
@@ -90,17 +93,23 @@ export abstract class Clock {
    * stopped or paused.
    * @param cb callback to fire
    * @param timeoutMs Optionally specify a timeout in milliseconds from now, default is 0ms which means the next possible tick
+   * @param timing Optionally specify a timeout in milliseconds from now, default is 0ms which means the next possible tick
    */
-  public schedule(cb: (elapsedMs: number) => any, timeoutMs: number = 0) {
+  public schedule(cb: (elapsedMs: number) => any, timeoutMs: number = 0, timing: ScheduledCallbackTiming = 'preframe') {
     // Scheduled based on internal elapsed time
     const scheduledTime = this._totalElapsed + timeoutMs;
-    this._scheduledCbs.push([cb, scheduledTime]);
+    this._scheduledCbs.push([cb, scheduledTime, timing]);
   }
 
-  private _runScheduledCbs() {
+  /**
+   * Called internally to trigger scheduled callbacks in the clock
+   * @param timing
+   * @internal
+   */
+  public __runScheduledCbs(timing: ScheduledCallbackTiming = 'preframe') {
     // walk backwards to delete items as we loop
     for (let i = this._scheduledCbs.length - 1; i > -1; i--) {
-      if (this._scheduledCbs[i][1] <= this._totalElapsed) {
+      if (timing === this._scheduledCbs[i][2] && this._scheduledCbs[i][1] <= this._totalElapsed) {
         this._scheduledCbs[i][0](this._elapsed);
         this._scheduledCbs.splice(i, 1);
       }
@@ -115,13 +124,13 @@ export abstract class Clock {
       let elapsed = now - this._lastTime || 1; // first frame
 
       // Constrain fps
-      const fpsInterval = (1000 / this._maxFps);
+      const fpsInterval = 1000 / this._maxFps;
 
       // only run frame if enough time has elapsed
       if (elapsed >= fpsInterval) {
         let leftover = 0;
         if (fpsInterval !== 0) {
-          leftover = (elapsed % fpsInterval);
+          leftover = elapsed % fpsInterval;
           elapsed = elapsed - leftover; // shift elapsed to be "in phase" with the current loop fps
         }
 
@@ -136,8 +145,9 @@ export abstract class Clock {
         // tick the mainloop and run scheduled callbacks
         this._elapsed = overrideUpdateMs || elapsed;
         this._totalElapsed += this._elapsed;
-        this._runScheduledCbs();
+        this.__runScheduledCbs('preframe');
         this.tick(overrideUpdateMs || elapsed);
+        this.__runScheduledCbs('postframe');
 
         if (fpsInterval !== 0) {
           this._lastTime = now - leftover;
@@ -168,12 +178,10 @@ export abstract class Clock {
   public abstract stop(): void;
 }
 
-
 /**
  * The [[StandardClock]] implements the requestAnimationFrame browser api to run the tick()
  */
 export class StandardClock extends Clock {
-
   private _running = false;
   private _requestId: number;
   constructor(options: ClockOptions) {

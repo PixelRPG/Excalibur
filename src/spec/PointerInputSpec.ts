@@ -34,6 +34,8 @@ describe('A pointer', () => {
 
   afterEach(() => {
     engine.stop();
+    engine.dispose();
+    engine = null;
   });
 
   it('should detect pointer event', () => {
@@ -201,7 +203,6 @@ describe('A pointer', () => {
     engine.currentScene.update(engine, 0);
 
     expect(pointerDownSpy).toHaveBeenCalledTimes(0);
-
   });
 
   it('can have pointer event canceled', () => {

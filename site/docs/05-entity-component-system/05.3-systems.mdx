@@ -48,7 +48,7 @@ Systems execute in this order
    * Run setup code for the update
 4. every frame `update(delta: number)`
    * Update all your entities here
-5. every frame `preupdate(scene: Scene, elapsedMs: number)`
+5. every frame `postupdate(scene: Scene, elapsedMs: number)`
    * Run cleanup code for the update
 
 ## Built in Systems
@@ -123,7 +123,7 @@ class SearchSystem extends ex.System {
 }
 
 const scene = new ex.Scene();
-scene.world.add(new SearchSystem());
+scene.world.add(SearchSystem);
 
 // Actors come with batteries included built in features
 const actor = new ex.Actor({

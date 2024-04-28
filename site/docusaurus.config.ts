@@ -52,7 +52,7 @@ const config: Config = {
           sidebarPath: require.resolve('./sidebars.js'),
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
-          editUrl: 'https://github.com/excaliburjs/Excalibur/tree/main/site/docs/',
+          editUrl: 'https://github.com/excaliburjs/Excalibur/tree/main/site/',
           rehypePlugins: [[rehypeRaw, rehypeRawOptions]],
           remarkPlugins: [
             [
@@ -190,6 +190,18 @@ const config: Config = {
           }
         ]
       }
+    ],
+    [
+      '@docusaurus/plugin-client-redirects',
+      {
+        redirects: [
+          // /docs/oldDoc -> /docs/newDoc
+          {
+            from: '/docs/webgl',
+            to: '/docs/performance',
+          },
+        ],
+      },
     ]
   ],
 
@@ -247,6 +259,15 @@ const config: Config = {
           title: 'Community',
           items: [
             {
+              label: 'Mastodon',
+              href: 'https://mastodon.gamedev.place/@excaliburjs',
+              rel: 'me'
+            },
+            {
+              label: 'Threads',
+              href: 'https://www.threads.net/@excalibur.js'
+            },
+            {
               label: 'Twitter',
               href: 'https://twitter.com/excaliburjs'
             },
@@ -257,8 +278,7 @@ const config: Config = {
             {
               label: 'Discussions',
               href: 'https://github.com/excaliburjs/Excalibur/discussions'
-            },
-            
+            }
           ]
         },
         {

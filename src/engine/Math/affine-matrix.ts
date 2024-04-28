@@ -2,7 +2,6 @@ import { Matrix } from './matrix';
 import { canonicalizeAngle, sign } from './util';
 import { vec, Vector } from './vector';
 
-
 export class AffineMatrix {
   /**
    * |         |         |          |
@@ -245,15 +244,14 @@ export class AffineMatrix {
       const b23 = other.data[5];
       //  const b33 = 1;
 
+      result.data[0] = a11 * b11 + a12 * b21; // + a13 * b31; // zero
+      result.data[1] = a21 * b11 + a22 * b21; // + a23 * b31; // zero
 
-      result.data[0] = a11 * b11 + a12 * b21;// + a13 * b31; // zero
-      result.data[1] = a21 * b11 + a22 * b21;// + a23 * b31; // zero
+      result.data[2] = a11 * b12 + a12 * b22; // + a13 * b32; // zero
+      result.data[3] = a21 * b12 + a22 * b22; // + a23 * b32; // zero
 
-      result.data[2] = a11 * b12 + a12 * b22;// + a13 * b32; // zero
-      result.data[3] = a21 * b12 + a22 * b22;// + a23 * b32; // zero
-
-      result.data[4] = a11 * b13 + a12 * b23 + a13;// * b33; // one
-      result.data[5] = a21 * b13 + a22 * b23 + a23;// * b33; // one
+      result.data[4] = a11 * b13 + a12 * b23 + a13; // * b33; // one
+      result.data[5] = a21 * b13 + a22 * b23 + a23; // * b33; // one
 
       const s = this.getScale();
       result._scaleSignX = sign(s.x) * sign(result._scaleSignX);
@@ -261,6 +259,33 @@ export class AffineMatrix {
 
       return result;
     }
+  }
+
+  /**
+   * Packed array of length 8, that contains 4 vertices, with 2 components each
+   * So: [x0, y0, x1, y1, x2, y2, x3, y3]
+   * @param quad
+   */
+  multiplyQuadInPlace(quad: number[]) {
+    const resultTopLeftX = quad[0] * this.data[0] + quad[1] * this.data[2] + this.data[4];
+    const resultTopLeftY = quad[0] * this.data[1] + quad[1] * this.data[3] + this.data[5];
+    quad[0] = resultTopLeftX;
+    quad[1] = resultTopLeftY;
+
+    const resultTopRightX = quad[2] * this.data[0] + quad[3] * this.data[2] + this.data[4];
+    const resultTopRightY = quad[2] * this.data[1] + quad[3] * this.data[3] + this.data[5];
+    quad[2] = resultTopRightX;
+    quad[3] = resultTopRightY;
+
+    const resultBottomLeftX = quad[4] * this.data[0] + quad[5] * this.data[2] + this.data[4];
+    const resultBottomLeftY = quad[4] * this.data[1] + quad[5] * this.data[3] + this.data[5];
+    quad[4] = resultBottomLeftX;
+    quad[5] = resultBottomLeftY;
+
+    const resultBottomRightX = quad[6] * this.data[0] + quad[7] * this.data[2] + this.data[4];
+    const resultBottomRightY = quad[6] * this.data[1] + quad[7] * this.data[3] + this.data[5];
+    quad[6] = resultBottomRightX;
+    quad[7] = resultBottomRightY;
   }
 
   to4x4() {
@@ -355,14 +380,7 @@ export class AffineMatrix {
   }
 
   public isIdentity(): boolean {
-    return (
-      this.data[0] === 1 &&
-      this.data[1] === 0 &&
-      this.data[2] === 0 &&
-      this.data[3] === 1 &&
-      this.data[4] === 0 &&
-      this.data[5] === 0
-    );
+    return this.data[0] === 1 && this.data[1] === 0 && this.data[2] === 0 && this.data[3] === 1 && this.data[4] === 0 && this.data[5] === 0;
   }
 
   /**
@@ -383,18 +401,11 @@ export class AffineMatrix {
   }
 
   /**
-   * Creates a new Matrix with the same data as the current 4x4
+   * Creates a new Matrix with the same data as the current [[AffineMatrix]]
    */
   public clone(dest?: AffineMatrix): AffineMatrix {
     const mat = dest || new AffineMatrix();
-    mat.data[0] = this.data[0];
-    mat.data[1] = this.data[1];
-
-    mat.data[2] = this.data[2];
-    mat.data[3] = this.data[3];
-
-    mat.data[4] = this.data[4];
-    mat.data[5] = this.data[5];
+    mat.data.set(this.data);
     return mat;
   }
 
@@ -405,5 +416,4 @@ export class AffineMatrix {
 [0 0 1]
 `;
   }
-
 }

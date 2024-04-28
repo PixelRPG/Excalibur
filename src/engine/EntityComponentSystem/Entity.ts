@@ -23,7 +23,7 @@ export interface EntityComponent {
  */
 export class AddedComponent implements Message<EntityComponent> {
   readonly type: 'Component Added' = 'Component Added';
-  constructor(public data: EntityComponent) { }
+  constructor(public data: EntityComponent) {}
 }
 
 /**
@@ -38,7 +38,7 @@ export function isAddedComponent(x: Message<EntityComponent>): x is AddedCompone
  */
 export class RemovedComponent implements Message<EntityComponent> {
   readonly type: 'Component Removed' = 'Component Removed';
-  constructor(public data: EntityComponent) { }
+  constructor(public data: EntityComponent) {}
 }
 
 /**
@@ -52,10 +52,10 @@ export function isRemovedComponent(x: Message<EntityComponent>): x is RemovedCom
  * Built in events supported by all entities
  */
 export type EntityEvents = {
-  'initialize': InitializeEvent;
-  'preupdate': PreUpdateEvent;
-  'postupdate': PostUpdateEvent;
-  'kill': KillEvent
+  initialize: InitializeEvent;
+  preupdate: PreUpdateEvent;
+  postupdate: PostUpdateEvent;
+  kill: KillEvent;
 };
 
 export const EntityEvents = {
@@ -67,7 +67,7 @@ export const EntityEvents = {
 
 export interface EntityOptions<TComponents extends Component> {
   name?: string;
-  components: TComponents[];
+  components?: TComponents[];
 }
 
 /**
@@ -95,10 +95,10 @@ export class Entity<TKnownComponents extends Component = any> implements OnIniti
    */
   public events = new EventEmitter<EntityEvents>();
   private _tags = new Set<string>();
-  public componentAdded$ = new Observable<Component>;
-  public componentRemoved$ = new Observable<Component>;
-  public tagAdded$ = new Observable<string>;
-  public tagRemoved$ = new Observable<string>;
+  public componentAdded$ = new Observable<Component>();
+  public componentRemoved$ = new Observable<Component>();
+  public tagAdded$ = new Observable<string>();
+  public tagRemoved$ = new Observable<string>();
   /**
    * Current components on the entity
    *
@@ -122,7 +122,7 @@ export class Entity<TKnownComponents extends Component = any> implements OnIniti
       nameToAdd = name;
     } else if (componentsOrOptions && typeof componentsOrOptions === 'object') {
       const { components, name } = componentsOrOptions;
-      componentsToAdd = components;
+      componentsToAdd = components ?? [];
       nameToAdd = name;
     }
     if (nameToAdd) {
@@ -181,9 +181,10 @@ export class Entity<TKnownComponents extends Component = any> implements OnIniti
    * Adds a tag to an entity
    * @param tag
    */
-  public addTag(tag: string) {
+  public addTag(tag: string): Entity<TKnownComponents> {
     this._tags.add(tag);
     this.tagAdded$.notifyAll(tag);
+    return this;
   }
 
   /**
@@ -192,9 +193,10 @@ export class Entity<TKnownComponents extends Component = any> implements OnIniti
    * Removals are deferred until the end of update
    * @param tag
    */
-  public removeTag(tag: string) {
+  public removeTag(tag: string): Entity<TKnownComponents> {
     this._tags.delete(tag);
     this.tagRemoved$.notifyAll(tag);
+    return this;
   }
 
   /**
@@ -238,7 +240,8 @@ export class Entity<TKnownComponents extends Component = any> implements OnIniti
   }
 
   private _getCachedInstanceOfType<TComponent extends Component>(
-    type: ComponentCtor<TComponent>): MaybeKnownComponent<TComponent, TKnownComponents> | undefined {
+    type: ComponentCtor<TComponent>
+  ): MaybeKnownComponent<TComponent, TKnownComponents> | undefined {
     if (this._instanceOfComponentCacheDirty) {
       this._instanceOfComponentCacheDirty = false;
       this._instanceOfComponentCache.clear();
@@ -259,7 +262,7 @@ export class Entity<TKnownComponents extends Component = any> implements OnIniti
 
   get<TComponent extends Component>(type: ComponentCtor<TComponent>): MaybeKnownComponent<TComponent, TKnownComponents> {
     const maybeComponent = this._getCachedInstanceOfType(type);
-    return maybeComponent ?? this.components.get(type) as MaybeKnownComponent<TComponent, TKnownComponents>;
+    return maybeComponent ?? (this.components.get(type) as MaybeKnownComponent<TComponent, TKnownComponents>);
   }
 
   private _parent: Entity | null = null;
@@ -434,8 +437,9 @@ export class Entity<TKnownComponents extends Component = any> implements OnIniti
    * @param force
    */
   public removeComponent<TComponent extends Component>(
-    typeOrInstance: ComponentCtor<TComponent> | TComponent, force = false): Entity<Exclude<TKnownComponents, TComponent>> {
-
+    typeOrInstance: ComponentCtor<TComponent> | TComponent,
+    force = false
+  ): Entity<Exclude<TKnownComponents, TComponent>> {
     let type: ComponentCtor<TComponent>;
     if (isComponentCtor(typeOrInstance)) {
       type = typeOrInstance;

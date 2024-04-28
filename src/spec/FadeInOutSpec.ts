@@ -21,12 +21,14 @@ describe('A FadeInOut transition', () => {
     const engine = TestUtils.engine({ backgroundColor: ex.Color.ExcaliburBlue });
     const clock = engine.clock as ex.TestClock;
     await TestUtils.runToReady(engine);
-    engine.add(new ex.Actor({
-      pos: ex.vec(20, 20),
-      width: 100,
-      height: 100,
-      color: ex.Color.Red
-    }));
+    engine.add(
+      new ex.Actor({
+        pos: ex.vec(20, 20),
+        width: 100,
+        height: 100,
+        color: ex.Color.Red
+      })
+    );
 
     const onDeactivateSpy = jasmine.createSpy('onDeactivate').and.callFake(async () => {
       await Promise.resolve();
@@ -36,16 +38,18 @@ describe('A FadeInOut transition', () => {
 
     const sut = new ex.FadeInOut({ duration: 1000, direction: 'in' });
     const scene = new ex.Scene();
-    scene.add(new ex.Actor({
-      pos: ex.vec(200, 200),
-      width: 40,
-      height: 40,
-      color: ex.Color.Violet
-    }));
+    scene.add(
+      new ex.Actor({
+        pos: ex.vec(200, 200),
+        width: 40,
+        height: 40,
+        color: ex.Color.Violet
+      })
+    );
     engine.addScene('newScene', { scene, transitions: { in: sut } });
 
     const goto = engine.goto('newScene');
-    await TestUtils.flushMicrotasks(clock, 13);
+    await TestUtils.flushMicrotasks(clock, 15);
     clock.step(500);
     await Promise.resolve();
     expect(onDeactivateSpy).toHaveBeenCalledTimes(1);
@@ -57,22 +61,25 @@ describe('A FadeInOut transition', () => {
     const engine = TestUtils.engine({ backgroundColor: ex.Color.ExcaliburBlue });
     const clock = engine.clock as ex.TestClock;
     await TestUtils.runToReady(engine);
-    engine.add(new ex.Actor({
-      pos: ex.vec(20, 20),
-      width: 100,
-      height: 100,
-      color: ex.Color.Red
-    }));
-
+    engine.add(
+      new ex.Actor({
+        pos: ex.vec(20, 20),
+        width: 100,
+        height: 100,
+        color: ex.Color.Red
+      })
+    );
 
     const sut = new ex.FadeInOut({ duration: 1000, direction: 'out', color: ex.Color.Violet });
     const scene = new ex.Scene();
-    scene.add(new ex.Actor({
-      pos: ex.vec(200, 200),
-      width: 40,
-      height: 40,
-      color: ex.Color.Violet
-    }));
+    scene.add(
+      new ex.Actor({
+        pos: ex.vec(200, 200),
+        width: 40,
+        height: 40,
+        color: ex.Color.Violet
+      })
+    );
     engine.addScene('newScene', scene);
 
     const goto = engine.goToScene('newScene', { sourceOut: sut });
@@ -80,5 +87,6 @@ describe('A FadeInOut transition', () => {
     clock.step(900);
     await Promise.resolve();
     await expectAsync(engine.canvas).toEqualImage('/src/spec/images/FadeInOutSpec/fadeout.png');
+    engine.dispose();
   });
 });

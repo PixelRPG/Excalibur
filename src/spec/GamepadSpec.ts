@@ -13,9 +13,15 @@ describe('A gamepad', () => {
 
     nav = mock.navigator();
 
-    spyOn(navigator, 'getGamepads').and.callFake(function(): any[] {
+    spyOn(navigator, 'getGamepads').and.callFake(function (): any[] {
       return nav.getGamepads();
     });
+  });
+
+  afterEach(() => {
+    engine.stop();
+    engine.dispose();
+    engine = null;
   });
 
   it('should fire an event on connect', () => {

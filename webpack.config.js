@@ -49,8 +49,8 @@ module.exports = (env, argv) => {
     experiments:
       env.output === 'esm'
         ? {
-          outputModule: true
-        }
+            outputModule: true
+          }
         : {},
     resolve: {
       // Add `.ts` and `.tsx` as a resolvable extension.
@@ -102,5 +102,5 @@ Licensed ${pkg.license}
 @preserve`
       )
     ]
-  }
+  };
 };

@@ -7,15 +7,96 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Breaking Changes
 
-=======
+- `ex.Action` now requires a unique `id` property
+
+### Deprecated
+
+- `actor.getGlobalPos()` - use `actor.globalPos` instead
+- `actor.getGlobalRotation()` - use `actor.globalRotation` instead
+- `actor.getGlobalScale()` - use `actor.globalScale` instead
+
+### Added
+
+- `actor.oldGlobalPos` returns the globalPosition from the previous frame
+- Built in actions now have a unique `id` property
+
+### Fixed
+
+-
+
+### Updates
+
+-
+
+### Changed
+
+- `ex.Vector.toAngle()` now returns angles from [0 - 2 PI)
+
+<!--------------------------------- DO NOT EDIT BELOW THIS LINE --------------------------------->
+<!--------------------------------- DO NOT EDIT BELOW THIS LINE --------------------------------->
+<!--------------------------------- DO NOT EDIT BELOW THIS LINE --------------------------------->
+
+## [v0.29.2]
+
+### Breaking Changes
+
 -
 
 ### Deprecated
 
--
+- `
 
 ### Added
 
+- Added ability to configure image wrapping on `ex.ImageSource` with the new `ex.ImageWrapping.Clamp` (default), `ex.ImageWrapping.Repeat`, and `ex.ImageWrapping.Mirror`.
+  ```typescript
+  const image = new ex.ImageSource('path/to/image.png', {
+    filtering: ex.ImageFiltering.Pixel,
+    wrapping: {
+      x: ex.ImageWrapping.Repeat,
+      y: ex.ImageWrapping.Repeat,
+    }
+  });
+  ```
+- Added pointer event support to `ex.TileMap`'s and individual `ex.Tile`'s
+- Added pointer event support to `ex.IsometricMap`'s and individual `ex.IsometricTile`'s
+- Added `useAnchor` parameter to `ex.GraphicsGroup` to allow users to opt out of anchor based positioning, if set to false all graphics members
+will be positioned with the top left of the graphic at the actor's position.
+  ```typescript
+  const graphicGroup = new ex.GraphicsGroup({
+    useAnchor: false,
+    members: [
+      {
+        graphic: heartImage.toSprite(),
+        offset: ex.vec(0, 0),
+      },
+      {
+        graphic: heartImage.toSprite(),
+        offset: ex.vec(0, 16),
+      },
+      {
+        graphic: heartImage.toSprite(),
+        offset: ex.vec(16, 16),
+      },
+      {
+        graphic: heartImage.toSprite(),
+        offset: ex.vec(16, 0),
+      },
+    ],
+  });
+  ```
+- Added simplified `ex.coroutine` overloads, you need not pass engine as long as you are in an Excalibur lifecycle
+  ```typescript
+  const result = ex.coroutine(function* () {...});
+  ```
+- Added way to bind 'this' to `ex.coroutine` overloads, you need not pass engine as long as you are in an Excalibur lifecycle
+  ```typescript
+  const result = ex.coroutine({myThis: 'cool'}, function* () {...});
+  ```
+- Added optional `ex.coroutine` timing parameter to schedule when they are updated
+  ```typescript
+  const result = ex.coroutine(engine, function * () {...}, { timing: 'postupdate' })
+  ```
 - Added `GraphicsComponent.bounds` which will report the world bounds of the graphic if applicable!
 - Added `ex.Vector.EQUALS_EPSILON` to configure the `ex.Vector.equals(v)` threshold
 - Added way to add custom WebGL context lost/recovered handlers for your game
@@ -28,6 +109,10 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Fixed
 
+- Fixed issue where `ex.TileMap` culling did not work properly when using fixed updates lower than refresh rate
+- Fixed incomplete types for font options in `ex.FontSource().toFont(options)`
+- Fixed issue with `ex.Loader` start button position when using CSS transforms
+- Fixed issue where adding scenes with the same name did not work when it was previously removed
 - Fixed issue when WebGL context lost occurs where there was no friendly output to the user
 - Fixed issue where HiDPI scaling could accidentally scale past the 4k mobile limit, if the context would scale too large it will now attempt to recover by backing off.
 - Fixed issue where logo was sometimes not loaded during `ex.Loader`
@@ -42,6 +127,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 - Fixed issue where Firefox on Linux would throw an error when using custom Materials due to unused attributes caused by glsl compiler optimization. 
 - Fixed issue where start transition did not work properly if deferred
 - Fixed issue where transitions did not cover the whole screen if camera was zoomed
+- Fixed issue where `Color.toHex()` produced invalid strings if the channel values are negative or fractional, or if the alpha channel was different than 1
 
 ### Updates
 
@@ -49,11 +135,8 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Changed
 
+- Significant 2x performance improvement to image drawing in Excalibur
 - Simplified `ex.Loader` viewport/resolution internal configuration
-
-<!--------------------------------- DO NOT EDIT BELOW THIS LINE --------------------------------->
-<!--------------------------------- DO NOT EDIT BELOW THIS LINE --------------------------------->
-<!--------------------------------- DO NOT EDIT BELOW THIS LINE --------------------------------->
 
 ## [v0.29.0]
 

@@ -13,7 +13,12 @@ export class FontTextInstance {
   public disposed: boolean = false;
   private _lastHashCode: string;
 
-  constructor(public readonly font: Font, public readonly text: string, public readonly color: Color, public readonly maxWidth?: number) {
+  constructor(
+    public readonly font: Font,
+    public readonly text: string,
+    public readonly color: Color,
+    public readonly maxWidth?: number
+  ) {
     this.canvas = document.createElement('canvas');
     this.ctx = this.canvas.getContext('2d');
     this.dimensions = this.measureText(text);
@@ -40,7 +45,7 @@ export class FontTextInstance {
     const metrics = this.ctx.measureText(maxWidthLine);
     let textHeight = Math.abs(metrics.actualBoundingBoxAscent) + Math.abs(metrics.actualBoundingBoxDescent);
 
-    // TODO lineheight makes the text bounds wonky
+    // TODO line height makes the text bounds wonky
     const lineAdjustedHeight = textHeight * lines.length;
     textHeight = lineAdjustedHeight;
     const bottomBounds = lineAdjustedHeight - Math.abs(metrics.actualBoundingBoxAscent);
@@ -59,7 +64,7 @@ export class FontTextInstance {
   private _setDimension(textBounds: BoundingBox, bitmap: CanvasRenderingContext2D) {
     let lineHeightRatio = 1;
     if (this.font.lineHeight) {
-      lineHeightRatio = (this.font.lineHeight/this.font.size);
+      lineHeightRatio = this.font.lineHeight / this.font.size;
     }
     // Changing the width and height clears the context properties
     // We double the bitmap width to account for all possible alignment
@@ -209,7 +214,7 @@ export class FontTextInstance {
 
       if (ex instanceof ExcaliburGraphicsContextWebGL) {
         for (const frag of this._textFragments) {
-          ex.textureLoader.load(frag.canvas, this.font.filtering, true);
+          ex.textureLoader.load(frag.canvas, { filtering: this.font.filtering }, true);
         }
       }
       this._lastHashCode = hashCode;

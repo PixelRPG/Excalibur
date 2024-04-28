@@ -3,8 +3,9 @@ import { ExcaliburGraphicsContext } from './ExcaliburGraphicsContext';
 import { ExcaliburGraphicsContextWebGL } from './ExcaliburGraphicsContextWebGL';
 import { Shader } from './shader';
 import { Logger } from '../../Util/Log';
-import { ImageSource } from '../ImageSource';
-import { ImageFiltering } from '../Filtering';
+import { ImageSource, ImageSourceAttributeConstants } from '../ImageSource';
+import { ImageFiltering, parseImageFiltering } from '../Filtering';
+import { parseImageWrapping } from '../Wrapping';
 
 export interface MaterialOptions {
   /**
@@ -40,7 +41,7 @@ export interface MaterialOptions {
    *  }
    * ```
    */
-  vertexSource?: string,
+  vertexSource?: string;
 
   /**
    * Add custom fragment shader
@@ -61,19 +62,19 @@ export interface MaterialOptions {
    * * `uniform float u_opacity` - The current opacity of the graphics context
    *
    */
-  fragmentSource: string,
+  fragmentSource: string;
 
   /**
    * Add custom color, by default ex.Color.Transparent
    */
-  color?: Color,
+  color?: Color;
 
   /**
    * Add additional images to the material, you are limited by the GPU's maximum texture slots
    *
    * Specify a dictionary of uniform sampler names to ImageSource
    */
-  images?: Record<string, ImageSource>
+  images?: Record<string, ImageSource>;
 }
 
 const defaultVertexSource = `#version 300 es
@@ -99,8 +100,7 @@ void main() {
 `;
 
 export interface MaterialImageOptions {
-  filtering?: ImageFiltering,
-
+  filtering?: ImageFiltering;
 }
 
 export class Material {
@@ -178,8 +178,10 @@ export class Material {
     if (this._images.size < this._maxTextureSlots) {
       this._images.set(textureUniformName, image);
     } else {
-      this._logger.warn(`Max number texture slots ${this._maxTextureSlots} have been reached for material "${this.name}", `+
-      `no more textures will be uploaded due to hardware constraints.`);
+      this._logger.warn(
+        `Max number texture slots ${this._maxTextureSlots} have been reached for material "${this.name}", ` +
+          `no more textures will be uploaded due to hardware constraints.`
+      );
     }
   }
 
@@ -191,15 +193,20 @@ export class Material {
 
   private _loadImageSource(image: ImageSource) {
     const imageElement = image.image;
-    const maybeFiltering = imageElement.getAttribute('filtering');
-    let filtering: ImageFiltering = null;
-    if (maybeFiltering === ImageFiltering.Blended ||
-        maybeFiltering === ImageFiltering.Pixel) {
-      filtering = maybeFiltering;
-    }
+    const maybeFiltering = imageElement.getAttribute(ImageSourceAttributeConstants.Filtering);
+    const filtering = maybeFiltering ? parseImageFiltering(maybeFiltering) : null;
+    const wrapX = parseImageWrapping(imageElement.getAttribute(ImageSourceAttributeConstants.WrappingX));
+    const wrapY = parseImageWrapping(imageElement.getAttribute(ImageSourceAttributeConstants.WrappingY));
 
     const force = imageElement.getAttribute('forceUpload') === 'true' ? true : false;
-    const texture = this._graphicsContext.textureLoader.load(imageElement, filtering, force);
+    const texture = this._graphicsContext.textureLoader.load(
+      imageElement,
+      {
+        filtering,
+        wrapping: { x: wrapX, y: wrapY }
+      },
+      force
+    );
     // remove force attribute after upload
     imageElement.removeAttribute('forceUpload');
     if (!this._textures.has(image)) {
@@ -210,12 +217,13 @@ export class Material {
   }
 
   uploadAndBind(gl: WebGL2RenderingContext, startingTextureSlot: number = 2) {
-
     let textureSlot = startingTextureSlot;
     for (const [textureName, image] of this._images.entries()) {
       if (!image.isLoaded()) {
-        this._logger.warnOnce(`Image named ${textureName} in material ${this.name} not loaded, nothing will be uploaded to the shader.` +
-        ` Did you forget to add this to a loader? https://excaliburjs.com/docs/loaders/`);
+        this._logger.warnOnce(
+          `Image named ${textureName} in material ${this.name} not loaded, nothing will be uploaded to the shader.` +
+            ` Did you forget to add this to a loader? https://excaliburjs.com/docs/loaders/`
+        );
         continue;
       } // skip unloaded images, maybe warn
       const texture = this._loadImageSource(image);
@@ -234,7 +242,6 @@ export class Material {
       this._shader.use();
       // Apply standard uniforms
       this._shader.trySetUniformFloatColor('u_color', this._color);
-
     } else {
       throw Error(`Material ${this.name} not yet initialized, use the ExcaliburGraphicsContext.createMaterial() to work around this.`);
     }

@@ -3,11 +3,15 @@
 var game = new ex.Engine({
   width: 1000,
   height: 1000,
+  pixelArt: true
 });
+game.toggleDebug();
+game.debug.graphics.showBounds = true;
+game.debug.transform.showPosition = true;
 
 var heartImage = new ex.ImageSource('./heart.png');
 
-var loader = new ex.Loader([heartImage])
+var loader = new ex.Loader([heartImage]);
 
 class MyActor2 extends ex.Actor {
   constructor() {
@@ -17,37 +21,38 @@ class MyActor2 extends ex.Actor {
   }
   onInitialize() {
     this.graphics.add(
-      "interactive",
+      'interactive',
       new ex.GraphicsGroup({
+        useAnchor: false,
         members: [
           {
-            graphic: undefined,
-            offset: ex.vec(8, 8),
+            graphic: heartImage.toSprite(),
+            offset: ex.vec(0, 0)
           },
           {
             graphic: heartImage.toSprite(),
-            offset: ex.vec(8, -16),
+            offset: ex.vec(0, 16)
           },
-        ],
-      }),
-      {
-        anchor: ex.vec(0, 0),
-      }
+          {
+            graphic: heartImage.toSprite(),
+            offset: ex.vec(16, 16)
+          },
+          {
+            graphic: heartImage.toSprite(),
+            offset: ex.vec(16, 0)
+          }
+        ]
+      })
     );
-    this.graphics.add(
-      "noninteractive",
-      heartImage.toSprite(),
-      {
-        anchor: ex.vec(8, 8),
-      }
-    )
   }
 
   onPreUpdate(engine: ex.Engine<any>, delta: number): void {
-    this.graphics.use("interactive");
+    this.graphics.use('interactive');
   }
 }
 
 game.add(new MyActor2());
 
-game.start(loader)
+game.start(loader);
+game.currentScene.camera.pos = ex.vec(200, 200);
+game.currentScene.camera.zoom = 3;

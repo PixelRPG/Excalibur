@@ -1,20 +1,33 @@
 import { BodyComponent } from '../Collision/BodyComponent';
-import { BoundingBox} from '../Collision/BoundingBox';
+import { BoundingBox } from '../Collision/BoundingBox';
 import { ColliderComponent } from '../Collision/ColliderComponent';
 import { Collider } from '../Collision/Colliders/Collider';
 import { CollisionType } from '../Collision/CollisionType';
 import { CompositeCollider } from '../Collision/Colliders/CompositeCollider';
 import { vec, Vector } from '../Math/vector';
 import { TransformComponent } from '../EntityComponentSystem/Components/TransformComponent';
-import { Entity } from '../EntityComponentSystem/Entity';
+import { Entity, EntityEvents } from '../EntityComponentSystem/Entity';
 import { DebugGraphicsComponent, ExcaliburGraphicsContext, Graphic, GraphicsComponent } from '../Graphics';
 import { IsometricEntityComponent } from './IsometricEntityComponent';
 import { DebugConfig } from '../Debug';
+import { PointerComponent } from '../Input/PointerComponent';
+import { PointerEvent } from '../Input/PointerEvent';
+import { EventEmitter } from '../EventEmitter';
+
+export type IsometricTilePointerEvents = {
+  pointerup: PointerEvent;
+  pointerdown: PointerEvent;
+  pointermove: PointerEvent;
+  pointercancel: PointerEvent;
+};
+
 export class IsometricTile extends Entity {
   /**
    * Indicates whether this tile is solid
    */
   public solid: boolean = false;
+
+  public events = new EventEmitter<EntityEvents & IsometricTilePointerEvents>();
 
   private _gfx: GraphicsComponent;
   private _tileBounds = new BoundingBox();
@@ -25,7 +38,7 @@ export class IsometricTile extends Entity {
   /**
    * Tile graphics
    */
-  public addGraphic(graphic: Graphic, options?: {offset?: Vector}) {
+  public addGraphic(graphic: Graphic, options?: { offset?: Vector }) {
     this._graphics.push(graphic);
     this._gfx.visible = this.map.visible;
     this._gfx.opacity = this.map.opacity;
@@ -41,7 +54,8 @@ export class IsometricTile extends Entity {
     for (const graphic of this._graphics) {
       const offset = vec(
         this.map.graphicsOffset.x - this.map.tileWidth / 2,
-        this.map.graphicsOffset.y - (this.map.renderFromTopOfGraphic ? 0 : (graphic.height - this.map.tileHeight)));
+        this.map.graphicsOffset.y - (this.map.renderFromTopOfGraphic ? 0 : graphic.height - this.map.tileHeight)
+      );
       bounds = bounds.combine(graphic.localBounds.translate(offset));
     }
     return bounds;
@@ -173,7 +187,7 @@ export class IsometricTile extends Entity {
     const totalHeight = this.map.tileHeight;
 
     // initial guess at gfx bounds based on the tile
-    const offset = vec(0, (this.map.renderFromTopOfGraphic ? totalHeight : 0));
+    const offset = vec(0, this.map.renderFromTopOfGraphic ? totalHeight : 0);
     this._gfx.localBounds = this._tileBounds = new BoundingBox({
       left: -totalWidth / 2,
       top: -totalHeight,
@@ -191,7 +205,8 @@ export class IsometricTile extends Entity {
       graphic.draw(
         gfx,
         this.map.graphicsOffset.x,
-        this.map.graphicsOffset.y - (this.map.renderFromTopOfGraphic ? 0 : (graphic.height - this.map.tileHeight)));
+        this.map.graphicsOffset.y - (this.map.renderFromTopOfGraphic ? 0 : graphic.height - this.map.tileHeight)
+      );
     }
     gfx.restore();
   }
@@ -295,17 +310,23 @@ export class IsometricMap extends Entity {
    */
   public collider: ColliderComponent;
 
+  public pointer: PointerComponent;
+
   private _composite: CompositeCollider;
 
   constructor(options: IsometricMapOptions) {
-    super([
-      new TransformComponent(),
-      new BodyComponent({
-        type: CollisionType.Fixed
-      }),
-      new ColliderComponent(),
-      new DebugGraphicsComponent((ctx, debugFlags) => this.debug(ctx, debugFlags), false)
-    ], options.name);
+    super(
+      [
+        new TransformComponent(),
+        new BodyComponent({
+          type: CollisionType.Fixed
+        }),
+        new ColliderComponent(),
+        new PointerComponent(),
+        new DebugGraphicsComponent((ctx, debugFlags) => this.debug(ctx, debugFlags), false)
+      ],
+      options.name
+    );
     const { pos, tileWidth, tileHeight, columns: width, rows: height, renderFromTopOfGraphic, graphicsOffset, elevation } = options;
 
     this.transform = this.get(TransformComponent);
@@ -315,9 +336,10 @@ export class IsometricMap extends Entity {
 
     this.collider = this.get(ColliderComponent);
     if (this.collider) {
-      this.collider.set(this._composite = new CompositeCollider([]));
+      this.collider.set((this._composite = new CompositeCollider([])));
     }
 
+    this.pointer = this.get(PointerComponent);
 
     this.renderFromTopOfGraphic = renderFromTopOfGraphic ?? this.renderFromTopOfGraphic;
     this.graphicsOffset = graphicsOffset ?? this.graphicsOffset;
@@ -338,6 +360,28 @@ export class IsometricMap extends Entity {
         this.addChild(tile);
       }
     }
+
+    this.pointer.localBounds = BoundingBox.fromDimension(
+      tileWidth * width * this.transform.scale.x,
+      tileHeight * height * this.transform.scale.y,
+      vec(0.5, 0)
+    );
+
+    this._setupPointerToTile();
+  }
+
+  private _forwardPointerEventToTile = (eventType: string) => (evt: PointerEvent) => {
+    const tile = this.getTileByPoint(evt.worldPos);
+    if (tile) {
+      tile.events.emit(eventType, evt);
+    }
+  };
+
+  private _setupPointerToTile() {
+    this.events.on('pointerup', this._forwardPointerEventToTile('pointerup'));
+    this.events.on('pointerdown', this._forwardPointerEventToTile('pointerdown'));
+    this.events.on('pointermove', this._forwardPointerEventToTile('pointermove'));
+    this.events.on('pointercancel', this._forwardPointerEventToTile('pointercancel'));
   }
 
   public update(): void {
@@ -386,14 +430,16 @@ export class IsometricMap extends Entity {
    * @param worldCoordinate
    */
   public worldToTile(worldCoordinate: Vector): Vector {
+    // TODO I don't think this handles parent transform see TileMap
     worldCoordinate = worldCoordinate.sub(this.transform.globalPos);
 
     const halfTileWidth = this.tileWidth / 2;
     const halfTileHeight = this.tileHeight / 2;
     // See https://clintbellanger.net/articles/isometric_math/ for formula
     return vec(
-      ~~((worldCoordinate.x / halfTileWidth + (worldCoordinate.y / halfTileHeight)) / 2),
-      ~~((worldCoordinate.y / halfTileHeight - (worldCoordinate.x / halfTileWidth)) / 2));
+      ~~((worldCoordinate.x / halfTileWidth + worldCoordinate.y / halfTileHeight) / 2),
+      ~~((worldCoordinate.y / halfTileHeight - worldCoordinate.x / halfTileWidth) / 2)
+    );
   }
 
   /**
@@ -435,7 +481,7 @@ export class IsometricMap extends Entity {
     for (const tile of this.tiles) {
       const currentZ = tile.get(TransformComponent).z;
       if (currentZ > maxZ) {
-        maxZ =  currentZ;
+        maxZ = currentZ;
       }
     }
     return maxZ;
@@ -446,22 +492,10 @@ export class IsometricMap extends Entity {
    * @param gfx
    */
   public debug(gfx: ExcaliburGraphicsContext, debugFlags: DebugConfig) {
-    const {
-      showAll,
-      showPosition,
-      positionColor,
-      positionSize,
-      showGrid,
-      gridColor,
-      gridWidth,
-      showColliderGeometry
-    } = debugFlags.isometric;
+    const { showAll, showPosition, positionColor, positionSize, showGrid, gridColor, gridWidth, showColliderGeometry } =
+      debugFlags.isometric;
 
-    const {
-      geometryColor,
-      geometryLineWidth,
-      geometryPointSize
-    } = debugFlags.collider;
+    const { geometryColor, geometryLineWidth, geometryPointSize } = debugFlags.collider;
     gfx.save();
     gfx.z = this._getMaxZIndex() + 0.5;
     if (showAll || showGrid) {
@@ -485,7 +519,8 @@ export class IsometricMap extends Entity {
     }
     if (showAll || showColliderGeometry) {
       for (const tile of this.tiles) {
-        if (tile.solid) { // only draw solid tiles
+        if (tile.solid) {
+          // only draw solid tiles
           for (const collider of tile.getColliders()) {
             collider.debug(gfx, geometryColor, { lineWidth: geometryLineWidth, pointSize: geometryPointSize });
           }

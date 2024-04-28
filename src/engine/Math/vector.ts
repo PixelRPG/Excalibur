@@ -1,5 +1,5 @@
 import { Clonable } from '../Interfaces/Clonable';
-import { clamp } from './util';
+import { canonicalizeAngle, clamp } from './util';
 
 /**
  * A 2D vector on a plane.
@@ -9,7 +9,7 @@ export class Vector implements Clonable<Vector> {
   /**
    * Get or set the vector equals epsilon, by default 0.001 meaning vectors within that tolerance on x or y will be considered equal.
    */
-  public static EQUALS_EPSILON = .001;
+  public static EQUALS_EPSILON = 0.001;
   /**
    * A (0, 0) vector
    */
@@ -353,12 +353,11 @@ export class Vector implements Clonable<Vector> {
    * Returns the angle of this vector.
    */
   public toAngle(): number {
-    return Math.atan2(this.y, this.x);
+    return canonicalizeAngle(Math.atan2(this.y, this.x));
   }
 
   /**
-   * Rotates the current vector around a point by a certain number of
-   * degrees in radians
+   * Rotates the current vector around a point by a certain angle in radians.
    */
   public rotate(angle: number, anchor?: Vector): Vector {
     if (!anchor) {

@@ -47,10 +47,12 @@ describe('A ImageSource', () => {
 
     await sut.load();
 
-    expect(logger.warn).toHaveBeenCalledWith( `The image [src/spec/images/GraphicsImageSourceSpec/big-image.png] provided to excalibur` +
-    ` is too large may not work on all mobile devices, it is recommended you resize images to a maximum (4096x4096).\n\n` +
-    `Images will likely render as black rectangles on some mobile platforms.\n\n` +
-    `Read more here: https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/WebGL_best_practices#understand_system_limits`);
+    expect(logger.warn).toHaveBeenCalledWith(
+      `The image [src/spec/images/GraphicsImageSourceSpec/big-image.png] provided to excalibur` +
+        ` is too large may not work on all mobile devices, it is recommended you resize images to a maximum (4096x4096).\n\n` +
+        `Images will likely render as black rectangles on some mobile platforms.\n\n` +
+        `Read more here: https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/WebGL_best_practices#understand_system_limits`
+    );
     expect(logger.error).not.toHaveBeenCalled();
   });
 
@@ -76,9 +78,10 @@ describe('A ImageSource', () => {
     expect(logger.warn).not.toHaveBeenCalled();
     expect(logger.error).toHaveBeenCalledWith(
       `The image [src/spec/images/GraphicsImageSourceSpec/big-image.png] provided to Excalibur is too large for the device's maximum ` +
-      `texture size of (4096x4096) please resize to an image for excalibur to render properly.\n\n` +
-      `Images will likely render as black rectangles.\n\n` +
-      `Read more here: https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/WebGL_best_practices#understand_system_limits`);
+        `texture size of (4096x4096) please resize to an image for excalibur to render properly.\n\n` +
+        `Images will likely render as black rectangles.\n\n` +
+        `Read more here: https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/WebGL_best_practices#understand_system_limits`
+    );
   });
 
   it('can load images with an image filtering Blended', async () => {
@@ -86,7 +89,7 @@ describe('A ImageSource', () => {
     const webgl = new ex.ExcaliburGraphicsContextWebGL({
       canvasElement: canvas
     });
-    const imageRenderer = new ImageRenderer({pixelArtSampler: false, uvPadding: 0});
+    const imageRenderer = new ImageRenderer({ pixelArtSampler: false, uvPadding: 0 });
     imageRenderer.initialize(webgl.__gl, webgl);
     spyOn(webgl.textureLoader, 'load').and.callThrough();
 
@@ -99,7 +102,17 @@ describe('A ImageSource', () => {
 
     expect(image.src).not.toBeNull();
     expect(whenLoaded).toHaveBeenCalledTimes(1);
-    expect(webgl.textureLoader.load).toHaveBeenCalledWith(image, ex.ImageFiltering.Blended, false);
+    expect(webgl.textureLoader.load).toHaveBeenCalledWith(
+      image,
+      {
+        filtering: ex.ImageFiltering.Blended,
+        wrapping: {
+          x: ex.ImageWrapping.Clamp,
+          y: ex.ImageWrapping.Clamp
+        }
+      },
+      false
+    );
   });
 
   it('can load images with an image filtering Pixel', async () => {
@@ -107,7 +120,7 @@ describe('A ImageSource', () => {
     const webgl = new ex.ExcaliburGraphicsContextWebGL({
       canvasElement: canvas
     });
-    const imageRenderer = new ImageRenderer({pixelArtSampler: false, uvPadding: 0});
+    const imageRenderer = new ImageRenderer({ pixelArtSampler: false, uvPadding: 0 });
     imageRenderer.initialize(webgl.__gl, webgl);
     spyOn(webgl.textureLoader, 'load').and.callThrough();
 
@@ -120,7 +133,126 @@ describe('A ImageSource', () => {
 
     expect(image.src).not.toBeNull();
     expect(whenLoaded).toHaveBeenCalledTimes(1);
-    expect(webgl.textureLoader.load).toHaveBeenCalledWith(image, ex.ImageFiltering.Pixel, false);
+    expect(webgl.textureLoader.load).toHaveBeenCalledWith(
+      image,
+      {
+        filtering: ex.ImageFiltering.Pixel,
+        wrapping: {
+          x: ex.ImageWrapping.Clamp,
+          y: ex.ImageWrapping.Clamp
+        }
+      },
+      false
+    );
+  });
+
+  it('can load images with an image wrap repeat', async () => {
+    const canvas = document.createElement('canvas');
+    const webgl = new ex.ExcaliburGraphicsContextWebGL({
+      canvasElement: canvas
+    });
+    const imageRenderer = new ImageRenderer({ pixelArtSampler: false, uvPadding: 0 });
+    imageRenderer.initialize(webgl.__gl, webgl);
+    spyOn(webgl.textureLoader, 'load').and.callThrough();
+
+    const spriteFontImage = new ex.ImageSource('src/spec/images/GraphicsTextSpec/spritefont.png', {
+      filtering: ex.ImageFiltering.Pixel,
+      wrapping: ex.ImageWrapping.Repeat
+    });
+    const whenLoaded = jasmine.createSpy('whenLoaded');
+    const image = await spriteFontImage.load();
+    await spriteFontImage.ready.then(whenLoaded);
+
+    imageRenderer.draw(image, 0, 0);
+
+    expect(image.src).not.toBeNull();
+    expect(whenLoaded).toHaveBeenCalledTimes(1);
+    expect(webgl.textureLoader.load).toHaveBeenCalledWith(
+      image,
+      {
+        filtering: ex.ImageFiltering.Pixel,
+        wrapping: {
+          x: ex.ImageWrapping.Repeat,
+          y: ex.ImageWrapping.Repeat
+        }
+      },
+      false
+    );
+  });
+
+  it('can load images with an image wrap repeat', async () => {
+    const canvas = document.createElement('canvas');
+    const webgl = new ex.ExcaliburGraphicsContextWebGL({
+      canvasElement: canvas
+    });
+    const imageRenderer = new ImageRenderer({ pixelArtSampler: false, uvPadding: 0 });
+    imageRenderer.initialize(webgl.__gl, webgl);
+    spyOn(webgl.textureLoader, 'load').and.callThrough();
+
+    const spriteFontImage = new ex.ImageSource('src/spec/images/GraphicsTextSpec/spritefont.png', {
+      filtering: ex.ImageFiltering.Pixel,
+      wrapping: ex.ImageWrapping.Mirror
+    });
+    const whenLoaded = jasmine.createSpy('whenLoaded');
+    const image = await spriteFontImage.load();
+    await spriteFontImage.ready.then(whenLoaded);
+
+    imageRenderer.draw(image, 0, 0);
+
+    expect(image.src).not.toBeNull();
+    expect(whenLoaded).toHaveBeenCalledTimes(1);
+    expect(webgl.textureLoader.load).toHaveBeenCalledWith(
+      image,
+      {
+        filtering: ex.ImageFiltering.Pixel,
+        wrapping: {
+          x: ex.ImageWrapping.Mirror,
+          y: ex.ImageWrapping.Mirror
+        }
+      },
+      false
+    );
+  });
+
+  it('can load images with an image wrap mixed', async () => {
+    const canvas = document.createElement('canvas');
+    const webgl = new ex.ExcaliburGraphicsContextWebGL({
+      canvasElement: canvas
+    });
+    const imageRenderer = new ImageRenderer({ pixelArtSampler: false, uvPadding: 0 });
+    imageRenderer.initialize(webgl.__gl, webgl);
+    spyOn(webgl.textureLoader, 'load').and.callThrough();
+    const texParameteri = spyOn(webgl.__gl, 'texParameteri').and.callThrough();
+    const gl = webgl.__gl;
+
+    const spriteFontImage = new ex.ImageSource('src/spec/images/GraphicsTextSpec/spritefont.png', {
+      filtering: ex.ImageFiltering.Pixel,
+      wrapping: {
+        x: ex.ImageWrapping.Mirror,
+        y: ex.ImageWrapping.Clamp
+      }
+    });
+    const whenLoaded = jasmine.createSpy('whenLoaded');
+    const image = await spriteFontImage.load();
+    await spriteFontImage.ready.then(whenLoaded);
+
+    imageRenderer.draw(image, 0, 0);
+
+    expect(image.src).not.toBeNull();
+    expect(whenLoaded).toHaveBeenCalledTimes(1);
+    expect(texParameteri.calls.argsFor(0)).toEqual([gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.MIRRORED_REPEAT]);
+    expect(texParameteri.calls.argsFor(1)).toEqual([gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]);
+    expect(webgl.textureLoader.load).toHaveBeenCalledWith(
+      image,
+      {
+        filtering: ex.ImageFiltering.Pixel,
+        wrapping: {
+          x: ex.ImageWrapping.Mirror,
+          y: ex.ImageWrapping.Clamp
+        }
+      },
+      false
+    );
   });
 
   it('can convert to a Sprite', async () => {
@@ -167,11 +299,9 @@ describe('A ImageSource', () => {
     );
   });
 
-  it('will return error if image doesn\'t exist', async () => {
+  it("will return error if image doesn't exist", async () => {
     const spriteFontImage = new ex.ImageSource('42.png');
 
-    await expectAsync(spriteFontImage.load()).toBeRejectedWith(
-      'Error loading ImageSource from path \'42.png\' with error [Not Found]'
-    );
+    await expectAsync(spriteFontImage.load()).toBeRejectedWith("Error loading ImageSource from path '42.png' with error [Not Found]");
   });
 });
