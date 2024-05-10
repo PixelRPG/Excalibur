@@ -11,21 +11,8 @@
   "exports": {
     "./package.json": "./package.json",
     ".": {
-      "types": "./build/dist/excalibur.d.ts",
-      "development": {
-        "import": "./build/esm/excalibur.development.js",
-        "require": "./build/dist/excalibur.development.js"
-      },
-      "production": {
-        "import": "./build/esm/excalibur.js",
-        "require": "./build/dist/excalibur.js"
-      },
-      "ts": {
-        "import": "./src/engine/index.ts",
-        "require": "./src/engine/index.ts"
-      },
-      "import": "./build/esm/excalibur.js",
-      "require": "./build/dist/excalibur.js"
+      "import": "./src/engine/index.ts",
+      "require": "./src/engine/index.ts"
     }
   },
   "repository": {
