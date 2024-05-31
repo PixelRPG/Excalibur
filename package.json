@@ -68,7 +68,8 @@
     "coveralls": "echo 'Temporarily Remove Coveralls Due To Outage'",
     "apidocs": "node scripts/apidocs.js",
     "release": "cross-env release=true npm run all",
-    "prepare": "husky"
+    "prepare": "husky",
+    "git:merge-upstream": "git fetch upstream && git merge upstream/main"
   },
   "devDependencies": {
     "@babel/core": "7.24.5",
