@@ -173,7 +173,7 @@ export class AffineMatrix {
     // We don't actually use the 3rd or 4th dimension
 
     const det = this.determinant();
-    const inverseDet = 1 / det; // TODO zero check
+    const inverseDet = 1 / det; // TODO zero check, or throw custom error for degenerate matrix
     const a = this.data[0];
     const b = this.data[2];
     const c = this.data[1];
@@ -332,14 +332,22 @@ export class AffineMatrix {
 
   public getScaleX(): number {
     // absolute scale of the matrix (we lose sign so need to add it back)
-    const xscale = vec(this.data[0], this.data[2]).distance();
-    return this._scaleSignX * xscale;
+    const xScaleSq = this.data[0] * this.data[0] + this.data[2] * this.data[2];
+    if (xScaleSq === 1.0) {
+      // usually there isn't scale so we can avoid a sqrt
+      return this._scaleSignX;
+    }
+    return this._scaleSignX * Math.sqrt(xScaleSq);
   }
 
   public getScaleY(): number {
     // absolute scale of the matrix (we lose sign so need to add it back)
-    const yscale = vec(this.data[1], this.data[3]).distance();
-    return this._scaleSignY * yscale;
+    const yScaleSq = this.data[1] * this.data[1] + this.data[3] * this.data[3];
+    if (yScaleSq === 1.0) {
+      // usually there isn't scale so we can avoid a sqrt
+      return this._scaleSignY;
+    }
+    return this._scaleSignY * Math.sqrt(yScaleSq);
   }
 
   /**
@@ -407,7 +415,12 @@ export class AffineMatrix {
    */
   public clone(dest?: AffineMatrix): AffineMatrix {
     const mat = dest || new AffineMatrix();
-    mat.data.set(this.data);
+    mat.data[0] = this.data[0];
+    mat.data[1] = this.data[1];
+    mat.data[2] = this.data[2];
+    mat.data[3] = this.data[3];
+    mat.data[4] = this.data[4];
+    mat.data[5] = this.data[5];
     mat._scaleSignX = this._scaleSignX;
     mat._scaleSignY = this._scaleSignY;
     return mat;

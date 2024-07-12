@@ -9,7 +9,13 @@ describe('A Collision', () => {
   let clock: ex.TestClock = null;
 
   beforeEach(async () => {
-    engine = TestUtils.engine({ width: 600, height: 400 });
+    engine = TestUtils.engine({
+      width: 600,
+      height: 400,
+      physics: {
+        solver: ex.SolverStrategy.Arcade
+      }
+    });
     clock = engine.clock = engine.clock.toTestClock();
 
     actor1 = new ex.Actor({ x: 0, y: 0, width: 10, height: 10 });
@@ -50,7 +56,9 @@ describe('A Collision', () => {
   });
 
   it('order of actors collision should not matter when an Active and Active Collision', () => {
-    const collisionTree = new ex.DynamicTreeCollisionProcessor(DefaultPhysicsConfig);
+    const collisionTree = new ex.DynamicTreeCollisionProcessor({
+      ...DefaultPhysicsConfig
+    });
 
     actor1.body.collisionType = ex.CollisionType.Active;
     actor2.body.collisionType = ex.CollisionType.Active;
@@ -67,7 +75,9 @@ describe('A Collision', () => {
   });
 
   it('order of actors collision should not matter when an Active and Passive Collision', () => {
-    const collisionTree = new ex.DynamicTreeCollisionProcessor(DefaultPhysicsConfig);
+    const collisionTree = new ex.DynamicTreeCollisionProcessor({
+      ...DefaultPhysicsConfig
+    });
 
     actor1.body.collisionType = ex.CollisionType.Active;
     actor2.body.collisionType = ex.CollisionType.Passive;
@@ -84,7 +94,7 @@ describe('A Collision', () => {
   });
 
   it('order of actors collision should not matter when an Active and PreventCollision', () => {
-    const collisionTree = new ex.DynamicTreeCollisionProcessor(DefaultPhysicsConfig);
+    const collisionTree = new ex.SparseHashGridCollisionProcessor({ size: 10 });
 
     actor1.body.collisionType = ex.CollisionType.Active;
     actor2.body.collisionType = ex.CollisionType.PreventCollision;
@@ -101,7 +111,7 @@ describe('A Collision', () => {
   });
 
   it('order of actors collision should not matter when an Active and Fixed', () => {
-    const collisionTree = new ex.DynamicTreeCollisionProcessor(DefaultPhysicsConfig);
+    const collisionTree = new ex.SparseHashGridCollisionProcessor({ size: 10 });
 
     actor1.body.collisionType = ex.CollisionType.Active;
     actor2.body.collisionType = ex.CollisionType.Fixed;
@@ -118,7 +128,7 @@ describe('A Collision', () => {
   });
 
   it('order of actors collision should not matter when an Fixed and Fixed', () => {
-    const collisionTree = new ex.DynamicTreeCollisionProcessor(DefaultPhysicsConfig);
+    const collisionTree = new ex.SparseHashGridCollisionProcessor({ size: 10 });
 
     actor1.body.collisionType = ex.CollisionType.Fixed;
     actor2.body.collisionType = ex.CollisionType.Fixed;

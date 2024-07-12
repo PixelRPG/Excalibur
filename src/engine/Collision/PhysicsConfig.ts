@@ -3,6 +3,32 @@ import { DeepRequired } from '../Util/Required';
 import { SolverStrategy } from './SolverStrategy';
 import { Physics } from './Physics';
 import { ContactSolveBias } from './Solver/ContactBias';
+import { SpatialPartitionStrategy } from './Detection/SpatialPartitionStrategy';
+
+export interface DynamicTreeConfig {
+  /**
+   * Pad collider BoundingBox by a constant amount for purposes of potential pairs
+   *
+   * Default 5 pixels
+   */
+  boundsPadding?: number;
+
+  /**
+   * Factor to add to the collider BoundingBox, bounding box (dimensions += vel * dynamicTreeVelocityMultiplier);
+   *
+   * Default 2
+   */
+  velocityMultiplier?: number;
+}
+
+export interface SparseHashGridConfig {
+  /**
+   * Size of the grid cells, default is 100x100 pixels.
+   *
+   * A good size means that your average collider in your game would fit inside the cell size by size dimension.
+   */
+  size: number;
+}
 
 export interface PhysicsConfig {
   /**
@@ -118,23 +144,11 @@ export interface PhysicsConfig {
   };
 
   /**
-   * Configure the dynamic tree spatial data structure for locating pairs and raycasts
+   * Configure the spatial data structure for locating pairs and raycasts
    */
-  dynamicTree?: {
-    /**
-     * Pad collider BoundingBox by a constant amount for purposes of potential pairs
-     *
-     * Default 5 pixels
-     */
-    boundsPadding?: number;
-
-    /**
-     * Factor to add to the collider BoundingBox, bounding box (dimensions += vel * dynamicTreeVelocityMultiplier);
-     *
-     * Default 2
-     */
-    velocityMultiplier?: number;
-  };
+  spatialPartition?: SpatialPartitionStrategy;
+  sparseHashGrid?: SparseHashGridConfig;
+  dynamicTree?: DynamicTreeConfig;
 
   /**
    * Configure the [[ArcadeSolver]]
@@ -215,6 +229,10 @@ export const DefaultPhysicsConfig: DeepRequired<PhysicsConfig> = {
     sleepBias: 0.9,
     defaultMass: 10
   },
+  spatialPartition: SpatialPartitionStrategy.SparseHashGrid,
+  sparseHashGrid: {
+    size: 100
+  },
   dynamicTree: {
     boundsPadding: 5,
     velocityMultiplier: 2
@@ -253,6 +271,10 @@ export function DeprecatedStaticToConfig(): DeepRequired<PhysicsConfig> {
       wakeThreshold: Physics.wakeThreshold,
       sleepBias: Physics.sleepBias,
       defaultMass: Physics.defaultMass
+    },
+    spatialPartition: SpatialPartitionStrategy.SparseHashGrid,
+    sparseHashGrid: {
+      size: 100
     },
     dynamicTree: {
       boundsPadding: Physics.boundsPadding,

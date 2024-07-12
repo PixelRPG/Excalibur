@@ -17,25 +17,58 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Added
 
+- You can now query for colliders on the physics world
+  ```typescript
+    const scene = ...;
+    const colliders = scene.physics.query(ex.BoundingBox.fromDimensions(...));
+  ```
 - `actor.oldGlobalPos` returns the globalPosition from the previous frame
 - create development builds of excalibur that bundlers can use in dev mode
 - show warning in development when Entity hasn't been added to a scene after a few seconds
+- New `RentalPool` type for sparse object pooling
+- New `ex.SparseHashGridCollisionProcessor` which is a simpler (and faster) implementation for broadphase pair generation. This works by bucketing colliders into uniform sized square buckets and using that to generate pairs.
+- CollisionContact can be biased toward a collider by using `contact.bias(collider)`. This adjusts the contact so that the given collider is colliderA, and is helpful if you 
+are doing mtv adjustments during precollision.
 
 ### Fixed
 
+- Fixed issue where not all physical keys from the spec were present in `ex.Keys` including the reported `ex.Keys.Tab`
+- Fixed invalid graphics types around `ex.Graphic.tint`
 - improve types to disallow invalid combo of collider/width/height/radius in actor args
 - only add default color graphic for the respective collider used
 - Fixed issue where `ex.SpriteFont` did not respect scale when measuring text
 - Fixed issue where negative transforms would cause collision issues because polygon winding would change.
 - Fixed issue where removing and re-adding an actor would cause subsequent children added not to function properly with regards to their parent/child transforms
 - Fixed issue where `ex.GraphicsSystem` would crash if a parent entity did not have a `ex.TransformComponent`
+- Fixed a bug in the new physics config merging, and re-arranged to better match the existing pattern
 
 ### Updates
 
--
+- Perf improvements to collision narrowphase and solver steps
+  * Working in the local polygon space as much as possible speeds things up
+  * Add another pair filtering condition on the `SparseHashGridCollisionProcessor` which reduces pairs passed to narrowphase
+  * Switching to c-style loops where possible
+  * Caching get component calls
+  * Removing allocations where it makes sense
+- Perf Side.fromDirection(direction: Vector): Side - thanks @ikudrickiy!
+- Perf improvements to PointerSystem by using new spatial hash grid data structure
+- Perf improvements: Hot path allocations
+  * Reduce State/Transform stack hot path allocations in graphics context
+  * Reduce Transform allocations
+  * Reduce AffineMatrix allocations
+
+- Perf improvements to `CircleCollider` bounds calculations
+- Switch from iterators to c-style loops which bring more speed
+  * `Entity` component iteration
+  * `EntityManager` iteration
+  * `EventEmitter`s
+  * `GraphicsSystem` entity iteration
+  * `PointerSystem` entity iteration
 
 ### Changed
 
+- Applied increased TS strictness for the Graphics API subtree
+- Applied increased TS strictness for the TileMap API subtree
 
 <!--------------------------------- DO NOT EDIT BELOW THIS LINE --------------------------------->
 <!--------------------------------- DO NOT EDIT BELOW THIS LINE --------------------------------->

@@ -97,7 +97,7 @@ export const TileMapEvents = {
 export class TileMap extends Entity {
   public events = new EventEmitter<TileMapEvents>();
   private _token = 0;
-  private _engine: Engine;
+  private _engine!: Engine;
 
   public logger: Logger = Logger.getInstance();
   public readonly tiles: Tile[] = [];
@@ -162,7 +162,7 @@ export class TileMap extends Entity {
     }
   }
 
-  private _oldRotation: number;
+  private _oldRotation: number = 0;
   public get rotation(): number {
     return this.transform?.rotation ?? 0;
   }
@@ -201,6 +201,20 @@ export class TileMap extends Entity {
     this._motion.vel = val;
   }
 
+  /**
+   * Width of the whole tile map in pixels
+   */
+  public get width(): number {
+    return this.tileWidth * this.columns * this.scale.x;
+  }
+
+  /**
+   * Height of the whole tilemap in pixels
+   */
+  public get height(): number {
+    return this.tileHeight * this.rows * this.scale.y;
+  }
+
   public emit<TEventName extends EventKey<TileMapEvents>>(eventName: TEventName, event: TileMapEvents[TEventName]): void;
   public emit(eventName: string, event?: any): void;
   public emit<TEventName extends EventKey<TileMapEvents> | string>(eventName: TEventName, event?: any): void {
@@ -223,7 +237,7 @@ export class TileMap extends Entity {
   public off(eventName: string, handler: Handler<unknown>): void;
   public off(eventName: string): void;
   public off<TEventName extends EventKey<TileMapEvents> | string>(eventName: TEventName, handler?: Handler<any>): void {
-    this.events.off(eventName, handler);
+    this.events.off(eventName, handler as any);
   }
 
   /**
@@ -322,7 +336,7 @@ export class TileMap extends Entity {
       this._originalOffsets.set(collider, originalOffset);
       return originalOffset;
     } else {
-      return this._originalOffsets.get(collider);
+      return this._originalOffsets.get(collider) ?? Vector.Zero;
     }
   }
 
@@ -334,7 +348,7 @@ export class TileMap extends Entity {
     this._composite.clearColliders();
     const colliders: BoundingBox[] = [];
     this._composite = this.collider.useCompositeCollider([]);
-    let current: BoundingBox;
+    let current: BoundingBox | null = null;
 
     /**
      * Returns wether or not the 2 boxes share an edge and are the same height
@@ -454,7 +468,7 @@ export class TileMap extends Entity {
    * For example, if I want the tile in fifth column (x), and second row (y):
    * `getTile(4, 1)` 0 based, so 0 is the first in row/column
    */
-  public getTile(x: number, y: number): Tile {
+  public getTile(x: number, y: number): Tile | null {
     if (x < 0 || y < 0 || x >= this.columns || y >= this.rows) {
       return null;
     }
@@ -521,7 +535,7 @@ export class TileMap extends Entity {
     const tiles: Tile[] = [];
     for (let x = tileStartX; x <= tileEndX; x++) {
       for (let y = tileStartY; y <= tileEndY; y++) {
-        tiles.push(this.getTile(x, y));
+        tiles.push(this.getTile(x, y)!);
       }
     }
     return tiles;
@@ -670,9 +684,9 @@ export interface TileOptions {
  * use transparency to create layers this way.
  */
 export class Tile {
-  private _bounds: BoundingBox;
-  private _geometry: BoundingBox;
-  private _pos: Vector;
+  private _bounds!: BoundingBox;
+  private _geometry!: BoundingBox;
+  private _pos!: Vector;
   private _posDirty = false;
 
   public events = new EventEmitter<TilePointerEvents>();

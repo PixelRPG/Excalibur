@@ -22,9 +22,10 @@ export class GraphicsSystem extends System {
   public readonly systemType = SystemType.Draw;
   public priority = SystemPriority.Average;
   private _token = 0;
-  private _graphicsContext: ExcaliburGraphicsContext;
-  private _camera: Camera;
-  private _engine: Engine;
+  // Set in the initialize
+  private _graphicsContext!: ExcaliburGraphicsContext;
+  private _camera!: Camera;
+  private _engine!: Engine;
   private _sortedTransforms: TransformComponent[] = [];
   query: Query<typeof TransformComponent | typeof GraphicsComponent>;
   public get sortedTransforms() {
@@ -82,7 +83,8 @@ export class GraphicsSystem extends System {
     if (this._camera) {
       this._camera.draw(this._graphicsContext);
     }
-    for (const transform of this._sortedTransforms) {
+    for (let transformIndex = 0; transformIndex < this._sortedTransforms.length; transformIndex++) {
+      const transform = this._sortedTransforms[transformIndex];
       const entity = transform.owner as Entity;
 
       // If the entity is offscreen skip

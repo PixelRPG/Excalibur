@@ -47,8 +47,23 @@ export class BoundingBox {
   /**
    * Returns a new instance of [[BoundingBox]] that is a copy of the current instance
    */
-  public clone(): BoundingBox {
-    return new BoundingBox(this.left, this.top, this.right, this.bottom);
+  public clone(dest?: BoundingBox): BoundingBox {
+    const result = dest || new BoundingBox(0, 0, 0, 0);
+    result.left = this.left;
+    result.right = this.right;
+    result.top = this.top;
+    result.bottom = this.bottom;
+    return result;
+  }
+
+  /**
+   * Resets the bounds to a zero width/height box
+   */
+  public reset(): void {
+    this.left = 0;
+    this.top = 0;
+    this.bottom = 0;
+    this.right = 0;
   }
 
   /**
@@ -259,45 +274,45 @@ export class BoundingBox {
    */
   public rayCast(ray: Ray, farClipDistance = Infinity): boolean {
     // algorithm from https://tavianator.com/fast-branchless-raybounding-box-intersections/
-    let tmin = -Infinity;
-    let tmax = +Infinity;
+    let tMin = -Infinity;
+    let tMax = +Infinity;
 
-    const xinv = ray.dir.x === 0 ? Number.MAX_VALUE : 1 / ray.dir.x;
-    const yinv = ray.dir.y === 0 ? Number.MAX_VALUE : 1 / ray.dir.y;
+    const xInv = ray.dir.x === 0 ? Number.MAX_VALUE : 1 / ray.dir.x;
+    const yInv = ray.dir.y === 0 ? Number.MAX_VALUE : 1 / ray.dir.y;
 
-    const tx1 = (this.left - ray.pos.x) * xinv;
-    const tx2 = (this.right - ray.pos.x) * xinv;
-    tmin = Math.min(tx1, tx2);
-    tmax = Math.max(tx1, tx2);
+    const tx1 = (this.left - ray.pos.x) * xInv;
+    const tx2 = (this.right - ray.pos.x) * xInv;
+    tMin = Math.min(tx1, tx2);
+    tMax = Math.max(tx1, tx2);
 
-    const ty1 = (this.top - ray.pos.y) * yinv;
-    const ty2 = (this.bottom - ray.pos.y) * yinv;
-    tmin = Math.max(tmin, Math.min(ty1, ty2));
-    tmax = Math.min(tmax, Math.max(ty1, ty2));
+    const ty1 = (this.top - ray.pos.y) * yInv;
+    const ty2 = (this.bottom - ray.pos.y) * yInv;
+    tMin = Math.max(tMin, Math.min(ty1, ty2));
+    tMax = Math.min(tMax, Math.max(ty1, ty2));
 
-    return tmax >= Math.max(0, tmin) && tmin < farClipDistance;
+    return tMax >= Math.max(0, tMin) && tMin < farClipDistance;
   }
 
   public rayCastTime(ray: Ray, farClipDistance = Infinity): number {
     // algorithm from https://tavianator.com/fast-branchless-raybounding-box-intersections/
-    let tmin = -Infinity;
-    let tmax = +Infinity;
+    let tMin = -Infinity;
+    let tMax = +Infinity;
 
-    const xinv = ray.dir.x === 0 ? Number.MAX_VALUE : 1 / ray.dir.x;
-    const yinv = ray.dir.y === 0 ? Number.MAX_VALUE : 1 / ray.dir.y;
+    const xInv = ray.dir.x === 0 ? Number.MAX_VALUE : 1 / ray.dir.x;
+    const yInv = ray.dir.y === 0 ? Number.MAX_VALUE : 1 / ray.dir.y;
 
-    const tx1 = (this.left - ray.pos.x) * xinv;
-    const tx2 = (this.right - ray.pos.x) * xinv;
-    tmin = Math.min(tx1, tx2);
-    tmax = Math.max(tx1, tx2);
+    const tx1 = (this.left - ray.pos.x) * xInv;
+    const tx2 = (this.right - ray.pos.x) * xInv;
+    tMin = Math.min(tx1, tx2);
+    tMax = Math.max(tx1, tx2);
 
-    const ty1 = (this.top - ray.pos.y) * yinv;
-    const ty2 = (this.bottom - ray.pos.y) * yinv;
-    tmin = Math.max(tmin, Math.min(ty1, ty2));
-    tmax = Math.min(tmax, Math.max(ty1, ty2));
+    const ty1 = (this.top - ray.pos.y) * yInv;
+    const ty2 = (this.bottom - ray.pos.y) * yInv;
+    tMin = Math.max(tMin, Math.min(ty1, ty2));
+    tMax = Math.min(tMax, Math.max(ty1, ty2));
 
-    if (tmax >= Math.max(0, tmin) && tmin < farClipDistance) {
-      return tmin;
+    if (tMax >= Math.max(0, tMin) && tMin < farClipDistance) {
+      return tMin;
     }
     return -1;
   }
@@ -317,10 +332,7 @@ export class BoundingBox {
     if (val instanceof Vector) {
       return this.left <= val.x && this.top <= val.y && this.bottom >= val.y && this.right >= val.x;
     } else if (val instanceof BoundingBox) {
-      if (this.left <= val.left && this.top <= val.top && val.bottom <= this.bottom && val.right <= this.right) {
-        return true;
-      }
-      return false;
+      return this.left <= val.left && this.top <= val.top && val.bottom <= this.bottom && val.right <= this.right;
     }
     return false;
   }
@@ -329,13 +341,16 @@ export class BoundingBox {
    * Combines this bounding box and another together returning a new bounding box
    * @param other  The bounding box to combine
    */
-  public combine(other: BoundingBox): BoundingBox {
-    const compositeBB = new BoundingBox(
-      Math.min(this.left, other.left),
-      Math.min(this.top, other.top),
-      Math.max(this.right, other.right),
-      Math.max(this.bottom, other.bottom)
-    );
+  public combine(other: BoundingBox, dest?: BoundingBox): BoundingBox {
+    const compositeBB = dest || new BoundingBox(0, 0, 0, 0);
+    const left = Math.min(this.left, other.left);
+    const top = Math.min(this.top, other.top);
+    const right = Math.max(this.right, other.right);
+    const bottom = Math.max(this.bottom, other.bottom);
+    compositeBB.left = left;
+    compositeBB.top = top;
+    compositeBB.right = right;
+    compositeBB.bottom = bottom;
     return compositeBB;
   }
 
