@@ -7,7 +7,43 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Breaking Changes
 
-- 
+- Remove core-js dependency, it is no longer necessary in modern browsers. Technically a breaking change for older browsers
+- `ex.Particle` and `ex.ParticleEmitter` now have an API that looks like modern Excalibur APIs
+  * `particleSprite` is renamed to `graphic`
+  * `particleRotationalVelocity` is renamed to `angularVelocity`
+  * `fadeFlag` is renamed to `fade`
+  * `acceleration` is renamed to `acc`
+  * `particleLife` is renamed to `life`
+  * `ParticleEmitter` now takes a separate `particle: ParticleConfig` parameter to disambiguate between particles parameters and emitter ones
+    ```typescript
+    const emitter =  new ex.ParticleEmitter({
+        width: 10,
+        height: 10,
+        radius: 5,
+        emitterType: ex.EmitterType.Rectangle,
+        emitRate: 300,
+        isEmitting: true,
+        particle: {
+          transform: ex.ParticleTransform.Global,
+          opacity: 0.5,
+          life: 1000,
+          acc: ex.vec(10, 80),
+          beginColor: ex.Color.Chartreuse,
+          endColor: ex.Color.Magenta,
+          startSize: 5,
+          endSize: 100,
+          minVel: 100,
+          maxVel: 200,
+          minAngle: 5.1,
+          maxAngle: 6.2,
+          fade: true,
+          maxSize: 10,
+          graphic: swordImg.toSprite(),
+          randomRotation: true,
+          minSize: 1
+        }
+      });
+    ```
 
 ### Deprecated
 
@@ -17,6 +53,8 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Added
 
+- Excalibur will now clean up WebGL textures that have not been drawn in a while, which improves stability for long game sessions
+  * If a graphic is drawn again it will be reloaded into the GPU seamlessly
 - You can now query for colliders on the physics world
   ```typescript
     const scene = ...;
@@ -32,6 +70,8 @@ are doing mtv adjustments during precollision.
 
 ### Fixed
 
+- Fixed issue where `ex.Scene.onPreLoad(loader: ex.DefaultLoader)` would lock up the engine if there was an empty loader
+- Fixed issue where `ex.Scene` scoped input events would preserve state and get stuck causing issues when switching back to the original scene.
 - Fixed issue where not all physical keys from the spec were present in `ex.Keys` including the reported `ex.Keys.Tab`
 - Fixed invalid graphics types around `ex.Graphic.tint`
 - improve types to disallow invalid combo of collider/width/height/radius in actor args
@@ -44,6 +84,9 @@ are doing mtv adjustments during precollision.
 
 ### Updates
 
+- Perf improvements to `ex.ParticleEmitter` 
+  * Use the same integrator as the MotionSystem in the tight loop
+  * Leverage object pools to increase performance and reduce allocations
 - Perf improvements to collision narrowphase and solver steps
   * Working in the local polygon space as much as possible speeds things up
   * Add another pair filtering condition on the `SparseHashGridCollisionProcessor` which reduces pairs passed to narrowphase

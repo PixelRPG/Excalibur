@@ -11,6 +11,7 @@ polyfill();
 export * from './Flags';
 export * from './Id';
 export * from './Engine';
+export * from './GarbageCollector';
 export * from './Screen';
 export * from './Actor';
 export * from './Math/Index';
@@ -24,8 +25,8 @@ export * from './Events';
 export * from './Label';
 export { FontStyle, FontUnit, TextAlign, BaseAlign } from './Graphics/FontCommon';
 export * from './EmitterType';
-export { Particle, ParticleTransform, ParticleArgs, ParticleEmitterArgs } from './Particles';
-export * from './ParticleEmitter';
+export { Particle, ParticleTransform, ParticleConfig as ParticleArgs, ParticleEmitterArgs } from './Particles/Particles';
+export * from './Particles/ParticleEmitter';
 export * from './Collision/Physics';
 export * from './Scene';
 
