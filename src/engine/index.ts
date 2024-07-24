@@ -25,7 +25,7 @@ export * from './Events';
 export * from './Label';
 export { FontStyle, FontUnit, TextAlign, BaseAlign } from './Graphics/FontCommon';
 export * from './EmitterType';
-export { Particle, ParticleTransform, ParticleConfig as ParticleArgs, ParticleEmitterArgs } from './Particles/Particles';
+export { Particle, ParticleTransform, type ParticleConfig as ParticleArgs, type ParticleEmitterArgs } from './Particles/Particles';
 export * from './Particles/ParticleEmitter';
 export * from './Collision/Physics';
 export * from './Scene';
@@ -69,9 +69,9 @@ export { PointerButton } from './Input/PointerButton';
 
 export { NativePointerButton } from './Input/NativePointerButton';
 
-export { CapturePointerConfig } from './Input/CapturePointerConfig';
+export type { CapturePointerConfig } from './Input/CapturePointerConfig';
 
-export {
+export type {
   NativePointerEvent,
   NativeMouseEvent,
   NativeTouchEvent,
@@ -86,7 +86,7 @@ export { PointerSystem } from './Input/PointerSystem';
 export { PointerType } from './Input/PointerType';
 export { PointerScope } from './Input/PointerScope';
 
-export {
+export type {
   Gamepads,
   Gamepad,
   Buttons,
@@ -98,7 +98,7 @@ export {
   GamepadConfiguration
 } from './Input/Gamepad';
 
-export { Keys, KeyEvent, KeyboardInitOptions, Keyboard } from './Input/Keyboard';
+export { Keys, KeyEvent, type KeyboardInitOptions, Keyboard } from './Input/Keyboard';
 export * from './Input/InputHost';
 export * from './Input/InputMapper';
 

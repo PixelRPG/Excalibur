@@ -36,14 +36,14 @@ export {
   NativePointerButton
 } from './NativePointerButton';
 
-export {
+export type {
   /**
    * @deprecated ex.Input.CapturePointerConfig import site will be removed in v0.29.0, use ex.CapturePointerConfig
    */
   CapturePointerConfig
 } from './CapturePointerConfig';
 
-export {
+export type {
   /**
    * @deprecated ex.Input.NativePointerEvent import site will be removed in v0.29.0, use ex.NativePointerEvent
    */
@@ -110,7 +110,7 @@ export {
   /**
    * @deprecated ex.Input.KeyboardInitOptions import site will be removed in v0.29.0, use ex.KeyboardInitOptions
    */
-  KeyboardInitOptions,
+  type KeyboardInitOptions,
   /**
    * @deprecated ex.Input.Keyboard import site will be removed in v0.29.0, use ex.Keyboard
    */
@@ -138,21 +138,21 @@ export {
   /**
    * @deprecated ex.Input.NavigatorGamepads import site will be removed in v0.29.0, use ex.NavigatorGamepads
    */
-  NavigatorGamepads,
+  type NavigatorGamepads,
   /**
    * @deprecated ex.Input.NavigatorGamepad import site will be removed in v0.29.0, use ex.NavigatorGamepad
    */
-  NavigatorGamepad,
+  type NavigatorGamepad,
   /**
    * @deprecated ex.Input.NavigatorGamepadButton import site will be removed in v0.29.0, use ex.NavigatorGamepadButton
    */
-  NavigatorGamepadButton,
+  type NavigatorGamepadButton,
   /**
    * @deprecated ex.Input.NavigatorGamepadEvent import site will be removed in v0.29.0, use ex.NavigatorGamepadEvent
    */
-  NavigatorGamepadEvent,
+  type NavigatorGamepadEvent,
   /**
    * @deprecated ex.Input.GamepadConfiguration import site will be removed in v0.29.0, use ex.GamepadConfiguration
    */
-  GamepadConfiguration
+  type GamepadConfiguration
 } from './Gamepad';
