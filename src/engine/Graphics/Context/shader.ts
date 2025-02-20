@@ -1,4 +1,4 @@
-import { Color, Logger, Vector } from '../..';
+import { AffineMatrix, Color, Logger, Vector } from '../..';
 import { Matrix } from '../../Math/matrix';
 import { getAttributeComponentSize, getAttributePointerType } from './webgl-util';
 
@@ -85,6 +85,9 @@ export interface ShaderOptions {
    * Fragment shader source code in glsl #version 300 es
    */
   fragmentSource: string;
+
+  onPreLink?: (program: WebGLProgram) => void;
+  onPostCompile?: (shader: Shader) => void;
 }
 
 export class Shader {
@@ -97,6 +100,8 @@ export class Shader {
   private _compiled = false;
   public readonly vertexSource: string;
   public readonly fragmentSource: string;
+  private _onPreLink?: (program: WebGLProgram) => void;
+  private _onPostCompile?: (shader: Shader) => void;
 
   public get compiled() {
     return this._compiled;
@@ -107,10 +112,12 @@ export class Shader {
    * @param options specify shader vertex and fragment source
    */
   constructor(options: ShaderOptions) {
-    const { gl, vertexSource, fragmentSource } = options;
+    const { gl, vertexSource, fragmentSource, onPreLink, onPostCompile } = options;
     this._gl = gl;
     this.vertexSource = vertexSource;
     this.fragmentSource = fragmentSource;
+    this._onPreLink = onPreLink;
+    this._onPostCompile = onPostCompile;
   }
 
   dispose() {
@@ -151,6 +158,9 @@ export class Shader {
     }
 
     this._compiled = true;
+    if (this._onPostCompile) {
+      this._onPostCompile(this);
+    }
     return this.program;
   }
 
@@ -309,7 +319,7 @@ export class Shader {
   }
 
   /**
-   * Set a [[Vector]] uniform for the current shader
+   * Set a {@apilink Vector} uniform for the current shader
    *
    * **Important** Must call ex.Shader.use() before setting a uniform!
    * @param name
@@ -320,7 +330,7 @@ export class Shader {
   }
 
   /**
-   * Set a [[Vector]] uniform for the current shader, WILL NOT THROW on error.
+   * Set a {@apilink Vector} uniform for the current shader, WILL NOT THROW on error.
    *
    * **Important** Must call ex.Shader.use() before setting a uniform!
    * @param name
@@ -331,7 +341,7 @@ export class Shader {
   }
 
   /**
-   * Set a [[Color]] uniform for the current shader
+   * Set a {@apilink Color} uniform for the current shader
    *
    * **Important** Must call ex.Shader.use() before setting a uniform!
    * @param name
@@ -342,7 +352,7 @@ export class Shader {
   }
 
   /**
-   * Set a [[Color]] uniform for the current shader, WILL NOT THROW on error.
+   * Set a {@apilink Color} uniform for the current shader, WILL NOT THROW on error.
    *
    * **Important** Must call ex.Shader.use() before setting a uniform!
    * @param name
@@ -353,7 +363,7 @@ export class Shader {
   }
 
   /**
-   * Set an [[Matrix]] uniform for the current shader
+   * Set an {@apilink Matrix} uniform for the current shader
    *
    * **Important** Must call ex.Shader.use() before setting a uniform!
    * @param name
@@ -363,8 +373,32 @@ export class Shader {
     this.setUniform('uniformMatrix4fv', name, false, value.data);
   }
 
+  setUniformAffineMatrix(name: string, value: AffineMatrix) {
+    this.setUniform('uniformMatrix4fv', name, false, [
+      value.data[0],
+      value.data[1],
+      0,
+      0,
+
+      value.data[2],
+      value.data[3],
+      0,
+      0,
+
+      0,
+      0,
+      1,
+      0,
+
+      value.data[4],
+      value.data[5],
+      0,
+      1
+    ]);
+  }
+
   /**
-   * Set an [[Matrix]] uniform for the current shader, WILL NOT THROW on error.
+   * Set an {@apilink Matrix} uniform for the current shader, WILL NOT THROW on error.
    *
    * **Important** Must call ex.Shader.use() before setting a uniform!
    * @param name
@@ -447,6 +481,10 @@ export class Shader {
     // attach the shaders.
     gl.attachShader(program, vertexShader);
     gl.attachShader(program, fragmentShader);
+
+    if (this._onPreLink) {
+      this._onPreLink(program);
+    }
 
     // link the program.
     gl.linkProgram(program);

@@ -100,6 +100,37 @@ describe('A SpriteSheet for Graphics', () => {
     await expectAsync(canvasElement).toEqualImage('src/spec/images/SpriteSheetSpec/NewSpriteSpacing.png');
   });
 
+  it('can be created from with spacing using vectors', async () => {
+    const image = new ex.ImageSource('src/spec/images/SpriteSheetSpec/kenny-cards.png');
+
+    await image.load();
+
+    const ss = ex.SpriteSheet.fromImageSource({
+      image,
+      grid: {
+        rows: 4,
+        columns: 14,
+        spriteWidth: 42,
+        spriteHeight: 60
+      },
+      spacing: {
+        originOffset: ex.vec(11, 2),
+        margin: ex.vec(23, 5)
+      }
+    });
+
+    ctx.clear();
+
+    ss.sprites[12].draw(ctx, 0, 0);
+    ss.sprites[24].draw(ctx, 60, 0);
+    ss.sprites[36].draw(ctx, 0, 60);
+    ss.sprites[48].draw(ctx, 60, 60);
+
+    expect(ss.sprites.length).toBe(4 * 14);
+
+    await expectAsync(canvasElement).toEqualImage('src/spec/images/SpriteSheetSpec/NewSpriteSpacing.png');
+  });
+
   it('can retrieve a sprite by x,y', async () => {
     const image = new ex.ImageSource('src/spec/images/SpriteSheetSpec/kenny-cards.png');
 
@@ -122,13 +153,17 @@ describe('A SpriteSheet for Graphics', () => {
     expect(ss.getSprite(0, 0)).withContext('top left sprite').toEqual(ss.sprites[0]);
     expect(ss.getSprite(13, 3)).withContext('bottom right sprite').not.toBeNull();
 
-    expect(() => ss.getSprite(13, 4)).toThrowError('No sprite exists in the SpriteSheet at (13, 4), y: 4 should be between 0 and 3');
+    expect(() => ss.getSprite(13, 4)).toThrowError('No sprite exists in the SpriteSheet at (13, 4), y: 4 should be between 0 and 3 rows');
 
-    expect(() => ss.getSprite(14, 3)).toThrowError('No sprite exists in the SpriteSheet at (14, 3), x: 14 should be between 0 and 13');
+    expect(() => ss.getSprite(14, 3)).toThrowError(
+      'No sprite exists in the SpriteSheet at (14, 3), x: 14 should be between 0 and 13 columns'
+    );
 
-    expect(() => ss.getSprite(-1, 3)).toThrowError('No sprite exists in the SpriteSheet at (-1, 3), x: -1 should be between 0 and 13');
+    expect(() => ss.getSprite(-1, 3)).toThrowError(
+      'No sprite exists in the SpriteSheet at (-1, 3), x: -1 should be between 0 and 13 columns'
+    );
 
-    expect(() => ss.getSprite(1, -1)).toThrowError('No sprite exists in the SpriteSheet at (1, -1), y: -1 should be between 0 and 3');
+    expect(() => ss.getSprite(1, -1)).toThrowError('No sprite exists in the SpriteSheet at (1, -1), y: -1 should be between 0 and 3 rows');
   });
 
   it('can retrieve a sprite by x,y, with options', async () => {

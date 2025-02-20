@@ -9,6 +9,9 @@ import { Logger } from '../Util/Log';
 import { WatchVector } from '../Math/watch-vector';
 import { TransformComponent } from '../EntityComponentSystem';
 import { GraphicsGroup } from '../Graphics/GraphicsGroup';
+import { Color } from '../Color';
+import { Raster } from './Raster';
+import { Text } from './Text';
 
 /**
  * Type guard for checking if a Graphic HasTick (used for graphics that change over time like animations)
@@ -32,6 +35,11 @@ export interface GraphicsComponentOptions {
    * Name of current graphic to use
    */
   current?: string;
+
+  /**
+   * Optionally set the color of the graphics component
+   */
+  color?: Color;
 
   /**
    * Optionally set a material to use on the graphic
@@ -85,27 +93,49 @@ export class GraphicsComponent extends Component {
   /**
    * Draws after the entity transform has been applied, but before graphics component graphics have been drawn
    */
-  public onPreDraw?: (ctx: ExcaliburGraphicsContext, elapsedMilliseconds: number) => void;
+  public onPreDraw?: (ctx: ExcaliburGraphicsContext, elapsed: number) => void;
 
   /**
    * Draws after the entity transform has been applied, and after graphics component graphics has been drawn
    */
-  public onPostDraw?: (ctx: ExcaliburGraphicsContext, elapsedMilliseconds: number) => void;
+  public onPostDraw?: (ctx: ExcaliburGraphicsContext, elapsed: number) => void;
 
   /**
    * Draws before the entity transform has been applied before any any graphics component drawing
    */
-  public onPreTransformDraw?: (ctx: ExcaliburGraphicsContext, elapsedMilliseconds: number) => void;
+  public onPreTransformDraw?: (ctx: ExcaliburGraphicsContext, elapsed: number) => void;
 
   /**
    * Draws after the entity transform has been applied, and after all graphics component drawing
    */
-  public onPostTransformDraw?: (ctx: ExcaliburGraphicsContext, elapsedMilliseconds: number) => void;
+  public onPostTransformDraw?: (ctx: ExcaliburGraphicsContext, elapsed: number) => void;
+  private _color?: Color;
+
+  /**
+   * Sets or gets wether any drawing should be visible in this component
+   * @deprecated use isVisible
+   */
+  public get visible(): boolean {
+    return this.isVisible;
+  }
+
+  /**
+   * Sets or gets wether any drawing should be visible in this component
+   * @deprecated use isVisible
+   */
+  public set visible(val: boolean) {
+    this.isVisible = val;
+  }
 
   /**
    * Sets or gets wether any drawing should be visible in this component
    */
-  public visible: boolean = true;
+  public isVisible: boolean = true;
+
+  /**
+   * Optionally force the graphic onscreen, default false. Not recommend to use for perf reasons, only if you known what you're doing.
+   */
+  public forceOnScreen: boolean = false;
 
   /**
    * Sets or gets wither all drawings should have an opacity applied
@@ -139,6 +169,22 @@ export class GraphicsComponent extends Component {
   }
 
   /**
+   * Sets the color of the actor's current graphic
+   */
+  public get color(): Color | undefined {
+    return this._color;
+  }
+  public set color(v: Color | undefined) {
+    if (v) {
+      this._color = v.clone();
+      const currentGraphic = this.graphics.current;
+      if (currentGraphic instanceof Raster || currentGraphic instanceof Text) {
+        currentGraphic.color = this._color;
+      }
+    }
+  }
+
+  /**
    * Flip all graphics horizontally along the y-axis
    */
   public flipHorizontal: boolean = false;
@@ -158,7 +204,7 @@ export class GraphicsComponent extends Component {
     super();
     // Defaults
     options = {
-      visible: this.visible,
+      visible: this.isVisible,
       graphics: {},
       ...options
     };
@@ -166,6 +212,7 @@ export class GraphicsComponent extends Component {
     const {
       current,
       anchor,
+      color,
       opacity,
       visible,
       graphics,
@@ -189,12 +236,13 @@ export class GraphicsComponent extends Component {
     this.offset = offset ?? this.offset;
     this.opacity = opacity ?? this.opacity;
     this.anchor = anchor ?? this.anchor;
+    this.color = color ?? this.color;
     this.copyGraphics = copyGraphics ?? this.copyGraphics;
     this.onPreDraw = onPreDraw ?? this.onPreDraw;
     this.onPostDraw = onPostDraw ?? this.onPostDraw;
     this.onPreDraw = onPreTransformDraw ?? this.onPreTransformDraw;
     this.onPostTransformDraw = onPostTransformDraw ?? this.onPostTransformDraw;
-    this.visible = !!visible;
+    this.isVisible = !!visible;
     this._current = current ?? this._current;
     if (current && this._graphics[current]) {
       this.use(current);
@@ -288,17 +336,7 @@ export class GraphicsComponent extends Component {
   }
 
   /**
-   * Shows a graphic, will be removed
-   * @param nameOrGraphic
-   * @param options
-   * @deprecated will be removed in v0.30.0, use `graphics.use(...)`
-   */
-  public show<T extends Graphic = Graphic>(nameOrGraphic: string | T, options?: GraphicsShowOptions): T {
-    return this.use(nameOrGraphic, options);
-  }
-
-  /**
-   * Use a graphic only, will set the default graphic. Returns the new [[Graphic]]
+   * Use a graphic only, will set the default graphic. Returns the new {@apilink Graphic}
    *
    * Optionally override the stored options
    * @param nameOrGraphic
@@ -408,12 +446,15 @@ export class GraphicsComponent extends Component {
     graphics._graphics = { ...this._graphics };
     graphics._options = { ...this._options };
     graphics.offset = this.offset.clone();
+    if (this.color) {
+      graphics.color = this.color.clone();
+    }
     graphics.opacity = this.opacity;
     graphics.anchor = this.anchor.clone();
     graphics.copyGraphics = this.copyGraphics;
     graphics.onPreDraw = this.onPreDraw;
     graphics.onPostDraw = this.onPostDraw;
-    graphics.visible = this.visible;
+    graphics.isVisible = this.isVisible;
 
     return graphics;
   }

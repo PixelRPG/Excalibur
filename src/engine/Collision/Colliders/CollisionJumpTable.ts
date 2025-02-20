@@ -61,7 +61,7 @@ export const CollisionJumpTable = {
 
     const info: SeparationInfo = {
       collider: circle,
-      separation: -minAxis.size,
+      separation: -minAxis.magnitude,
       axis: normal,
       point: point,
       localPoint: local,
@@ -253,6 +253,11 @@ export const CollisionJumpTable = {
       }
     }
 
+    // FIXME temporary to prevent a crash, invalid separation
+    if (!separation.localSide || !separation.localAxis || !separation.axis) {
+      return [];
+    }
+
     // Clip incident side by the perpendicular lines at each end of the reference side
     // https://en.wikipedia.org/wiki/Sutherland%E2%80%93Hodgman_algorithm
     const referenceSide = separation.localSide.transform(toIncidentFrame);
@@ -277,7 +282,6 @@ export const CollisionJumpTable = {
           points.push(other.transform.apply(p));
         }
       }
-
       let normal = separation.axis;
       let tangent = normal.perpendicular();
       // Point Contact A -> B
@@ -290,7 +294,7 @@ export const CollisionJumpTable = {
     return [];
   },
 
-  FindContactSeparation(contact: CollisionContact, localPoint: Vector) {
+  FindContactSeparation(contact: CollisionContact, localPoint: Vector): number {
     const shapeA = contact.colliderA;
     const txA = contact.bodyA?.transform ?? new TransformComponent();
     const shapeB = contact.colliderB;
@@ -310,11 +314,17 @@ export const CollisionJumpTable = {
         let side: LineSegment;
         let worldPoint: Vector;
         if (contact.info.collider === shapeA) {
-          side = new LineSegment(txA.apply(contact.info.localSide.begin), txA.apply(contact.info.localSide.end));
-          worldPoint = txB.apply(localPoint);
+          side = new LineSegment(
+            txA.apply(contact.info.localSide.begin).add(shapeA.offset),
+            txA.apply(contact.info.localSide.end).add(shapeA.offset)
+          );
+          worldPoint = txB.apply(localPoint).add(shapeB.offset);
         } else {
-          side = new LineSegment(txB.apply(contact.info.localSide.begin), txB.apply(contact.info.localSide.end));
-          worldPoint = txA.apply(localPoint);
+          side = new LineSegment(
+            txB.apply(contact.info.localSide.begin).add(shapeB.offset),
+            txB.apply(contact.info.localSide.end).add(shapeB.offset)
+          );
+          worldPoint = txA.apply(localPoint).add(shapeA.offset);
         }
 
         return side.distanceToPoint(worldPoint, true);

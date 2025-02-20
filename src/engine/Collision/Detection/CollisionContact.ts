@@ -80,7 +80,7 @@ export class CollisionContact {
     this.info = info;
     this.id = Pair.calculatePairHash(colliderA.id, colliderB.id);
     if (colliderA.composite || colliderB.composite) {
-      // Add on the parent composite pair for start/end contact if 'together
+      // Add on the parent composite pair for start/end contact if 'together'
       const colliderAId = colliderA.composite?.compositeStrategy === 'separate' ? colliderA.id : colliderA.composite?.id ?? colliderA.id;
       const colliderBId = colliderB.composite?.compositeStrategy === 'separate' ? colliderB.id : colliderB.composite?.id ?? colliderB.id;
       this.id += '|' + Pair.calculatePairHash(colliderAId, colliderBId);
@@ -100,12 +100,12 @@ export class CollisionContact {
     const bodyA = this.bodyA;
     const bodyB = this.bodyB;
     if (bodyA && bodyB) {
-      if (bodyA.sleeping !== bodyB.sleeping) {
-        if (bodyA.sleeping && bodyA.collisionType !== CollisionType.Fixed && bodyB.sleepMotion >= bodyA.wakeThreshold) {
-          bodyA.setSleeping(false);
+      if (bodyA.isSleeping !== bodyB.isSleeping) {
+        if (bodyA.isSleeping && bodyA.collisionType !== CollisionType.Fixed && bodyB.sleepMotion >= bodyA.wakeThreshold) {
+          bodyA.isSleeping = false;
         }
-        if (bodyB.sleeping && bodyB.collisionType !== CollisionType.Fixed && bodyA.sleepMotion >= bodyB.wakeThreshold) {
-          bodyB.setSleeping(false);
+        if (bodyB.isSleeping && bodyB.collisionType !== CollisionType.Fixed && bodyA.sleepMotion >= bodyB.wakeThreshold) {
+          bodyB.isSleeping = false;
         }
       }
     }

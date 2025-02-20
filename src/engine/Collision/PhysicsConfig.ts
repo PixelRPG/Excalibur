@@ -1,7 +1,6 @@
 import { Vector, vec } from '../Math/vector';
 import { DeepRequired } from '../Util/Required';
 import { SolverStrategy } from './SolverStrategy';
-import { Physics } from './Physics';
 import { ContactSolveBias } from './Solver/ContactBias';
 import { SpatialPartitionStrategy } from './Detection/SpatialPartitionStrategy';
 
@@ -36,24 +35,31 @@ export interface PhysicsConfig {
    */
   enabled?: boolean;
   /**
-   * Configure gravity that applies to all [[CollisionType.Active]] bodies.
+   * Configure gravity that applies to all {@apilink CollisionType.Active} bodies.
    *
    * This is acceleration in pixels/sec^2
    *
    * Default vec(0, 0)
    *
-   * [[BodyComponent.useGravity]] to opt out
+   * {@apilink BodyComponent.useGravity} to opt out
    */
   gravity?: Vector;
   /**
    * Configure the type of physics simulation you would like
    *
-   * * [[SolverStrategy.Arcade]] is suitable for games where you might be doing platforming or top down movement.
-   * * [[SolverStrategy.Realistic]] is where you need objects to bounce off each other and respond like real world objects.
+   * * {@apilink SolverStrategy.Arcade} is suitable for games where you might be doing platforming or top down movement.
+   * * {@apilink SolverStrategy.Realistic} is where you need objects to bounce off each other and respond like real world objects.
    *
    * Default is Arcade
    */
   solver?: SolverStrategy;
+
+  /**
+   * Configure physics sub-stepping, this can increase simulation fidelity by doing smaller physics steps
+   *
+   * Default is 1 step
+   */
+  substep?: number;
 
   /**
    * Configure colliders
@@ -63,7 +69,7 @@ export interface PhysicsConfig {
      * Treat composite collider's member colliders as either separate colliders for the purposes of onCollisionStart/onCollision
      * or as a single collider together.
      *
-     * This property can be overridden on individual [[CompositeColliders]].
+     * This property can be overridden on individual {@apilink CompositeColliders}.
      *
      * For composites without gaps or small groups of colliders, you probably want 'together'
      *
@@ -151,26 +157,27 @@ export interface PhysicsConfig {
   dynamicTree?: DynamicTreeConfig;
 
   /**
-   * Configure the [[ArcadeSolver]]
+   * Configure the {@apilink ArcadeSolver}
    */
   arcade?: {
     /**
-     * Hints the [[ArcadeSolver]] to preferentially solve certain contact directions first.
+     * Hints the {@apilink ArcadeSolver} to preferentially solve certain contact directions first.
      *
      * Options:
-     * * Solve [[ContactSolveBias.VerticalFirst]] which will do vertical contact resolution first (useful for platformers
+     * * Solve {@apilink ContactSolveBias.VerticalFirst} which will do vertical contact resolution first (useful for platformers
      * with up/down gravity)
-     * * Solve [[ContactSolveBias.HorizontalFirst]] which will do horizontal contact resolution first (useful for games with
+     * * Solve {@apilink ContactSolveBias.HorizontalFirst} which will do horizontal contact resolution first (useful for games with
      * left/right forces)
-     * * By default [[ContactSolveBias.None]] which sorts by distance
+     * * By default {@apilink ContactSolveBias.None} which sorts by distance
      */
     contactSolveBias?: ContactSolveBias;
   };
 
   /**
-   * Configure the [[RealisticSolver]]
+   * Configure the {@apilink RealisticSolver}
    */
   realistic?: {
+    contactSolveBias?: ContactSolveBias;
     /**
      * Number of position iterations (overlap) to run in the solver
      *
@@ -210,10 +217,11 @@ export interface PhysicsConfig {
   };
 }
 
-export const DefaultPhysicsConfig: DeepRequired<PhysicsConfig> = {
+export const getDefaultPhysicsConfig: () => DeepRequired<PhysicsConfig> = () => ({
   enabled: true,
-  gravity: vec(0, 0),
+  gravity: vec(0, 0).clone(),
   solver: SolverStrategy.Arcade,
+  substep: 1,
   colliders: {
     compositeStrategy: 'together'
   },
@@ -241,54 +249,11 @@ export const DefaultPhysicsConfig: DeepRequired<PhysicsConfig> = {
     contactSolveBias: ContactSolveBias.None
   },
   realistic: {
+    contactSolveBias: ContactSolveBias.None,
     positionIterations: 3,
     velocityIterations: 8,
     slop: 1,
     steeringFactor: 0.2,
     warmStart: true
   }
-};
-
-/**
- * @deprecated will be removed in v0.30
- */
-export function DeprecatedStaticToConfig(): DeepRequired<PhysicsConfig> {
-  return {
-    enabled: Physics.enabled,
-    gravity: Physics.gravity,
-    solver: Physics.collisionResolutionStrategy,
-    continuous: {
-      checkForFastBodies: Physics.checkForFastBodies,
-      disableMinimumSpeedForFastBody: Physics.disableMinimumSpeedForFastBody,
-      surfaceEpsilon: Physics.surfaceEpsilon
-    },
-    colliders: {
-      compositeStrategy: 'together'
-    },
-    bodies: {
-      canSleepByDefault: Physics.bodiesCanSleepByDefault,
-      sleepEpsilon: Physics.sleepEpsilon,
-      wakeThreshold: Physics.wakeThreshold,
-      sleepBias: Physics.sleepBias,
-      defaultMass: Physics.defaultMass
-    },
-    spatialPartition: SpatialPartitionStrategy.SparseHashGrid,
-    sparseHashGrid: {
-      size: 100
-    },
-    dynamicTree: {
-      boundsPadding: Physics.boundsPadding,
-      velocityMultiplier: Physics.dynamicTreeVelocityMultiplier
-    },
-    arcade: {
-      contactSolveBias: ContactSolveBias.None
-    },
-    realistic: {
-      positionIterations: Physics.positionIterations,
-      velocityIterations: Physics.velocityIterations,
-      slop: Physics.slop,
-      steeringFactor: Physics.steeringFactor,
-      warmStart: Physics.warmStart
-    }
-  };
-}
+});

@@ -8,14 +8,14 @@ import { Entity } from '../EntityComponentSystem/Entity';
 import { BoundingBox } from '../Collision/BoundingBox';
 import { clamp } from '../Math/util';
 import { Graphic } from '../Graphics';
-import { EmitterType } from '../EmitterType';
+import { EmitterType } from './EmitterType';
 import { MotionComponent } from '../EntityComponentSystem';
 import { EulerIntegrator } from '../Collision/Integrator';
 import type { ParticleEmitter } from './ParticleEmitter';
 
 /**
 /**
- * Particle is used in a [[ParticleEmitter]]
+ * CPU Particle is used in a {@apilink ParticleEmitter}
  */
 export class Particle extends Entity {
   public static DefaultConfig: ParticleConfig = {
@@ -60,8 +60,10 @@ export class Particle extends Entity {
   public graphics: GraphicsComponent;
   public particleTransform = ParticleTransform.Global;
 
+  public name = `Particle#${this.id}`;
+
   constructor(options: ParticleConfig) {
-    super();
+    super({ silenceWarnings: true });
     this.addComponent((this.transform = new TransformComponent()));
     this.addComponent((this.motion = new MotionComponent()));
     this.addComponent((this.graphics = new GraphicsComponent()));
@@ -122,14 +124,16 @@ export class Particle extends Entity {
     }
   }
 
-  public kill() {
-    if (this._emitter) {
+  public override kill() {
+    if (this._emitter?.isActive) {
       this._emitter.removeParticle(this);
+    } else {
+      super.kill();
     }
   }
 
-  public update(engine: Engine, delta: number) {
-    this.life = this.life - delta;
+  public update(engine: Engine, elapsed: number) {
+    this.life = this.life - elapsed;
 
     if (this.life < 0) {
       this.kill();
@@ -140,12 +144,16 @@ export class Particle extends Entity {
     }
 
     if (this.startSize && this.endSize && this.startSize > 0 && this.endSize > 0) {
-      this.size = clamp(this.sizeRate * delta + this.size, Math.min(this.startSize, this.endSize), Math.max(this.startSize, this.endSize));
+      this.size = clamp(
+        this.sizeRate * elapsed + this.size,
+        Math.min(this.startSize, this.endSize),
+        Math.max(this.startSize, this.endSize)
+      );
     }
 
-    this._currentColor.r = clamp(this._currentColor.r + this._rRate * delta, 0, 255);
-    this._currentColor.g = clamp(this._currentColor.g + this._gRate * delta, 0, 255);
-    this._currentColor.b = clamp(this._currentColor.b + this._bRate * delta, 0, 255);
+    this._currentColor.r = clamp(this._currentColor.r + this._rRate * elapsed, 0, 255);
+    this._currentColor.g = clamp(this._currentColor.g + this._gRate * elapsed, 0, 255);
+    this._currentColor.b = clamp(this._currentColor.b + this._bRate * elapsed, 0, 255);
     this._currentColor.a = this.graphics.opacity;
 
     let accel = this.motion.acc;
@@ -154,19 +162,19 @@ export class Particle extends Entity {
         .sub(this.transform.pos)
         .normalize()
         .scale(this.focusAccel || 0)
-        .scale(delta / 1000);
+        .scale(elapsed / 1000);
     }
     // Update transform and motion based on Euler linear algebra
-    EulerIntegrator.integrate(this.transform, this.motion, accel, delta);
+    EulerIntegrator.integrate(this.transform, this.motion, accel, elapsed);
   }
 }
 
 export interface ParticleConfig {
   /**
-   * Optionally set the emitted particle transform style, [[ParticleTransform.Global]] is the default and emits particles as if
+   * Optionally set the emitted particle transform style, {@apilink ParticleTransform.Global} is the default and emits particles as if
    * they were world space objects, useful for most effects.
    *
-   * If set to [[ParticleTransform.Local]] particles are children of the emitter and move relative to the emitter
+   * If set to {@apilink ParticleTransform.Local} particles are children of the emitter and move relative to the emitter
    * as they would in a parent/child actor relationship.
    */
   transform?: ParticleTransform;
@@ -238,13 +246,13 @@ export interface ParticleConfig {
    */
   maxSize?: number;
   /**
-   * Minimum magnitude of the particle starting vel
+   * Minimum magnitude of the particle starting speed
    */
-  minVel?: number; // TODO Change to speed!
+  minSpeed?: number;
   /**
-   * Maximum magnitude of the particle starting vel
+   * Maximum magnitude of the particle starting speed
    */
-  maxVel?: number;
+  maxSpeed?: number;
   /**
    * Minimum angle to use for the particles starting rotation
    */
@@ -256,6 +264,8 @@ export interface ParticleConfig {
 
   /**
    * Gets or sets the optional focus where all particles should accelerate towards
+   *
+   * If the particle transform is global the focus is in world space, otherwise it is relative to the emitter
    */
   focus?: Vector;
   /**
@@ -271,12 +281,12 @@ export interface ParticleConfig {
 
 export enum ParticleTransform {
   /**
-   * [[ParticleTransform.Global]] is the default and emits particles as if
+   * {@apilink ParticleTransform.Global} is the default and emits particles as if
    * they were world space objects, useful for most effects.
    */
   Global = 'global',
   /**
-   * [[ParticleTransform.Local]] particles are children of the emitter and move relative to the emitter
+   * {@apilink ParticleTransform.Local} particles are children of the emitter and move relative to the emitter
    * as they would in a parent/child actor relationship.
    */
   Local = 'local'
@@ -290,11 +300,23 @@ export interface ParticleEmitterArgs {
   pos?: Vector;
   width?: number;
   height?: number;
+  /**
+   * Is emitting currently
+   */
   isEmitting?: boolean;
+  /**
+   * Particles per second
+   */
   emitRate?: number;
   focus?: Vector;
   focusAccel?: number;
+  /**
+   * Emitter shape
+   */
   emitterType?: EmitterType;
+  /**
+   * Radius of the emitter if the emitter type is EmitterType.Circle
+   */
   radius?: number;
   random?: Random;
 }

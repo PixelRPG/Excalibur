@@ -38,7 +38,7 @@ import { DefaultLoader } from './Director/DefaultLoader';
 import { Transition } from './Director';
 import { InputHost } from './Input/InputHost';
 import { PointerScope } from './Input/PointerScope';
-import { DefaultPhysicsConfig } from './Collision/PhysicsConfig';
+import { getDefaultPhysicsConfig } from './Collision/PhysicsConfig';
 
 export class PreLoadEvent {
   loader: DefaultLoader;
@@ -55,6 +55,8 @@ export type SceneEvents = {
   predebugdraw: PreDebugDrawEvent;
   postdebugdraw: PostDebugDrawEvent;
   preload: PreLoadEvent;
+  transitionstart: Transition;
+  transitionend: Transition;
 };
 
 export const SceneEvents = {
@@ -67,8 +69,10 @@ export const SceneEvents = {
   PostDraw: 'postdraw',
   PreDebugDraw: 'predebugdraw',
   PostDebugDraw: 'postdebugdraw',
-  PreLoad: 'preload'
-};
+  PreLoad: 'preload',
+  TransitionStart: 'transitionstart',
+  TransitionEnd: 'transitionend'
+} as const;
 
 export type SceneConstructor = new (...args: any[]) => Scene;
 /**
@@ -79,7 +83,7 @@ export function isSceneConstructor(x: any): x is SceneConstructor {
 }
 
 /**
- * [[Actor|Actors]] are composed together into groupings called Scenes in
+ * {@apilink Actor | `Actors`} are composed together into groupings called Scenes in
  * Excalibur. The metaphor models the same idea behind real world
  * actors in a scene. Only actors in scenes will be updated and drawn.
  *
@@ -110,7 +114,7 @@ export class Scene<TActivationData = unknown> implements CanInitialize, CanActiv
    *
    * Can be used to perform scene ray casts, track colliders, broadphase, and narrowphase.
    */
-  public physics = new PhysicsWorld(DefaultPhysicsConfig);
+  public physics = new PhysicsWorld(getDefaultPhysicsConfig());
 
   /**
    * The actors in the current scene
@@ -138,7 +142,7 @@ export class Scene<TActivationData = unknown> implements CanInitialize, CanActiv
   }
 
   /**
-   * The [[TileMap]]s in the scene, if any
+   * The {@apilink TileMap}s in the scene, if any
    */
   public get tileMaps(): readonly TileMap[] {
     return this.world.entityManager.entities.filter((e: Entity<any>) => {
@@ -231,7 +235,7 @@ export class Scene<TActivationData = unknown> implements CanInitialize, CanActiv
   }
 
   /**
-   * This is called before the first update of the [[Scene]]. Initializes scene members like the camera. This method is meant to be
+   * This is called before the first update of the {@apilink Scene}. Initializes scene members like the camera. This method is meant to be
    * overridden. This is where initialization of child actors should take place.
    */
   public onInitialize(engine: Engine): void {
@@ -258,8 +262,10 @@ export class Scene<TActivationData = unknown> implements CanInitialize, CanActiv
    * Safe to override onPreUpdate lifecycle event handler. Synonymous with `.on('preupdate', (evt) =>{...})`
    *
    * `onPreUpdate` is called directly before a scene is updated.
+   * @param engine reference to the engine
+   * @param elapsed  Number of milliseconds elapsed since the last draw.
    */
-  public onPreUpdate(engine: Engine, delta: number): void {
+  public onPreUpdate(engine: Engine, elapsed: number): void {
     // will be overridden
   }
 
@@ -267,8 +273,10 @@ export class Scene<TActivationData = unknown> implements CanInitialize, CanActiv
    * Safe to override onPostUpdate lifecycle event handler. Synonymous with `.on('preupdate', (evt) =>{...})`
    *
    * `onPostUpdate` is called directly after a scene is updated.
+   * @param engine reference to the engine
+   * @param elapsed  Number of milliseconds elapsed since the last draw.
    */
-  public onPostUpdate(engine: Engine, delta: number): void {
+  public onPostUpdate(engine: Engine, elapsed: number): void {
     // will be overridden
   }
 
@@ -278,7 +286,7 @@ export class Scene<TActivationData = unknown> implements CanInitialize, CanActiv
    * `onPreDraw` is called directly before a scene is drawn.
    *
    */
-  public onPreDraw(ctx: ExcaliburGraphicsContext, delta: number): void {
+  public onPreDraw(ctx: ExcaliburGraphicsContext, elapsed: number): void {
     // will be overridden
   }
 
@@ -288,7 +296,7 @@ export class Scene<TActivationData = unknown> implements CanInitialize, CanActiv
    * `onPostDraw` is called directly after a scene is drawn.
    *
    */
-  public onPostDraw(ctx: ExcaliburGraphicsContext, delta: number): void {
+  public onPostDraw(ctx: ExcaliburGraphicsContext, elapsed: number): void {
     // will be overridden
   }
 
@@ -302,7 +310,7 @@ export class Scene<TActivationData = unknown> implements CanInitialize, CanActiv
   }
 
   /**
-   * Gets whether or not the [[Scene]] has been initialized
+   * Gets whether or not the {@apilink Scene} has been initialized
    */
   public get isInitialized(): boolean {
     return this._isInitialized;
@@ -378,58 +386,58 @@ export class Scene<TActivationData = unknown> implements CanInitialize, CanActiv
   /**
    * It is not recommended that internal excalibur methods be overridden, do so at your own risk.
    *
-   * Internal _preupdate handler for [[onPreUpdate]] lifecycle event
+   * Internal _preupdate handler for {@apilink onPreUpdate} lifecycle event
    * @internal
    */
-  public _preupdate(engine: Engine, delta: number): void {
-    this.emit('preupdate', new PreUpdateEvent(engine, delta, this));
-    this.onPreUpdate(engine, delta);
+  public _preupdate(engine: Engine, elapsed: number): void {
+    this.emit('preupdate', new PreUpdateEvent(engine, elapsed, this));
+    this.onPreUpdate(engine, elapsed);
   }
 
   /**
    *  It is not recommended that internal excalibur methods be overridden, do so at your own risk.
    *
-   * Internal _preupdate handler for [[onPostUpdate]] lifecycle event
+   * Internal _preupdate handler for {@apilink onPostUpdate} lifecycle event
    * @internal
    */
-  public _postupdate(engine: Engine, delta: number): void {
-    this.emit('postupdate', new PostUpdateEvent(engine, delta, this));
-    this.onPostUpdate(engine, delta);
+  public _postupdate(engine: Engine, elapsed: number): void {
+    this.emit('postupdate', new PostUpdateEvent(engine, elapsed, this));
+    this.onPostUpdate(engine, elapsed);
   }
 
   /**
    * It is not recommended that internal excalibur methods be overridden, do so at your own risk.
    *
-   * Internal _predraw handler for [[onPreDraw]] lifecycle event
+   * Internal _predraw handler for {@apilink onPreDraw} lifecycle event
    * @internal
    */
-  public _predraw(ctx: ExcaliburGraphicsContext, delta: number): void {
-    this.emit('predraw', new PreDrawEvent(ctx, delta, this));
-    this.onPreDraw(ctx, delta);
+  public _predraw(ctx: ExcaliburGraphicsContext, elapsed: number): void {
+    this.emit('predraw', new PreDrawEvent(ctx, elapsed, this));
+    this.onPreDraw(ctx, elapsed);
   }
 
   /**
    * It is not recommended that internal excalibur methods be overridden, do so at your own risk.
    *
-   * Internal _postdraw handler for [[onPostDraw]] lifecycle event
+   * Internal _postdraw handler for {@apilink onPostDraw} lifecycle event
    * @internal
    */
-  public _postdraw(ctx: ExcaliburGraphicsContext, delta: number): void {
-    this.emit('postdraw', new PostDrawEvent(ctx, delta, this));
-    this.onPostDraw(ctx, delta);
+  public _postdraw(ctx: ExcaliburGraphicsContext, elapsed: number): void {
+    this.emit('postdraw', new PostDrawEvent(ctx, elapsed, this));
+    this.onPostDraw(ctx, elapsed);
   }
 
   /**
-   * Updates all the actors and timers in the scene. Called by the [[Engine]].
+   * Updates all the actors and timers in the scene. Called by the {@apilink Engine}.
    * @param engine  Reference to the current Engine
-   * @param delta   The number of milliseconds since the last update
+   * @param elapsed   The number of milliseconds since the last update
    */
-  public update(engine: Engine, delta: number) {
+  public update(engine: Engine, elapsed: number) {
     if (!this.isInitialized) {
       this._logger.warnOnce(`Scene update called before initialize for scene ${engine.director?.getSceneName(this)}!`);
       return;
     }
-    this._preupdate(engine, delta);
+    this._preupdate(engine, elapsed);
 
     // TODO differed entity removal for timers
     let i: number, len: number;
@@ -441,45 +449,45 @@ export class Scene<TActivationData = unknown> implements CanInitialize, CanActiv
 
     // Cycle through timers updating timers
     for (const timer of this._timers) {
-      timer.update(delta);
+      timer.update(elapsed);
     }
 
-    this.world.update(SystemType.Update, delta);
+    this.world.update(SystemType.Update, elapsed);
 
     // Camera last keeps renders smooth that are based on entity/actor
     if (this.camera) {
-      this.camera.update(engine, delta);
+      this.camera.update(engine, elapsed);
     }
 
     this._collectActorStats(engine);
 
-    this._postupdate(engine, delta);
+    this._postupdate(engine, elapsed);
 
     this.input.update();
   }
 
   /**
-   * Draws all the actors in the Scene. Called by the [[Engine]].
+   * Draws all the actors in the Scene. Called by the {@apilink Engine}.
    * @param ctx    The current rendering context
-   * @param delta  The number of milliseconds since the last draw
+   * @param elapsed  The number of milliseconds since the last draw
    */
-  public draw(ctx: ExcaliburGraphicsContext, delta: number) {
+  public draw(ctx: ExcaliburGraphicsContext, elapsed: number) {
     if (!this.isInitialized) {
       this._logger.warnOnce(`Scene draw called before initialize!`);
       return;
     }
-    this._predraw(ctx, delta);
+    this._predraw(ctx, elapsed);
 
-    this.world.update(SystemType.Draw, delta);
+    this.world.update(SystemType.Draw, elapsed);
 
     if (this.engine?.isDebug) {
       this.debugDraw(ctx);
     }
-    this._postdraw(ctx, delta);
+    this._postdraw(ctx, elapsed);
   }
 
   /**
-   * Draws all the actors' debug information in the Scene. Called by the [[Engine]].
+   * Draws all the actors' debug information in the Scene. Called by the {@apilink Engine}.
    * @param ctx  The current rendering context
    */
   /* istanbul ignore next */
@@ -497,53 +505,53 @@ export class Scene<TActivationData = unknown> implements CanInitialize, CanActiv
   }
 
   /**
-   * Adds a [[Timer]] to the current [[Scene]].
-   * @param timer  The timer to add to the current [[Scene]].
+   * Adds a {@apilink Timer} to the current {@apilink Scene}.
+   * @param timer  The timer to add to the current {@apilink Scene}.
    */
   public add(timer: Timer): void;
 
   /**
-   * Adds a [[TileMap]] to the [[Scene]], once this is done the [[TileMap]] will be drawn and updated.
+   * Adds a {@apilink TileMap} to the {@apilink Scene}, once this is done the {@apilink TileMap} will be drawn and updated.
    */
   public add(tileMap: TileMap): void;
 
   /**
-   * Adds a [[Trigger]] to the [[Scene]], once this is done the [[Trigger]] will listen for interactions with other actors.
+   * Adds a {@apilink Trigger} to the {@apilink Scene}, once this is done the {@apilink Trigger} will listen for interactions with other actors.
    * @param trigger
    */
   public add(trigger: Trigger): void;
 
   /**
-   * Adds an actor to the scene, once this is done the [[Actor]] will be drawn and updated.
+   * Adds an actor to the scene, once this is done the {@apilink Actor} will be drawn and updated.
    * @param actor  The actor to add to the current scene
    */
   public add(actor: Actor): void;
 
   /**
-   * Adds an [[Entity]] to the scene, once this is done the [[Actor]] will be drawn and updated.
+   * Adds an {@apilink Entity} to the scene, once this is done the {@apilink Actor} will be drawn and updated.
    * @param entity The entity to add to the current scene
    */
   public add(entity: Entity): void;
 
   /**
-   * Adds a [[ScreenElement]] to the scene.
+   * Adds a {@apilink ScreenElement} to the scene.
    * @param screenElement  The ScreenElement to add to the current scene
    */
   public add(screenElement: ScreenElement): void;
   public add(entity: any): void {
     this.emit('entityadded', { target: entity } as any);
-    this.world.add(entity);
-    entity.scene = this;
     if (entity instanceof Timer) {
       if (!Util.contains(this._timers, entity)) {
         this.addTimer(entity);
       }
       return;
     }
+    this.world.add(entity);
+    entity.scene = this;
   }
 
   /**
-   * Removes a [[Timer]] from it's current scene
+   * Removes a {@apilink Timer} from it's current scene
    * and adds it to this scene.
    *
    * Useful if you want to have an object be present in only 1 scene at a time.
@@ -552,7 +560,7 @@ export class Scene<TActivationData = unknown> implements CanInitialize, CanActiv
   public transfer(timer: Timer): void;
 
   /**
-   * Removes a [[TileMap]] from it's current scene
+   * Removes a {@apilink TileMap} from it's current scene
    * and adds it to this scene.
    *
    * Useful if you want to have an object be present in only 1 scene at a time.
@@ -561,7 +569,7 @@ export class Scene<TActivationData = unknown> implements CanInitialize, CanActiv
   public transfer(tileMap: TileMap): void;
 
   /**
-   * Removes a [[Trigger]] from it's current scene
+   * Removes a {@apilink Trigger} from it's current scene
    * and adds it to this scene.
    *
    * Useful if you want to have an object be present in only 1 scene at a time.
@@ -570,7 +578,7 @@ export class Scene<TActivationData = unknown> implements CanInitialize, CanActiv
   public transfer(trigger: Trigger): void;
 
   /**
-   * Removes an [[Actor]] from it's current scene
+   * Removes an {@apilink Actor} from it's current scene
    * and adds it to this scene.
    *
    * Useful if you want to have an object be present in only 1 scene at a time.
@@ -579,7 +587,7 @@ export class Scene<TActivationData = unknown> implements CanInitialize, CanActiv
   public transfer(actor: Actor): void;
 
   /**
-   * Removes an [[Entity]] from it's current scene
+   * Removes an {@apilink Entity} from it's current scene
    * and adds it to this scene.
    *
    * Useful if you want to have an object be present in only 1 scene at a time.
@@ -588,7 +596,7 @@ export class Scene<TActivationData = unknown> implements CanInitialize, CanActiv
   public transfer(entity: Entity): void;
 
   /**
-   * Removes a [[ScreenElement]] from it's current scene
+   * Removes a {@apilink ScreenElement} from it's current scene
    * and adds it to this scene.
    *
    * Useful if you want to have an object be present in only 1 scene at a time.
@@ -597,7 +605,7 @@ export class Scene<TActivationData = unknown> implements CanInitialize, CanActiv
   public transfer(screenElement: ScreenElement): void;
 
   /**
-   * Removes an [[Entity]] (Actor, TileMap, Trigger, etc) or [[Timer]] from it's current scene
+   * Removes an {@apilink Entity} (Actor, TileMap, Trigger, etc) or {@apilink Timer} from it's current scene
    * and adds it to this scene.
    *
    * Useful if you want to have an object be present in only 1 scene at a time.
@@ -613,18 +621,19 @@ export class Scene<TActivationData = unknown> implements CanInitialize, CanActiv
       scene = entity.scene;
       entity.scene.removeTimer(entity);
     }
+
     scene?.emit('entityremoved', { target: entity } as any);
     this.add(entity);
   }
 
   /**
-   * Removes a [[Timer]] from the current scene, it will no longer be updated.
+   * Removes a {@apilink Timer} from the current scene, it will no longer be updated.
    * @param timer  The timer to remove to the current scene.
    */
   public remove(timer: Timer): void;
 
   /**
-   * Removes a [[TileMap]] from the scene, it will no longer be drawn or updated.
+   * Removes a {@apilink TileMap} from the scene, it will no longer be drawn or updated.
    * @param tileMap {TileMap}
    */
   public remove(tileMap: TileMap): void;
@@ -638,14 +647,14 @@ export class Scene<TActivationData = unknown> implements CanInitialize, CanActiv
   public remove(entity: Entity): void;
 
   /**
-   * Removes a [[ScreenElement]] to the scene, it will no longer be drawn or updated
+   * Removes a {@apilink ScreenElement} to the scene, it will no longer be drawn or updated
    * @param screenElement  The ScreenElement to remove from the current scene
    */
   public remove(screenElement: ScreenElement): void;
   public remove(entity: any): void {
+    this.emit('entityremoved', { target: entity } as any);
     if (entity instanceof Entity) {
-      this.emit('entityremoved', { target: entity } as any);
-      if (entity.active) {
+      if (entity.isActive) {
         entity.kill();
       }
       this.world.remove(entity);
@@ -671,7 +680,7 @@ export class Scene<TActivationData = unknown> implements CanInitialize, CanActiv
   }
 
   /**
-   * Adds a [[Timer]] to the scene
+   * Adds a {@apilink Timer} to the scene
    * @param timer  The timer to add
    */
   public addTimer(timer: Timer): Timer {
@@ -681,8 +690,8 @@ export class Scene<TActivationData = unknown> implements CanInitialize, CanActiv
   }
 
   /**
-   * Removes a [[Timer]] from the scene.
-   * @warning Can be dangerous, use [[cancelTimer]] instead
+   * Removes a {@apilink Timer} from the scene.
+   * @warning Can be dangerous, use {@apilink cancelTimer} instead
    * @param timer  The timer to remove
    */
   public removeTimer(timer: Timer): Timer {
@@ -694,7 +703,7 @@ export class Scene<TActivationData = unknown> implements CanInitialize, CanActiv
   }
 
   /**
-   * Cancels a [[Timer]], removing it from the scene nicely
+   * Cancels a {@apilink Timer}, removing it from the scene nicely
    * @param timer  The timer to cancel
    */
   public cancelTimer(timer: Timer): Timer {
@@ -703,7 +712,7 @@ export class Scene<TActivationData = unknown> implements CanInitialize, CanActiv
   }
 
   /**
-   * Tests whether a [[Timer]] is active in the scene
+   * Tests whether a {@apilink Timer} is active in the scene
    */
   public isTimerActive(timer: Timer): boolean {
     return this._timers.indexOf(timer) > -1 && !timer.complete;
@@ -717,14 +726,15 @@ export class Scene<TActivationData = unknown> implements CanInitialize, CanActiv
   }
 
   private _collectActorStats(engine: Engine) {
-    const screenElements = this.actors.filter((a) => a instanceof ScreenElement) as ScreenElement[];
-    for (const _ui of screenElements) {
-      engine.stats.currFrame.actors.ui++;
-    }
-
-    for (const actor of this.actors) {
+    const actors = this.actors;
+    for (let i = 0; i < actors.length; i++) {
+      const actor = actors[i];
+      if (actor instanceof ScreenElement) {
+        engine.stats.currFrame.actors.ui++;
+      }
       engine.stats.currFrame.actors.alive++;
-      for (const child of actor.children) {
+      for (let j = 0; j < actor.children.length; j++) {
+        const child = actor.children[j];
         if (isScreenElement(child as Actor)) {
           // TODO not true
           engine.stats.currFrame.actors.ui++;

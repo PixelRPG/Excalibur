@@ -48,15 +48,15 @@ import { ImageFiltering } from './Graphics/Filtering';
 import { GraphicsDiagnostics } from './Graphics/GraphicsDiagnostics';
 import { Toaster } from './Util/Toaster';
 import { InputMapper } from './Input/InputMapper';
-import { GoToOptions, SceneMap, Director, StartOptions, SceneWithOptions, WithRoot } from './Director/Director';
+import { GoToOptions, SceneMap, Director, StartOptions, SceneWithOptions, WithRoot, DirectorEvents } from './Director/Director';
 import { InputHost } from './Input/InputHost';
-import { DefaultPhysicsConfig, DeprecatedStaticToConfig, PhysicsConfig } from './Collision/PhysicsConfig';
+import { getDefaultPhysicsConfig, PhysicsConfig } from './Collision/PhysicsConfig';
 import { DeepRequired } from './Util/Required';
 import { Context, createContext, useContext } from './Context';
 import { DefaultGarbageCollectionOptions, GarbageCollectionOptions, GarbageCollector } from './GarbageCollector';
 import { mergeDeep } from './Util/Util';
 
-export type EngineEvents = {
+export type EngineEvents = DirectorEvents & {
   fallbackgraphicscontext: ExcaliburGraphicsContext2DCanvas;
   initialize: InitializeEvent<Engine>;
   visible: VisibleEvent;
@@ -83,7 +83,8 @@ export const EngineEvents = {
   PreFrame: 'preframe',
   PostFrame: 'postframe',
   PreDraw: 'predraw',
-  PostDraw: 'postdraw'
+  PostDraw: 'postdraw',
+  ...DirectorEvents
 } as const;
 
 /**
@@ -120,13 +121,13 @@ export interface EngineOptions<TKnownScenes extends string = any> {
 
   /**
    * Optionally configure the width & height of the viewport in css pixels.
-   * Use `viewport` instead of [[EngineOptions.width]] and [[EngineOptions.height]], or vice versa.
+   * Use `viewport` instead of {@apilink EngineOptions.width} and {@apilink EngineOptions.height}, or vice versa.
    */
   viewport?: ViewportDimension;
 
   /**
    * Optionally specify the size the logical pixel resolution, if not specified it will be width x height.
-   * See [[Resolution]] for common presets.
+   * See {@apilink Resolution} for common presets.
    */
   resolution?: Resolution;
 
@@ -134,12 +135,12 @@ export interface EngineOptions<TKnownScenes extends string = any> {
    * Optionally specify antialiasing (smoothing), by default true (smooth pixels)
    *
    *  * `true` - useful for high resolution art work you would like smoothed, this also hints excalibur to load images
-   * with default blending [[ImageFiltering.Blended]]
+   * with default blending {@apilink ImageFiltering.Blended}
    *
    *  * `false` - useful for pixel art style art work you would like sharp, this also hints excalibur to load images
-   * with default blending [[ImageFiltering.Pixel]]
+   * with default blending {@apilink ImageFiltering.Pixel}
    *
-   * * [[AntialiasOptions]] Optionally deeply configure the different antialiasing settings, **WARNING** thar be dragons here.
+   * * {@apilink AntialiasOptions} Optionally deeply configure the different antialiasing settings, **WARNING** thar be dragons here.
    * It is recommended you stick to `true` or `false` unless you understand what you're doing and need to control rendering to
    * a high degree.
    */
@@ -152,7 +153,7 @@ export interface EngineOptions<TKnownScenes extends string = any> {
    *
    * * `false` - garbage collection is completely disabled (not recommended)
    *
-   * * [[GarbageCollectionOptions]] Optionally deeply configure garbage collection settings, **WARNING** thar be dragons here.
+   * * {@apilink GarbageCollectionOptions} Optionally deeply configure garbage collection settings, **WARNING** thar be dragons here.
    * It is recommended you stick to `true` or `false` unless you understand what you're doing, it is possible to get into a downward
    * spiral if collection timings are set too low where you are stuck in repeated collection.
    */
@@ -196,7 +197,7 @@ export interface EngineOptions<TKnownScenes extends string = any> {
 
   /**
    * Optionally upscale the number of pixels in the canvas. Normally only useful if you need a smoother look to your assets, especially
-   * [[Text]] or Pixel Art assets.
+   * {@apilink Text} or Pixel Art assets.
    *
    * **WARNING** It is recommended you try using `antialiasing: true` before adjusting pixel ratio. Pixel ratio will consume more memory
    * and on mobile may break if the internal size of the canvas exceeds 4k pixels in width or height.
@@ -221,13 +222,20 @@ export interface EngineOptions<TKnownScenes extends string = any> {
   canvasElement?: HTMLCanvasElement;
 
   /**
+   * Optionally enable the right click context menu on the canvas
+   *
+   * Default if unset is false
+   */
+  enableCanvasContextMenu?: boolean;
+
+  /**
    * Optionally snap graphics to nearest pixel, default is false
    */
   snapToPixel?: boolean;
 
   /**
-   * The [[DisplayMode]] of the game, by default [[DisplayMode.FitScreen]] with aspect ratio 4:3 (800x600).
-   * Depending on this value, [[width]] and [[height]] may be ignored.
+   * The {@apilink DisplayMode} of the game, by default {@apilink DisplayMode.FitScreen} with aspect ratio 4:3 (800x600).
+   * Depending on this value, {@apilink width} and {@apilink height} may be ignored.
    */
   displayMode?: DisplayMode;
 
@@ -289,7 +297,22 @@ export interface EngineOptions<TKnownScenes extends string = any> {
   maxFps?: number;
 
   /**
-   * Optionally configure a fixed update fps, this can be desireable if you need the physics simulation to be very stable. When set
+   * Optionally configure a fixed update timestep in milliseconds, this can be desirable if you need the physics simulation to be very stable. When
+   * set the update step and physics will use the same elapsed time for each tick even if the graphical framerate drops. In order for the
+   * simulation to be correct, excalibur will run multiple updates in a row (at the configured update elapsed) to catch up, for example
+   * there could be X updates and 1 draw each clock step.
+   *
+   * **NOTE:** This does come at a potential perf cost because each catch-up update will need to be run if the fixed rate is greater than
+   * the current instantaneous framerate, or perf gain if the fixed rate is less than the current framerate.
+   *
+   * By default is unset and updates will use the current instantaneous framerate with 1 update and 1 draw each clock step.
+   *
+   * **WARN:** `fixedUpdateTimestep` takes precedence over `fixedUpdateFps` use whichever is most convenient.
+   */
+  fixedUpdateTimestep?: number;
+
+  /**
+   * Optionally configure a fixed update fps, this can be desirable if you need the physics simulation to be very stable. When set
    * the update step and physics will use the same elapsed time for each tick even if the graphical framerate drops. In order for the
    * simulation to be correct, excalibur will run multiple updates in a row (at the configured update elapsed) to catch up, for example
    * there could be X updates and 1 draw each clock step.
@@ -298,6 +321,8 @@ export interface EngineOptions<TKnownScenes extends string = any> {
    * the current instantaneous framerate, or perf gain if the fixed rate is less than the current framerate.
    *
    * By default is unset and updates will use the current instantaneous framerate with 1 update and 1 draw each clock step.
+   *
+   * **WARN:** `fixedUpdateTimestep` takes precedence over `fixedUpdateFps` use whichever is most convenient.
    */
   fixedUpdateFps?: number;
 
@@ -306,6 +331,7 @@ export interface EngineOptions<TKnownScenes extends string = any> {
    *
    * Excalibur will automatically sort draw calls by z and priority into renderer batches for maximal draw performance,
    * this can disrupt a specific desired painter order.
+   *
    */
   useDrawSorting?: boolean;
 
@@ -348,12 +374,12 @@ export interface EngineOptions<TKnownScenes extends string = any> {
    *
    * If false, Excalibur will not produce a physics simulation.
    *
-   * Default is configured to use [[SolverStrategy.Arcade]] physics simulation
+   * Default is configured to use {@apilink SolverStrategy.Arcade} physics simulation
    */
   physics?: boolean | PhysicsConfig;
 
   /**
-   * Optionally specify scenes with their transitions and loaders to excalibur's scene [[Director]]
+   * Optionally specify scenes with their transitions and loaders to excalibur's scene {@apilink Director}
    *
    * Scene transitions can can overridden dynamically by the `Scene` or by the call to `.goToScene`
    */
@@ -363,7 +389,7 @@ export interface EngineOptions<TKnownScenes extends string = any> {
 /**
  * The Excalibur Engine
  *
- * The [[Engine]] is the main driver for a game. It is responsible for
+ * The {@apilink Engine} is the main driver for a game. It is responsible for
  * starting/stopping the game, maintaining state, transmitting events,
  * loading resources, and managing the scene.
  */
@@ -446,7 +472,7 @@ export class Engine<TKnownScenes extends string = any> implements CanInitialize,
   public maxFps: number = Number.POSITIVE_INFINITY;
 
   /**
-   * Optionally configure a fixed update fps, this can be desireable if you need the physics simulation to be very stable. When set
+   * Optionally configure a fixed update fps, this can be desirable if you need the physics simulation to be very stable. When set
    * the update step and physics will use the same elapsed time for each tick even if the graphical framerate drops. In order for the
    * simulation to be correct, excalibur will run multiple updates in a row (at the configured update elapsed) to catch up, for example
    * there could be X updates and 1 draw each clock step.
@@ -455,8 +481,25 @@ export class Engine<TKnownScenes extends string = any> implements CanInitialize,
    * the current instantaneous framerate, or perf gain if the fixed rate is less than the current framerate.
    *
    * By default is unset and updates will use the current instantaneous framerate with 1 update and 1 draw each clock step.
+   *
+   * **WARN:** `fixedUpdateTimestep` takes precedence over `fixedUpdateFps` use whichever is most convenient.
    */
-  public fixedUpdateFps?: number;
+  public readonly fixedUpdateFps?: number;
+
+  /**
+   * Optionally configure a fixed update timestep in milliseconds, this can be desirable if you need the physics simulation to be very stable. When
+   * set the update step and physics will use the same elapsed time for each tick even if the graphical framerate drops. In order for the
+   * simulation to be correct, excalibur will run multiple updates in a row (at the configured update elapsed) to catch up, for example
+   * there could be X updates and 1 draw each clock step.
+   *
+   * **NOTE:** This does come at a potential perf cost because each catch-up update will need to be run if the fixed rate is greater than
+   * the current instantaneous framerate, or perf gain if the fixed rate is less than the current framerate.
+   *
+   * By default is unset and updates will use the current instantaneous framerate with 1 update and 1 draw each clock step.
+   *
+   * **WARN:** `fixedUpdateTimestep` takes precedence over `fixedUpdateFps` use whichever is most convenient.
+   */
+  public readonly fixedUpdateTimestep?: number;
 
   /**
    * Direct access to the excalibur clock
@@ -554,28 +597,28 @@ export class Engine<TKnownScenes extends string = any> implements CanInitialize,
   public debug: DebugConfig;
 
   /**
-   * Access [[stats]] that holds frame statistics.
+   * Access {@apilink stats} that holds frame statistics.
    */
   public get stats(): DebugStats {
     return this.debug.stats;
   }
 
   /**
-   * The current [[Scene]] being drawn and updated on screen
+   * The current {@apilink Scene} being drawn and updated on screen
    */
   public get currentScene(): Scene {
     return this.director.currentScene;
   }
 
   /**
-   * The current [[Scene]] being drawn and updated on screen
+   * The current {@apilink Scene} being drawn and updated on screen
    */
   public get currentSceneName(): string {
     return this.director.currentSceneName;
   }
 
   /**
-   * The default [[Scene]] of the game, use [[Engine.goToScene]] to transition to different scenes.
+   * The default {@apilink Scene} of the game, use {@apilink Engine.goToScene} to transition to different scenes.
    */
   public get rootScene(): Scene {
     return this.director.rootScene;
@@ -596,7 +639,7 @@ export class Engine<TKnownScenes extends string = any> implements CanInitialize,
   }
 
   /**
-   * Indicates the current [[DisplayMode]] of the engine.
+   * Indicates the current {@apilink DisplayMode} of the engine.
    */
   public get displayMode(): DisplayMode {
     return this.screen.displayMode;
@@ -696,7 +739,7 @@ export class Engine<TKnownScenes extends string = any> implements CanInitialize,
   }
 
   /**
-   * Default [[EngineOptions]]
+   * Default {@apilink EngineOptions}
    */
   private static _DEFAULT_ENGINE_OPTIONS: EngineOptions = {
     width: 0,
@@ -710,6 +753,7 @@ export class Engine<TKnownScenes extends string = any> implements CanInitialize,
     },
     canvasElementId: '',
     canvasElement: undefined,
+    enableCanvasContextMenu: false,
     snapToPixel: false,
     antialiasing: true,
     pixelArt: false,
@@ -729,9 +773,9 @@ export class Engine<TKnownScenes extends string = any> implements CanInitialize,
   public readonly _originalDisplayMode: DisplayMode;
 
   /**
-   * Creates a new game using the given [[EngineOptions]]. By default, if no options are provided,
+   * Creates a new game using the given {@apilink EngineOptions}. By default, if no options are provided,
    * the game will be rendered full screen (taking up all available browser window space).
-   * You can customize the game rendering through [[EngineOptions]].
+   * You can customize the game rendering through {@apilink EngineOptions}.
    *
    * Example:
    *
@@ -852,6 +896,12 @@ O|===|* >________________>\n\
     } else {
       this._logger.debug('Using generated canvas element');
       this.canvas = <HTMLCanvasElement>document.createElement('canvas');
+    }
+
+    if (this.canvas && !options.enableCanvasContextMenu) {
+      this.canvas.addEventListener('contextmenu', (evt) => {
+        evt.preventDefault();
+      });
     }
 
     let displayMode = options.displayMode ?? DisplayMode.Fixed;
@@ -975,7 +1025,10 @@ O|===|* >________________>\n\
     }
 
     this.maxFps = options.maxFps ?? this.maxFps;
+
+    this.fixedUpdateTimestep = options.fixedUpdateTimestep ?? this.fixedUpdateTimestep;
     this.fixedUpdateFps = options.fixedUpdateFps ?? this.fixedUpdateFps;
+    this.fixedUpdateTimestep = this.fixedUpdateTimestep || 1000 / this.fixedUpdateFps;
 
     this.clock = new StandardClock({
       maxFps: this.maxFps,
@@ -987,14 +1040,12 @@ O|===|* >________________>\n\
 
     if (typeof options.physics === 'boolean') {
       this.physics = {
-        ...DefaultPhysicsConfig,
-        ...DeprecatedStaticToConfig(),
+        ...getDefaultPhysicsConfig(),
         enabled: options.physics
       };
     } else {
       this.physics = {
-        ...DefaultPhysicsConfig,
-        ...DeprecatedStaticToConfig()
+        ...getDefaultPhysicsConfig()
       };
       mergeDeep(this.physics, options.physics);
     }
@@ -1002,6 +1053,7 @@ O|===|* >________________>\n\
     this.debug = new DebugConfig(this);
 
     this.director = new Director(this, options.scenes);
+    this.director.events.pipe(this.events);
 
     this._initialize(options);
 
@@ -1116,7 +1168,7 @@ O|===|* >________________>\n\
     this.canvas.parentNode.replaceChild(newCanvas, this.canvas);
     this.canvas = newCanvas;
 
-    const options = { ...this._originalOptions, antialiasing: this.getAntialiasing() };
+    const options = { ...this._originalOptions, antialiasing: this.screen.antialiasing };
     const displayMode = this._originalDisplayMode;
 
     // New graphics context
@@ -1198,8 +1250,8 @@ O|===|* >________________>\n\
    * when using time-based movement.
    */
   public set timescale(value: number) {
-    if (value <= 0) {
-      Logger.getInstance().error('Cannot set engine.timescale to a value of 0 or less than 0.');
+    if (value < 0) {
+      Logger.getInstance().warnOnce('engine.timescale to a value less than 0 are ignored');
       return;
     }
 
@@ -1207,23 +1259,23 @@ O|===|* >________________>\n\
   }
 
   /**
-   * Adds a [[Timer]] to the [[currentScene]].
-   * @param timer  The timer to add to the [[currentScene]].
+   * Adds a {@apilink Timer} to the {@apilink currentScene}.
+   * @param timer  The timer to add to the {@apilink currentScene}.
    */
   public addTimer(timer: Timer): Timer {
     return this.currentScene.addTimer(timer);
   }
 
   /**
-   * Removes a [[Timer]] from the [[currentScene]].
-   * @param timer  The timer to remove to the [[currentScene]].
+   * Removes a {@apilink Timer} from the {@apilink currentScene}.
+   * @param timer  The timer to remove to the {@apilink currentScene}.
    */
   public removeTimer(timer: Timer): Timer {
     return this.currentScene.removeTimer(timer);
   }
 
   /**
-   * Adds a [[Scene]] to the engine, think of scenes in Excalibur as you
+   * Adds a {@apilink Scene} to the engine, think of scenes in Excalibur as you
    * would levels or menus.
    * @param key  The name of the scene, must be unique
    * @param scene The scene to add to the engine
@@ -1234,7 +1286,7 @@ O|===|* >________________>\n\
   }
 
   /**
-   * Removes a [[Scene]] instance from the engine
+   * Removes a {@apilink Scene} instance from the engine
    * @param scene  The scene to remove
    */
   public removeScene(scene: Scene | SceneConstructor): void;
@@ -1251,39 +1303,39 @@ O|===|* >________________>\n\
   }
 
   /**
-   * Adds a [[Scene]] to the engine, think of scenes in Excalibur as you
+   * Adds a {@apilink Scene} to the engine, think of scenes in Excalibur as you
    * would levels or menus.
    * @param sceneKey  The key of the scene, must be unique
    * @param scene     The scene to add to the engine
    */
   public add(sceneKey: string, scene: Scene | SceneConstructor | SceneWithOptions): void;
   /**
-   * Adds a [[Timer]] to the [[currentScene]].
-   * @param timer  The timer to add to the [[currentScene]].
+   * Adds a {@apilink Timer} to the {@apilink currentScene}.
+   * @param timer  The timer to add to the {@apilink currentScene}.
    */
   public add(timer: Timer): void;
   /**
-   * Adds a [[TileMap]] to the [[currentScene]], once this is done the TileMap
+   * Adds a {@apilink TileMap} to the {@apilink currentScene}, once this is done the TileMap
    * will be drawn and updated.
    */
   public add(tileMap: TileMap): void;
   /**
-   * Adds an actor to the [[currentScene]] of the game. This is synonymous
+   * Adds an actor to the {@apilink currentScene} of the game. This is synonymous
    * to calling `engine.currentScene.add(actor)`.
    *
    * Actors can only be drawn if they are a member of a scene, and only
-   * the [[currentScene]] may be drawn or updated.
-   * @param actor  The actor to add to the [[currentScene]]
+   * the {@apilink currentScene} may be drawn or updated.
+   * @param actor  The actor to add to the {@apilink currentScene}
    */
   public add(actor: Actor): void;
 
   public add(entity: Entity): void;
 
   /**
-   * Adds a [[ScreenElement]] to the [[currentScene]] of the game,
+   * Adds a {@apilink ScreenElement} to the {@apilink currentScene} of the game,
    * ScreenElements do not participate in collisions, instead the
    * remain in the same place on the screen.
-   * @param screenElement  The ScreenElement to add to the [[currentScene]]
+   * @param screenElement  The ScreenElement to add to the {@apilink currentScene}
    */
   public add(screenElement: ScreenElement): void;
   public add(entity: any): void {
@@ -1310,24 +1362,24 @@ O|===|* >________________>\n\
    */
   public remove(sceneKey: string): void;
   /**
-   * Removes a [[Timer]] from the [[currentScene]].
-   * @param timer  The timer to remove to the [[currentScene]].
+   * Removes a {@apilink Timer} from the {@apilink currentScene}.
+   * @param timer  The timer to remove to the {@apilink currentScene}.
    */
   public remove(timer: Timer): void;
   /**
-   * Removes a [[TileMap]] from the [[currentScene]], it will no longer be drawn or updated.
+   * Removes a {@apilink TileMap} from the {@apilink currentScene}, it will no longer be drawn or updated.
    */
   public remove(tileMap: TileMap): void;
   /**
-   * Removes an actor from the [[currentScene]] of the game. This is synonymous
+   * Removes an actor from the {@apilink currentScene} of the game. This is synonymous
    * to calling `engine.currentScene.removeChild(actor)`.
    * Actors that are removed from a scene will no longer be drawn or updated.
-   * @param actor  The actor to remove from the [[currentScene]].
+   * @param actor  The actor to remove from the {@apilink currentScene}.
    */
   public remove(actor: Actor): void;
   /**
-   * Removes a [[ScreenElement]] to the scene, it will no longer be drawn or updated
-   * @param screenElement  The ScreenElement to remove from the [[currentScene]]
+   * Removes a {@apilink ScreenElement} to the scene, it will no longer be drawn or updated
+   * @param screenElement  The ScreenElement to remove from the {@apilink currentScene}
    */
   public remove(screenElement: ScreenElement): void;
   public remove(entity: any): void {
@@ -1373,47 +1425,10 @@ O|===|* >________________>\n\
    * ```
    * @param destinationScene
    * @param options
-   * @deprecated use goToScene, it now behaves the same as goto
-   */
-  public async goto(destinationScene: WithRoot<TKnownScenes>, options?: GoToOptions) {
-    await this.scope(async () => {
-      await this.director.goto(destinationScene, options);
-    });
-  }
-
-  /**
-   * Changes the current scene with optionally supplied:
-   * * Activation data
-   * * Transitions
-   * * Loaders
-   *
-   * Example:
-   * ```typescript
-   * game.goToScene('myScene', {
-   *   sceneActivationData: {any: 'thing at all'},
-   *   destinationIn: new FadeInOut({duration: 1000, direction: 'in'}),
-   *   sourceOut: new FadeInOut({duration: 1000, direction: 'out'}),
-   *   loader: MyLoader
-   * });
-   * ```
-   *
-   * Scenes are defined in the Engine constructor
-   * ```typescript
-   * const engine = new ex.Engine({
-      scenes: {...}
-    });
-   * ```
-   * Or by adding dynamically
-   *
-   * ```typescript
-   * engine.addScene('myScene', new ex.Scene());
-   * ```
-   * @param destinationScene
-   * @param options
    */
   public async goToScene<TData = undefined>(destinationScene: WithRoot<TKnownScenes>, options?: GoToOptions<TData>): Promise<void> {
     await this.scope(async () => {
-      await this.director.goto(destinationScene, options);
+      await this.director.goToScene(destinationScene, options);
     });
   }
 
@@ -1477,25 +1492,6 @@ O|===|* >________________>\n\
   }
 
   /**
-   * If supported by the browser, this will set the antialiasing flag on the
-   * canvas. Set this to `false` if you want a 'jagged' pixel art look to your
-   * image resources.
-   * @param isSmooth  Set smoothing to true or false
-   * @deprecated Set in engine constructor, will be removed in v0.30
-   */
-  public setAntialiasing(isSmooth: boolean) {
-    this.screen.antialiasing = isSmooth;
-  }
-
-  /**
-   * Return the current smoothing status of the canvas
-   * @deprecated Set in engine constructor, will be removed in v0.30
-   */
-  public getAntialiasing(): boolean {
-    return this.screen.antialiasing;
-  }
-
-  /**
    * Gets whether the actor is Initialized
    */
   public get isInitialized(): boolean {
@@ -1513,12 +1509,12 @@ O|===|* >________________>\n\
 
   /**
    * Updates the entire state of the game
-   * @param delta  Number of milliseconds elapsed since the last update.
+   * @param elapsed  Number of milliseconds elapsed since the last update.
    */
-  private _update(delta: number) {
+  private _update(elapsed: number) {
     if (this._isLoading) {
       // suspend updates until loading is finished
-      this._loader?.onUpdate(this, delta);
+      this._loader?.onUpdate(this, elapsed);
       // Update input listeners
       this.input.update();
       return;
@@ -1526,17 +1522,17 @@ O|===|* >________________>\n\
 
     // Publish preupdate events
     this.clock.__runScheduledCbs('preupdate');
-    this._preupdate(delta);
+    this._preupdate(elapsed);
 
     // process engine level events
-    this.currentScene.update(this, delta);
+    this.currentScene.update(this, elapsed);
 
     // Update graphics postprocessors
-    this.graphicsContext.updatePostProcessors(delta);
+    this.graphicsContext.updatePostProcessors(elapsed);
 
     // Publish update event
     this.clock.__runScheduledCbs('postupdate');
-    this._postupdate(delta);
+    this._postupdate(elapsed);
 
     // Update input listeners
     this.input.update();
@@ -1545,36 +1541,48 @@ O|===|* >________________>\n\
   /**
    * @internal
    */
-  public _preupdate(delta: number) {
-    this.emit('preupdate', new PreUpdateEvent(this, delta, this));
-    this.onPreUpdate(this, delta);
+  public _preupdate(elapsed: number) {
+    this.emit('preupdate', new PreUpdateEvent(this, elapsed, this));
+    this.onPreUpdate(this, elapsed);
   }
 
-  public onPreUpdate(engine: Engine, delta: number) {
+  /**
+   * Safe to override method
+   * @param engine The reference to the current game engine
+   * @param elapsed  The time elapsed since the last update in milliseconds
+   */
+  public onPreUpdate(engine: Engine, elapsed: number) {
     // Override me
   }
 
   /**
    * @internal
    */
-  public _postupdate(delta: number) {
-    this.emit('postupdate', new PostUpdateEvent(this, delta, this));
-    this.onPostUpdate(this, delta);
+  public _postupdate(elapsed: number) {
+    this.emit('postupdate', new PostUpdateEvent(this, elapsed, this));
+    this.onPostUpdate(this, elapsed);
   }
 
-  public onPostUpdate(engine: Engine, delta: number) {
+  /**
+   * Safe to override method
+   * @param engine The reference to the current game engine
+   * @param elapsed  The time elapsed since the last update in milliseconds
+   */
+  public onPostUpdate(engine: Engine, elapsed: number) {
     // Override me
   }
 
   /**
    * Draws the entire game
-   * @param delta  Number of milliseconds elapsed since the last draw.
+   * @param elapsed  Number of milliseconds elapsed since the last draw.
    */
-  private _draw(delta: number) {
+  private _draw(elapsed: number) {
+    // Use scene background color if present, fallback to engine
+    this.graphicsContext.backgroundColor = this.currentScene.backgroundColor ?? this.backgroundColor;
     this.graphicsContext.beginDrawLifecycle();
     this.graphicsContext.clear();
     this.clock.__runScheduledCbs('predraw');
-    this._predraw(this.graphicsContext, delta);
+    this._predraw(this.graphicsContext, elapsed);
 
     // Drawing nothing else while loading
     if (this._isLoading) {
@@ -1587,13 +1595,10 @@ O|===|* >________________>\n\
       return;
     }
 
-    // Use scene background color if present, fallback to engine
-    this.graphicsContext.backgroundColor = this.currentScene.backgroundColor ?? this.backgroundColor;
-
-    this.currentScene.draw(this.graphicsContext, delta);
+    this.currentScene.draw(this.graphicsContext, elapsed);
 
     this.clock.__runScheduledCbs('postdraw');
-    this._postdraw(this.graphicsContext, delta);
+    this._postdraw(this.graphicsContext, elapsed);
 
     // Flush any pending drawings
     this.graphicsContext.flush();
@@ -1605,24 +1610,34 @@ O|===|* >________________>\n\
   /**
    * @internal
    */
-  public _predraw(ctx: ExcaliburGraphicsContext, delta: number) {
-    this.emit('predraw', new PreDrawEvent(ctx, delta, this));
-    this.onPreDraw(ctx, delta);
+  public _predraw(ctx: ExcaliburGraphicsContext, elapsed: number) {
+    this.emit('predraw', new PreDrawEvent(ctx, elapsed, this));
+    this.onPreDraw(ctx, elapsed);
   }
 
-  public onPreDraw(ctx: ExcaliburGraphicsContext, delta: number) {
+  /**
+   * Safe to override method to hook into pre draw
+   * @param ctx {@link ExcaliburGraphicsContext} for drawing
+   * @param elapsed  Number of milliseconds elapsed since the last draw.
+   */
+  public onPreDraw(ctx: ExcaliburGraphicsContext, elapsed: number) {
     // Override me
   }
 
   /**
    * @internal
    */
-  public _postdraw(ctx: ExcaliburGraphicsContext, delta: number) {
-    this.emit('postdraw', new PostDrawEvent(ctx, delta, this));
-    this.onPostDraw(ctx, delta);
+  public _postdraw(ctx: ExcaliburGraphicsContext, elapsed: number) {
+    this.emit('postdraw', new PostDrawEvent(ctx, elapsed, this));
+    this.onPostDraw(ctx, elapsed);
   }
 
-  public onPostDraw(ctx: ExcaliburGraphicsContext, delta: number) {
+  /**
+   * Safe to override method to hook into pre draw
+   * @param ctx {@link ExcaliburGraphicsContext} for drawing
+   * @param elapsed  Number of milliseconds elapsed since the last draw.
+   */
+  public onPostDraw(ctx: ExcaliburGraphicsContext, elapsed: number) {
     // Override me
   }
 
@@ -1662,7 +1677,7 @@ O|===|* >________________>\n\
   /**
    * Starts the internal game loop for Excalibur after loading
    * any provided assets.
-   * @param loader  Optional [[Loader]] to use to load resources. The default loader is [[Loader]],
+   * @param loader  Optional {@apilink Loader} to use to load resources. The default loader is {@apilink Loader},
    * override to provide your own custom loader.
    *
    * Note: start() only resolves AFTER the user has clicked the play button
@@ -1670,7 +1685,7 @@ O|===|* >________________>\n\
   public async start(loader?: DefaultLoader): Promise<void>;
   /**
    * Starts the internal game loop for Excalibur after configuring any routes, loaders, or transitions
-   * @param startOptions Optional [[StartOptions]] to configure the routes for scenes in Excalibur
+   * @param startOptions Optional {@apilink StartOptions} to configure the routes for scenes in Excalibur
    *
    * Note: start() only resolves AFTER the user has clicked the play button
    */
@@ -1728,31 +1743,31 @@ O|===|* >________________>\n\
   private _mainloop(elapsed: number) {
     this.scope(() => {
       this.emit('preframe', new PreFrameEvent(this, this.stats.prevFrame));
-      const delta = elapsed * this.timescale;
-      this.currentFrameElapsedMs = delta;
+      const elapsedMs = elapsed * this.timescale;
+      this.currentFrameElapsedMs = elapsedMs;
 
       // reset frame stats (reuse existing instances)
       const frameId = this.stats.prevFrame.id + 1;
       this.stats.currFrame.reset();
       this.stats.currFrame.id = frameId;
-      this.stats.currFrame.delta = delta;
+      this.stats.currFrame.elapsedMs = elapsedMs;
       this.stats.currFrame.fps = this.clock.fpsSampler.fps;
       GraphicsDiagnostics.clear();
 
       const beforeUpdate = this.clock.now();
-      const fixedTimestepMs = 1000 / this.fixedUpdateFps;
-      if (this.fixedUpdateFps) {
-        this._lagMs += delta;
+      const fixedTimestepMs = this.fixedUpdateTimestep;
+      if (this.fixedUpdateTimestep) {
+        this._lagMs += elapsedMs;
         while (this._lagMs >= fixedTimestepMs) {
           this._update(fixedTimestepMs);
           this._lagMs -= fixedTimestepMs;
         }
       } else {
-        this._update(delta);
+        this._update(elapsedMs);
       }
       const afterUpdate = this.clock.now();
       this.currentFrameLagMs = this._lagMs;
-      this._draw(delta);
+      this._draw(elapsedMs);
       const afterDraw = this.clock.now();
 
       this.stats.currFrame.duration.update = afterUpdate - beforeUpdate;
@@ -1817,8 +1832,10 @@ O|===|* >________________>\n\
 
       const result = new Image();
       const raw = screenshot.toDataURL('image/png');
+      result.onload = () => {
+        request.resolve(result);
+      };
       result.src = raw;
-      request.resolve(result);
     }
     // Reset state
     this._screenShotRequests.length = 0;
@@ -1828,7 +1845,7 @@ O|===|* >________________>\n\
    * Another option available to you to load resources into the game.
    * Immediately after calling this the game will pause and the loading screen
    * will appear.
-   * @param loader  Some [[Loadable]] such as a [[Loader]] collection, [[Sound]], or [[Texture]].
+   * @param loader  Some {@apilink Loadable} such as a {@apilink Loader} collection, {@apilink Sound}, or {@apilink Texture}.
    */
   public async load(loader: DefaultLoader, hideLoader = false): Promise<void> {
     await this.scope(async () => {

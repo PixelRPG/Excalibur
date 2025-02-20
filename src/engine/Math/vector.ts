@@ -1,5 +1,6 @@
 import { Clonable } from '../Interfaces/Clonable';
-import { canonicalizeAngle, clamp } from './util';
+import { RotationType } from './rotation-type';
+import { canonicalizeAngle, clamp, TwoPI } from './util';
 
 /**
  * A 2D vector on a plane.
@@ -161,7 +162,7 @@ export class Vector implements Clonable<Vector> {
   }
 
   /**
-   * The distance to another vector. If no other Vector is specified, this will return the [[magnitude]].
+   * The distance to another vector. If no other Vector is specified, this will return the {@apilink magnitude}.
    * @param v  The other vector. Leave blank to use origin vector.
    */
   public distance(v?: Vector): number {
@@ -187,14 +188,15 @@ export class Vector implements Clonable<Vector> {
    * @param magnitude
    */
   public clampMagnitude(magnitude: number): Vector {
-    const size = this.size;
+    const size = this.magnitude;
     const newSize = clamp(size, 0, magnitude);
-    this.size = newSize;
+    this.magnitude = newSize;
     return this;
   }
 
   /**
    * The size (magnitude) of the Vector
+   * @deprecated Will be removed in v1, use Vector.magnitude
    */
   public get size(): number {
     return this.distance();
@@ -203,6 +205,7 @@ export class Vector implements Clonable<Vector> {
   /**
    * Setting the size mutates the current vector
    * @warning Can be used to set the size of the vector, **be very careful using this, mutating vectors can cause hard to find bugs**
+   * @deprecated Will be removed in v1, use Vector.magnitude
    */
   public set size(newLength: number) {
     const v = this.normalize().scale(newLength);
@@ -210,15 +213,30 @@ export class Vector implements Clonable<Vector> {
   }
 
   /**
-   * Normalizes a vector to have a magnitude of 1.
+   * The magnitude (length) of the Vector
+   */
+  public get magnitude(): number {
+    return this.distance();
+  }
+
+  /**
+   * Setting the size mutates the current vector
+   * @warning Can be used to set the size of the vector, **be very careful using this, mutating vectors can cause hard to find bugs**
+   */
+  public set magnitude(newMagnitude: number) {
+    this.normalize().scale(newMagnitude, this);
+  }
+
+  /**
+   * Normalizes a non-zero vector to have a magnitude of 1. Zero vectors return a new zero vector.
    */
   public normalize(): Vector {
-    const d = this.distance();
-    if (d > 0) {
-      return new Vector(this.x / d, this.y / d);
-    } else {
-      return new Vector(0, 1);
+    const distance = this.distance();
+    if (distance === 0) {
+      return Vector.Zero;
     }
+
+    return new Vector(this.x / distance, this.y / distance);
   }
 
   /**
@@ -355,14 +373,53 @@ export class Vector implements Clonable<Vector> {
   }
 
   /**
-   * Returns the angle of this vector.
+   * Returns the angle of this vector, in range [0, 2*PI)
    */
   public toAngle(): number {
     return canonicalizeAngle(Math.atan2(this.y, this.x));
   }
 
   /**
+   * Returns the difference in radians between the angle of this vector and given angle,
+   * using the given rotation type.
+   * @param angle in radians to which the vector has to be rotated, using {@apilink rotate}
+   * @param rotationType what {@apilink RotationType} to use for the rotation
+   * @returns the angle by which the vector needs to be rotated to match the given angle
+   */
+  public angleBetween(angle: number, rotationType: RotationType): number {
+    const startAngleRadians = this.toAngle();
+    const endAngleRadians = canonicalizeAngle(angle);
+    let rotationClockwise = 0;
+    let rotationAntiClockwise = 0;
+    if (endAngleRadians > startAngleRadians) {
+      rotationClockwise = endAngleRadians - startAngleRadians;
+    } else {
+      rotationClockwise = (TwoPI - startAngleRadians + endAngleRadians) % TwoPI;
+    }
+    rotationAntiClockwise = (rotationClockwise - TwoPI) % TwoPI;
+    switch (rotationType) {
+      case RotationType.ShortestPath:
+        if (Math.abs(rotationClockwise) < Math.abs(rotationAntiClockwise)) {
+          return rotationClockwise;
+        } else {
+          return rotationAntiClockwise;
+        }
+      case RotationType.LongestPath:
+        if (Math.abs(rotationClockwise) > Math.abs(rotationAntiClockwise)) {
+          return rotationClockwise;
+        } else {
+          return rotationAntiClockwise;
+        }
+      case RotationType.Clockwise:
+        return rotationClockwise;
+      case RotationType.CounterClockwise:
+        return rotationAntiClockwise;
+    }
+  }
+
+  /**
    * Rotates the current vector around a point by a certain angle in radians.
+   * Positive angle means rotation clockwise.
    */
   public rotate(angle: number, anchor?: Vector, dest?: Vector): Vector {
     const result = dest || new Vector(0, 0);

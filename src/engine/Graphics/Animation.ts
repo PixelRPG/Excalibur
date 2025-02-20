@@ -8,10 +8,10 @@ import { EventEmitter } from '../EventEmitter';
 export interface HasTick {
   /**
    *
-   * @param elapsedMilliseconds The amount of real world time in milliseconds that has elapsed that must be updated in the animation
+   * @param elapsed The amount of real world time in milliseconds that has elapsed that must be updated in the animation
    * @param idempotencyToken Optional idempotencyToken prevents a ticking animation from updating twice per frame
    */
-  tick(elapsedMilliseconds: number, idempotencyToken?: number): void;
+  tick(elapsed: number, idempotencyToken?: number): void;
 }
 
 export enum AnimationDirection {
@@ -89,7 +89,7 @@ export interface AnimationOptions {
    */
   totalDuration?: number;
   /**
-   * Optionally specify the [[AnimationStrategy]] for the Animation
+   * Optionally specify the {@apilink AnimationStrategy} for the Animation
    */
   strategy?: AnimationStrategy;
 }
@@ -108,11 +108,11 @@ export const AnimationEvents = {
 
 export interface FromSpriteSheetOptions {
   /**
-   * [[SpriteSheet]] to source the animation frames from
+   * {@apilink SpriteSheet} to source the animation frames from
    */
   spriteSheet: SpriteSheet;
   /**
-   * The list of (x, y) positions of sprites in the [[SpriteSheet]] of each frame, for example (0, 0)
+   * The list of (x, y) positions of sprites in the {@apilink SpriteSheet} of each frame, for example (0, 0)
    * is the the top left sprite, (0, 1) is the sprite directly below that, and so on.
    *
    * You may optionally specify a duration for the frame in milliseconds as well, this will override
@@ -121,8 +121,13 @@ export interface FromSpriteSheetOptions {
   frameCoordinates: { x: number; y: number; duration?: number; options?: GetSpriteOptions }[];
   /**
    * Optionally specify a default duration for frames in milliseconds
+   * @deprecated use `durationPerFrame`
    */
   durationPerFrameMs?: number;
+  /**
+   * Optionally specify a default duration for frames in milliseconds
+   */
+  durationPerFrame?: number;
   /**
    * Optionally set a positive speed multiplier on the animation.
    *
@@ -130,7 +135,7 @@ export interface FromSpriteSheetOptions {
    */
   speed?: number;
   /**
-   * Optionally specify the animation strategy for this animation, by default animations loop [[AnimationStrategy.Loop]]
+   * Optionally specify the animation strategy for this animation, by default animations loop {@apilink AnimationStrategy.Loop}
    */
   strategy?: AnimationStrategy;
   /**
@@ -140,9 +145,9 @@ export interface FromSpriteSheetOptions {
 }
 
 /**
- * Create an Animation given a list of [[Frame|frames]] in [[AnimationOptions]]
+ * Create an Animation given a list of {@apilink Frame | `frames`} in {@apilink AnimationOptions}
  *
- * To create an Animation from a [[SpriteSheet]], use [[Animation.fromSpriteSheet]]
+ * To create an Animation from a {@apilink SpriteSheet}, use {@apilink Animation.fromSpriteSheet}
  */
 export class Animation extends Graphic implements HasTick {
   private static _LOGGER = Logger.getInstance();
@@ -201,8 +206,8 @@ export class Animation extends Graphic implements HasTick {
   }
 
   /**
-   * Create an Animation from a [[SpriteSheet]], a list of indices into the sprite sheet, a duration per frame
-   * and optional [[AnimationStrategy]]
+   * Create an Animation from a {@apilink SpriteSheet}, a list of indices into the sprite sheet, a duration per frame
+   * and optional {@apilink AnimationStrategy}
    *
    * Example:
    * ```typescript
@@ -210,19 +215,19 @@ export class Animation extends Graphic implements HasTick {
    *
    * const anim = Animation.fromSpriteSheet(spriteSheet, range(0, 5), 200, AnimationStrategy.Loop);
    * ```
-   * @param spriteSheet
-   * @param frameIndices
-   * @param durationPerFrameMs
-   * @param strategy
+   * @param spriteSheet ex.SpriteSheet
+   * @param spriteSheetIndex 0 based index from left to right, top down (row major order) of the ex.SpriteSheet
+   * @param durationPerFrame duration per frame in milliseconds
+   * @param strategy Optional strategy, default AnimationStrategy.Loop
    */
   public static fromSpriteSheet(
     spriteSheet: SpriteSheet,
-    frameIndices: number[],
-    durationPerFrameMs: number,
+    spriteSheetIndex: number[],
+    durationPerFrame: number,
     strategy: AnimationStrategy = AnimationStrategy.Loop
   ): Animation {
     const maxIndex = spriteSheet.sprites.length - 1;
-    const invalidIndices = frameIndices.filter((index) => index < 0 || index > maxIndex);
+    const invalidIndices = spriteSheetIndex.filter((index) => index < 0 || index > maxIndex);
     if (invalidIndices.length) {
       Animation._LOGGER.warn(
         `Indices into SpriteSheet were provided that don\'t exist: ${invalidIndices.join(',')} no frame will be shown`
@@ -230,17 +235,17 @@ export class Animation extends Graphic implements HasTick {
     }
     return new Animation({
       frames: spriteSheet.sprites
-        .filter((_, index) => frameIndices.indexOf(index) > -1)
+        .filter((_, index) => spriteSheetIndex.indexOf(index) > -1)
         .map((f) => ({
           graphic: f,
-          duration: durationPerFrameMs
+          duration: durationPerFrame
         })),
       strategy: strategy
     });
   }
 
   /**
-   * Create an [[Animation]] from a [[SpriteSheet]] given a list of coordinates
+   * Create an {@apilink Animation} from a {@apilink SpriteSheet} given a list of coordinates
    *
    * Example:
    * ```typescript
@@ -251,8 +256,8 @@ export class Animation extends Graphic implements HasTick {
    *  frameCoordinates: [
    *    {x: 0, y: 5, duration: 100, options { flipHorizontal: true }},
    *    {x: 1, y: 5, duration: 200},
-   *    {x: 2, y: 5, duration: 100},
-   *    {x: 3, y: 5, duration: 500}
+   *    {x: 2, y: 5},
+   *    {x: 3, y: 5}
    *  ],
    *  strategy: AnimationStrategy.PingPong
    * });
@@ -261,8 +266,8 @@ export class Animation extends Graphic implements HasTick {
    * @returns Animation
    */
   public static fromSpriteSheetCoordinates(options: FromSpriteSheetOptions): Animation {
-    const { spriteSheet, frameCoordinates, durationPerFrameMs, speed, strategy, reverse } = options;
-    const defaultDuration = durationPerFrameMs ?? 100;
+    const { spriteSheet, frameCoordinates, durationPerFrame, durationPerFrameMs, speed, strategy, reverse } = options;
+    const defaultDuration = durationPerFrame ?? durationPerFrameMs ?? 100;
     const frames: Frame[] = [];
     for (const coord of frameCoordinates) {
       const { x, y, duration, options } = coord;
@@ -310,8 +315,8 @@ export class Animation extends Graphic implements HasTick {
   /**
    * Returns the current Frame of the animation
    *
-   * Use [[Animation.currentFrameIndex]] to get the frame number and
-   * [[Animation.goToFrame]] to set the current frame index
+   * Use {@apilink Animation.currentFrameIndex} to get the frame number and
+   * {@apilink Animation.goToFrame} to set the current frame index
    */
   public get currentFrame(): Frame | null {
     if (this._currentFrame >= 0 && this._currentFrame < this.frames.length) {
@@ -323,7 +328,7 @@ export class Animation extends Graphic implements HasTick {
   /**
    * Returns the current frame index of the animation
    *
-   * Use [[Animation.currentFrame]] to grab the current [[Frame]] object
+   * Use {@apilink Animation.currentFrame} to grab the current {@apilink Frame} object
    */
   public get currentFrameIndex(): number {
     return this._currentFrame;
@@ -344,6 +349,11 @@ export class Animation extends Graphic implements HasTick {
   }
 
   private _reversed = false;
+
+  public get isReversed() {
+    return this._reversed;
+  }
+
   /**
    * Reverses the play direction of the Animation, this preserves the current frame
    */
@@ -487,10 +497,10 @@ export class Animation extends Graphic implements HasTick {
 
   /**
    * Called internally by Excalibur to update the state of the animation potential update the current frame
-   * @param elapsedMilliseconds Milliseconds elapsed
+   * @param elapsed Milliseconds elapsed
    * @param idempotencyToken Prevents double ticking in a frame by passing a unique token to the frame
    */
-  public tick(elapsedMilliseconds: number, idempotencyToken: number = 0): void {
+  public tick(elapsed: number, idempotencyToken: number = 0): void {
     if (this._idempotencyToken === idempotencyToken) {
       return;
     }
@@ -505,7 +515,7 @@ export class Animation extends Graphic implements HasTick {
       this.events.emit('frame', { ...this.currentFrame, frameIndex: this.currentFrameIndex });
     }
 
-    this._timeLeftInFrame -= elapsedMilliseconds * this._speed;
+    this._timeLeftInFrame -= elapsed * this._speed;
     if (this._timeLeftInFrame <= 0) {
       this.goToFrame(this._nextFrame());
     }

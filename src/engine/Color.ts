@@ -1,7 +1,7 @@
 /**
- * Provides standard colors (e.g. [[Color.Black]])
+ * Provides standard colors (e.g. {@apilink Color.Black})
  * but you can also create custom colors using RGB, HSL, or Hex. Also provides
- * useful color operations like [[Color.lighten]], [[Color.darken]], and more.
+ * useful color operations like {@apilink Color.lighten}, {@apilink Color.darken}, and more.
  */
 export class Color {
   /**
@@ -265,8 +265,13 @@ export class Color {
   /**
    * Returns a clone of the current color.
    */
-  public clone(): Color {
-    return new Color(this.r, this.g, this.b, this.a);
+  public clone(dest?: Color): Color {
+    const result = dest || new Color(this.r, this.g, this.b, this.a);
+    result.r = this.r;
+    result.g = this.g;
+    result.b = this.b;
+    result.a = this.a;
+    return result;
   }
 
   /**

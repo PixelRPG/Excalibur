@@ -1,5 +1,5 @@
 /**
- * Flags is a feature flag implementation for Excalibur. They can only be operated **before [[Engine]] construction**
+ * Flags is a feature flag implementation for Excalibur. They can only be operated **before {@apilink Engine} construction**
  * after which they are frozen and are read-only.
  *
  * Flags are used to enable experimental or preview features in Excalibur.
@@ -14,6 +14,13 @@ export class Flags {
    */
   public static useCanvasGraphicsContext() {
     Flags.enable('use-canvas-context');
+  }
+
+  /**
+   * Force excalibur to use the less optimized image renderer
+   */
+  public static useLegacyImageRenderer() {
+    Flags.enable('use-legacy-image-renderer');
   }
 
   /**
@@ -34,7 +41,7 @@ export class Flags {
     Flags._FLAGS = {};
   }
   /**
-   * Enable a specific feature flag by name. **Note: can only be set before [[Engine]] constructor time**
+   * Enable a specific feature flag by name. **Note: can only be set before {@apilink Engine} constructor time**
    * @param flagName
    */
   public static enable(flagName: string): void {
@@ -45,7 +52,7 @@ export class Flags {
   }
 
   /**
-   * Disable a specific feature flag by name. **Note: can only be set before [[Engine]] constructor time**
+   * Disable a specific feature flag by name. **Note: can only be set before {@apilink Engine} constructor time**
    * @param flagName
    */
   public static disable(flagName: string): void {

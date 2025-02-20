@@ -35,12 +35,20 @@ export function clamp(val: number, min: number, max: number) {
 }
 
 /**
- * Convert an angle to be the equivalent in the range [0, 2PI]
+ * Approximately equals
+ */
+export function approximatelyEqual(val1: number, val2: number, tolerance: number) {
+  // https://dev.to/alldanielscott/how-to-compare-numbers-correctly-in-javascript-1l4i
+  return Math.abs(val1 - val2) < tolerance;
+}
+
+/**
+ * Convert an angle to be the equivalent in the range [0, 2PI)
  */
 export function canonicalizeAngle(angle: number): number {
   let tmpAngle = angle;
-  if (angle > TwoPI) {
-    while (tmpAngle > TwoPI) {
+  if (angle >= TwoPI) {
+    while (tmpAngle >= TwoPI) {
       tmpAngle -= TwoPI;
     }
   }

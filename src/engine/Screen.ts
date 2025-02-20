@@ -20,39 +20,39 @@ export enum DisplayMode {
 
   /**
    * Fit the aspect ratio given by the game resolution within the container at all times will fill any gaps with canvas.
-   * The displayed area outside the aspect ratio is not guaranteed to be on the screen, only the [[Screen.contentArea]]
+   * The displayed area outside the aspect ratio is not guaranteed to be on the screen, only the {@apilink Screen.contentArea}
    * is guaranteed to be on screen.
    */
   FitContainerAndFill = 'FitContainerAndFill',
 
   /**
    * Fit the aspect ratio given by the game resolution the screen at all times will fill the screen.
-   * This displayed area outside the aspect ratio is not guaranteed to be on the screen, only the [[Screen.contentArea]]
+   * This displayed area outside the aspect ratio is not guaranteed to be on the screen, only the {@apilink Screen.contentArea}
    * is guaranteed to be on screen.
    */
   FitScreenAndFill = 'FitScreenAndFill',
 
   /**
    * Fit the viewport to the parent element maintaining aspect ratio given by the game resolution, but zooms in to avoid the black bars
-   * (letterbox) that would otherwise be present in [[FitContainer]].
+   * (letterbox) that would otherwise be present in {@apilink FitContainer}.
    *
    * **warning** This will clip some drawable area from the user because of the zoom,
-   * use [[Screen.contentArea]] to know the safe to draw area.
+   * use {@apilink Screen.contentArea} to know the safe to draw area.
    */
   FitContainerAndZoom = 'FitContainerAndZoom',
 
   /**
    * Fit the viewport to the device screen maintaining aspect ratio given by the game resolution, but zooms in to avoid the black bars
-   * (letterbox) that would otherwise be present in [[FitScreen]].
+   * (letterbox) that would otherwise be present in {@apilink FitScreen}.
    *
    * **warning** This will clip some drawable area from the user because of the zoom,
-   * use [[Screen.contentArea]] to know the safe to draw area.
+   * use {@apilink Screen.contentArea} to know the safe to draw area.
    */
   FitScreenAndZoom = 'FitScreenAndZoom',
 
   /**
    * Fit to screen using as much space as possible while maintaining aspect ratio and resolution.
-   * This is not the same as [[Screen.goFullScreen]] but behaves in a similar way maintaining aspect ratio.
+   * This is not the same as {@apilink Screen.enterFullscreen} but behaves in a similar way maintaining aspect ratio.
    *
    * You may want to center your game here is an example
    * ```html
@@ -79,7 +79,7 @@ export enum DisplayMode {
 
   /**
    * Fill the entire screen's css width/height for the game resolution dynamically. This means the resolution of the game will
-   * change dynamically as the window is resized. This is not the same as [[Screen.goFullScreen]]
+   * change dynamically as the window is resized. This is not the same as {@apilink Screen.enterFullscreen}
    */
   FillScreen = 'FillScreen',
 
@@ -184,8 +184,8 @@ export interface ScreenOptions {
   pixelRatio?: number;
   /**
    * Optionally specify the actual pixel resolution in width/height pixels (also known as logical resolution), by default the
-   * resolution will be the same as the viewport. Resolution will be overridden by [[DisplayMode.FillContainer]] and
-   * [[DisplayMode.FillScreen]].
+   * resolution will be the same as the viewport. Resolution will be overridden by {@apilink DisplayMode.FillContainer} and
+   * {@apilink DisplayMode.FillScreen}.
    */
   resolution?: Resolution;
   /**
@@ -262,7 +262,7 @@ export const ScreenEvents = {
 export class Screen {
   public graphicsContext: ExcaliburGraphicsContext;
   /**
-   * Listen to screen events [[ScreenEvents]]
+   * Listen to screen events {@apilink ScreenEvents}
    */
   public events = new EventEmitter<ScreenEvents>();
   private _canvas: HTMLCanvasElement;
@@ -277,7 +277,7 @@ export class Screen {
   private _viewportStack: ViewportDimension[] = [];
   private _pixelRatioOverride: number | null = null;
   private _displayMode: DisplayMode;
-  private _isFullScreen = false;
+  private _isFullscreen = false;
   private _mediaQueryList: MediaQueryList;
   private _isDisposed = false;
   private _logger = Logger.getInstance();
@@ -344,10 +344,10 @@ export class Screen {
     if (this._isDisposed) {
       return;
     }
-    this._isFullScreen = !this._isFullScreen;
-    this._logger.debug('Fullscreen Change', this._isFullScreen);
+    this._isFullscreen = !this._isFullscreen;
+    this._logger.debug('Fullscreen Change', this._isFullscreen);
     this.events.emit('fullscreen', {
-      fullscreen: this.isFullScreen
+      fullscreen: this.isFullscreen
     } satisfies FullScreenChangeEvent);
   };
 
@@ -359,6 +359,7 @@ export class Screen {
     this._listenForPixelRatio();
     this._devicePixelRatio = this._calculateDevicePixelRatio();
     this.applyResolutionAndViewport();
+
     this.events.emit('pixelratio', {
       pixelRatio: this.pixelRatio
     } satisfies PixelRatioChangeEvent);
@@ -372,6 +373,7 @@ export class Screen {
     this._logger.debug('View port resized');
     this._setResolutionAndViewportByDisplayMode(parent);
     this.applyResolutionAndViewport();
+
     // Emit resize event
     this.events.emit('resize', {
       resolution: this.resolution,
@@ -401,6 +403,22 @@ export class Screen {
     }
 
     return this._devicePixelRatio;
+  }
+
+  /**
+   * This calculates the ratio between excalibur pixels and the HTML pixels.
+   *
+   * This is useful for scaling HTML UI so that it matches your game.
+   */
+  public get worldToPagePixelRatio(): number {
+    if (this._canvas) {
+      const pageOrigin = this.worldToPageCoordinates(Vector.Zero);
+      const pageDistance = this.worldToPageCoordinates(vec(1, 0)).sub(pageOrigin);
+      const pixelConversion = pageDistance.x;
+      return pixelConversion;
+    } else {
+      return 1;
+    }
   }
 
   /**
@@ -563,12 +581,22 @@ export class Screen {
     if (this.graphicsContext instanceof ExcaliburGraphicsContext2DCanvas) {
       this.graphicsContext.scale(this.pixelRatio, this.pixelRatio);
     }
+    // Add the excalibur world pixel to page pixel
+    document.documentElement.style.setProperty('--ex-pixel-ratio', this.worldToPagePixelRatio.toString());
   }
 
+  /**
+   * Get or set screen antialiasing,
+   *
+   * If true smoothing is applied
+   */
   public get antialiasing() {
     return this._antialiasing;
   }
 
+  /**
+   * Get or set screen antialiasing
+   */
   public set antialiasing(isSmooth: boolean) {
     this._antialiasing = isSmooth;
     this.graphicsContext.smoothing = this._antialiasing;
@@ -576,9 +604,17 @@ export class Screen {
 
   /**
    * Returns true if excalibur is fullscreen using the browser fullscreen api
+   * @deprecated use isFullscreen()
    */
   public get isFullScreen() {
-    return this._isFullScreen;
+    return this._isFullscreen;
+  }
+
+  /**
+   * Returns true if excalibur is fullscreen using the browser fullscreen api
+   */
+  public get isFullscreen() {
+    return this._isFullscreen;
   }
 
   /**
@@ -587,26 +623,53 @@ export class Screen {
    *
    * Optionally specify a target element id to go fullscreen, by default the game canvas is used
    * @param elementId
+   * @deprecated use enterFullscreen(...)
    */
   public goFullScreen(elementId?: string): Promise<void> {
+    return this.enterFullscreen(elementId);
+  }
+
+  /**
+   * Requests to enter fullscreen using the browser fullscreen api, requires user interaction to be successful.
+   * For example, wire this to a user click handler.
+   *
+   * Optionally specify a target element id to go fullscreen, by default the game canvas is used
+   * @param elementId
+   */
+  public enterFullscreen(elementId?: string): Promise<void> {
     if (elementId) {
       const maybeElement = document.getElementById(elementId);
-      if (maybeElement) {
+      // workaround for safari partial support
+      if (maybeElement?.requestFullscreen || (maybeElement as any)?.webkitRequestFullscreen) {
         if (!maybeElement.getAttribute('ex-fullscreen-listener')) {
           maybeElement.setAttribute('ex-fullscreen-listener', 'true');
           maybeElement.addEventListener('fullscreenchange', this._fullscreenChangeHandler);
         }
-        const fullscreenPromise = maybeElement.requestFullscreen();
-        return fullscreenPromise;
+        if (maybeElement.requestFullscreen) {
+          return maybeElement.requestFullscreen() ?? Promise.resolve();
+        } else if ((maybeElement as any).webkitRequestFullscreen) {
+          return (maybeElement as any).webkitRequestFullscreen() ?? Promise.resolve();
+        }
       }
     }
-    return this._canvas.requestFullscreen();
+    if (this._canvas?.requestFullscreen) {
+      return this._canvas?.requestFullscreen() ?? Promise.resolve();
+    } else if ((this._canvas as any).webkitRequestFullscreen) {
+      return (this._canvas as any).webkitRequestFullscreen() ?? Promise.resolve();
+    }
+    this._logger.warnOnce('Could not go fullscreen, is this an iPhone? Currently Apple does not support fullscreen on iPhones');
+    return Promise.resolve();
   }
 
   /**
    * Requests to exit fullscreen using the browser fullscreen api
+   * @deprecated use exitFullscreen()
    */
   public exitFullScreen(): Promise<void> {
+    return this.exitFullscreen();
+  }
+
+  public exitFullscreen(): Promise<void> {
     return document.exitFullscreen();
   }
 
@@ -630,7 +693,7 @@ export class Screen {
     let newX = point.x;
     let newY = point.y;
 
-    if (!this._isFullScreen) {
+    if (!this._isFullscreen) {
       newX -= getPosition(this._canvas).x;
       newY -= getPosition(this._canvas).y;
     }
@@ -639,7 +702,7 @@ export class Screen {
 
     // if fullscreen api on it centers with black bars
     // we need to adjust the screen to world coordinates in this case
-    if (this._isFullScreen) {
+    if (this._isFullscreen) {
       if (window.innerWidth / this.aspectRatio < window.innerHeight) {
         const screenHeight = window.innerWidth / this.aspectRatio;
         const screenMarginY = (window.innerHeight - screenHeight) / 2;
@@ -682,7 +745,7 @@ export class Screen {
     newX = (newX / this.resolution.width) * viewport.width;
     newY = (newY / this.resolution.height) * viewport.height;
 
-    if (this._isFullScreen) {
+    if (this._isFullscreen) {
       if (window.innerWidth / this.aspectRatio < window.innerHeight) {
         const screenHeight = window.innerWidth / this.aspectRatio;
         const screenMarginY = (window.innerHeight - screenHeight) / 2;
@@ -696,7 +759,7 @@ export class Screen {
       }
     }
 
-    if (!this._isFullScreen) {
+    if (!this._isFullscreen) {
       newX += getPosition(this._canvas).x;
       newY += getPosition(this._canvas).y;
     }
@@ -707,8 +770,8 @@ export class Screen {
   /**
    * Takes a coordinate in Excalibur screen space, and translates it to Excalibur world space.
    *
-   * World space is where [[Entity|entities]] in Excalibur live by default [[CoordPlane.World]]
-   * and extends infinitely out relative from the [[Camera]].
+   * World space is where {@apilink Entity | `entities`} in Excalibur live by default {@apilink CoordPlane.World}
+   * and extends infinitely out relative from the {@apilink Camera}.
    * @param point  Screen coordinate to convert
    */
   public screenToWorldCoordinates(point: Vector): Vector {
@@ -725,7 +788,7 @@ export class Screen {
   /**
    * Takes a coordinate in Excalibur world space, and translates it to Excalibur screen space.
    *
-   * Screen space is where [[ScreenElement|screen elements]] and [[Entity|entities]] with [[CoordPlane.Screen]] live.
+   * Screen space is where {@apilink ScreenElement | `screen elements`} and {@apilink Entity | `entities`} with {@apilink CoordPlane.Screen} live.
    * @param point  World coordinate to convert
    */
   public worldToScreenCoordinates(point: Vector): Vector {
@@ -810,6 +873,16 @@ export class Screen {
   }
 
   /**
+   * Returns the width of the engine's visible drawing surface in pixels including zoom and device pixel ratio.
+   */
+  public get width(): number {
+    if (this._camera) {
+      return this.resolution.width / this._camera.zoom;
+    }
+    return this.resolution.width;
+  }
+
+  /**
    * Returns half the width of the engine's visible drawing surface in pixels including zoom and device pixel ratio.
    */
   public get halfDrawWidth(): number {
@@ -820,6 +893,13 @@ export class Screen {
    * Returns the height of the engine's visible drawing surface in pixels including zoom and device pixel ratio.
    */
   public get drawHeight(): number {
+    if (this._camera) {
+      return this.resolution.height / this._camera.zoom;
+    }
+    return this.resolution.height;
+  }
+
+  public get height(): number {
     if (this._camera) {
       return this.resolution.height / this._camera.zoom;
     }

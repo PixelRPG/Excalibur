@@ -5,10 +5,10 @@ import { Action } from './Action';
 /**
  * Action Queues represent an ordered sequence of actions
  *
- * Action queues are part of the [[ActionContext|Action API]] and
- * store the list of actions to be executed for an [[Actor]].
+ * Action queues are part of the {@apilink ActionContext | `Action API`} and
+ * store the list of actions to be executed for an {@apilink Actor}.
  *
- * Actors implement [[Actor.actions]] which can be manipulated by
+ * Actors implement {@apilink Actor.actions} which can be manipulated by
  * advanced users to adjust the actions currently being executed in the
  * queue.
  */
@@ -57,6 +57,14 @@ export class ActionQueue {
     return this._actions.concat(this._completedActions);
   }
 
+  public getIncompleteActions(): Action[] {
+    return this._actions;
+  }
+
+  public getCurrentAction(): Action | null {
+    return this._currentAction;
+  }
+
   /**
    *
    * @returns `true` if there are more actions to process in the sequence
@@ -87,16 +95,16 @@ export class ActionQueue {
 
   /**
    * Update the queue which updates actions and handles completing actions
-   * @param elapsedMs
+   * @param elapsed
    */
-  public update(elapsedMs: number) {
+  public update(elapsed: number) {
     if (this._actions.length > 0) {
       if (this._currentAction !== this._actions[0]) {
         this._currentAction = this._actions[0];
         this._entity.emit('actionstart', new ActionStartEvent(this._currentAction, this._entity));
       }
 
-      this._currentAction.update(elapsedMs);
+      this._currentAction.update(elapsed);
 
       if (this._currentAction.isComplete(this._entity)) {
         this._entity.emit('actioncomplete', new ActionCompleteEvent(this._currentAction, this._entity));

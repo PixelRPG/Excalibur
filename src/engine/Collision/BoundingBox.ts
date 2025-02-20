@@ -45,7 +45,7 @@ export class BoundingBox {
   }
 
   /**
-   * Returns a new instance of [[BoundingBox]] that is a copy of the current instance
+   * Returns a new instance of {@apilink BoundingBox} that is a copy of the current instance
    */
   public clone(dest?: BoundingBox): BoundingBox {
     const result = dest || new BoundingBox(0, 0, 0, 0);
@@ -196,7 +196,7 @@ export class BoundingBox {
   }
 
   /**
-   * Transform the axis aligned bounding box by a [[Matrix]], producing a new axis aligned bounding box
+   * Transform the axis aligned bounding box by a {@apilink Matrix}, producing a new axis aligned bounding box
    * @param matrix
    */
   public transform(matrix: AffineMatrix) {
@@ -330,7 +330,7 @@ export class BoundingBox {
   public contains(bb: BoundingBox): boolean;
   public contains(val: any): boolean {
     if (val instanceof Vector) {
-      return this.left <= val.x && this.top <= val.y && this.bottom >= val.y && this.right >= val.x;
+      return this.left <= val.x && this.top <= val.y && val.y <= this.bottom && val.x <= this.right;
     } else if (val instanceof BoundingBox) {
       return this.left <= val.left && this.top <= val.top && val.bottom <= this.bottom && val.right <= this.right;
     }
@@ -380,7 +380,7 @@ export class BoundingBox {
    * Test wether this bounding box intersects with another returning
    * the intersection vector that can be used to resolve the collision. If there
    * is no intersection null is returned.
-   * @param other  Other [[BoundingBox]] to test intersection with
+   * @param other  Other {@apilink BoundingBox} to test intersection with
    * @returns A Vector in the direction of the current BoundingBox, this <- other
    */
   public intersect(other: BoundingBox): Vector {

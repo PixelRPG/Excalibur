@@ -325,7 +325,7 @@ describe('A camera', () => {
 
   it('can use built-in elastic around actor strategy', () => {
     engine.currentScene.camera = new ex.Camera();
-    engine.currentScene.camera.pos.setTo(0, 0);
+    engine.currentScene.camera.pos = ex.vec(0, 0);
     const actor = new ex.Actor();
 
     engine.currentScene.camera.strategy.elasticToActor(actor, 0.05, 0.1);
@@ -421,9 +421,9 @@ describe('A camera', () => {
     });
 
     it('can have onPostUpdate overridden safely', () => {
-      camera.onPostUpdate = (engine, delta) => {
+      camera.onPostUpdate = (engine, elapsedMs) => {
         expect(engine).not.toBe(null);
-        expect(delta).toBe(100);
+        expect(elapsedMs).toBe(100);
       };
 
       spyOn(camera, 'onPostUpdate').and.callThrough();
@@ -437,9 +437,9 @@ describe('A camera', () => {
     });
 
     it('can have onPreUpdate overridden safely', () => {
-      camera.onPreUpdate = (engine, delta) => {
+      camera.onPreUpdate = (engine, elapsedMs) => {
         expect(engine).not.toBe(null);
-        expect(delta).toBe(100);
+        expect(elapsedMs).toBe(100);
       };
 
       spyOn(camera, 'onPreUpdate').and.callThrough();

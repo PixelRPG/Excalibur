@@ -14,6 +14,7 @@ export * from './Colliders/EdgeCollider';
 export * from './Colliders/PolygonCollider';
 export * from './Colliders/CollisionJumpTable';
 export * from './Colliders/ClosestLineJumpTable';
+export * from './Colliders/SeparatingAxis';
 
 export * from './Group/CollisionGroup';
 export * from './Group/CollisionGroupManager';
@@ -41,5 +42,4 @@ export * from './MotionSystem';
 
 export * from './PhysicsWorld';
 export * from './PhysicsConfig';
-export * from './Physics';
 export * from './Side';

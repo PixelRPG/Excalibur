@@ -4,26 +4,25 @@ import { vec } from '../Math/vector';
 import { Random } from '../Math/Random';
 import { CollisionType } from '../Collision/CollisionType';
 import { randomInRange } from '../Math/util';
-import { EmitterType } from '../EmitterType';
+import { EmitterType } from './EmitterType';
 import { Particle, ParticleTransform, ParticleEmitterArgs, ParticleConfig } from './Particles';
 import { RentalPool } from '../Util/RentalPool';
 
 /**
- * Used internally by Excalibur to manage all particles in the engine
- */
-export const ParticlePool = new RentalPool(
-  () => new Particle({}),
-  (p) => p,
-  2000
-);
-
-/**
  * Using a particle emitter is a great way to create interesting effects
  * in your game, like smoke, fire, water, explosions, etc. `ParticleEmitter`
- * extend [[Actor]] allowing you to use all of the features that come with.
+ * extend {@apilink Actor} allowing you to use all of the features that come with.
+ *
+ * These particles are simulated on the CPU in JavaScript
  */
 export class ParticleEmitter extends Actor {
   private _particlesToEmit: number = 0;
+
+  private _particlePool = new RentalPool(
+    () => new Particle({}),
+    (p) => p,
+    500
+  );
 
   public numParticles: number = 0;
 
@@ -53,7 +52,7 @@ export class ParticleEmitter extends Actor {
   public emitterType: EmitterType = EmitterType.Rectangle;
 
   /**
-   * Gets or sets the emitter radius, only takes effect when the [[emitterType]] is [[EmitterType.Circle]]
+   * Gets or sets the emitter radius, only takes effect when the {@apilink emitterType} is {@apilink EmitterType.Circle}
    */
   public radius: number = 0;
 
@@ -97,11 +96,17 @@ export class ParticleEmitter extends Actor {
     this.deadParticles.push(particle);
   }
 
+  private _activeParticles: Particle[] = [];
+
   /**
    * Causes the emitter to emit particles
    * @param particleCount  Number of particles to emit right now
    */
   public emitParticles(particleCount: number) {
+    if (particleCount <= 0) {
+      return;
+    }
+    particleCount = particleCount | 0; // coerce to int
     for (let i = 0; i < particleCount; i++) {
       const p = this._createParticle();
       if (this?.scene?.world) {
@@ -111,6 +116,13 @@ export class ParticleEmitter extends Actor {
           this.addChild(p);
         }
       }
+      this._activeParticles.push(p);
+    }
+  }
+
+  public clearParticles() {
+    for (let i = 0; i < this._activeParticles.length; i++) {
+      this.removeParticle(this._activeParticles[i]);
     }
   }
 
@@ -120,7 +132,7 @@ export class ParticleEmitter extends Actor {
     let ranY = 0;
 
     const angle = randomInRange(this.particle.minAngle || 0, this.particle.maxAngle || Math.PI * 2, this.random);
-    const vel = randomInRange(this.particle.minVel || 0, this.particle.maxVel || 0, this.random);
+    const vel = randomInRange(this.particle.minSpeed || 0, this.particle.maxSpeed || 0, this.random);
     const size = this.particle.startSize || randomInRange(this.particle.minSize || 5, this.particle.maxSize || 5, this.random);
     const dx = vel * Math.cos(angle);
     const dy = vel * Math.sin(angle);
@@ -134,7 +146,7 @@ export class ParticleEmitter extends Actor {
       ranY = radius * Math.sin(angle);
     }
 
-    const p = ParticlePool.rent();
+    const p = this._particlePool.rent();
     p.configure({
       life: this.particle.life,
       opacity: this.particle.opacity,
@@ -161,11 +173,11 @@ export class ParticleEmitter extends Actor {
     return p;
   }
 
-  public update(engine: Engine, delta: number) {
-    super.update(engine, delta);
+  public update(engine: Engine, elapsed: number) {
+    super.update(engine, elapsed);
 
     if (this.isEmitting) {
-      this._particlesToEmit += this.emitRate * (delta / 1000);
+      this._particlesToEmit += this.emitRate * (elapsed / 1000);
       if (this._particlesToEmit > 1.0) {
         this.emitParticles(Math.floor(this._particlesToEmit));
         this._particlesToEmit = this._particlesToEmit - Math.floor(this._particlesToEmit);
@@ -176,7 +188,11 @@ export class ParticleEmitter extends Actor {
     for (let i = 0; i < this.deadParticles.length; i++) {
       if (this?.scene?.world) {
         this.scene.world.remove(this.deadParticles[i], false);
-        ParticlePool.return(this.deadParticles[i]);
+        this._particlePool.return(this.deadParticles[i]);
+      }
+      const index = this._activeParticles.indexOf(this.deadParticles[i]);
+      if (index > -1) {
+        this._activeParticles.splice(index, 1);
       }
     }
     this.deadParticles.length = 0;

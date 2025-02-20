@@ -1,11 +1,12 @@
 import { Resource } from '../Resources/Resource';
-import { Sprite } from './Sprite';
+import { Sprite, SpriteOptions } from './Sprite';
 import { Loadable } from '../Interfaces/Index';
 import { Logger } from '../Util/Log';
 import { ImageFiltering } from './Filtering';
 import { Future } from '../Util/Future';
 import { TextureLoader } from '../Graphics/Context/texture-loader';
 import { ImageWrapping } from './Wrapping';
+import { GraphicOptions } from './Graphic';
 
 export interface ImageSourceOptions {
   filtering?: ImageFiltering;
@@ -75,19 +76,19 @@ export class ImageSource implements Loadable<HTMLImageElement> {
 
   /**
    * The path to the image, can also be a data url like 'data:image/'
-   * @param path {string} Path to the image resource relative from the HTML document hosting the game, or absolute
+   * @param pathOrBase64 {string} Path to the image resource relative from the HTML document hosting the game, or absolute
    * @param options
    */
-  constructor(path: string, options?: ImageSourceOptions);
+  constructor(pathOrBase64: string, options?: ImageSourceOptions);
   /**
    * The path to the image, can also be a data url like 'data:image/'
-   * @param path {string} Path to the image resource relative from the HTML document hosting the game, or absolute
+   * @param pathOrBase64 {string} Path to the image resource relative from the HTML document hosting the game, or absolute
    * @param bustCache {boolean} Should excalibur add a cache busting querystring?
-   * @param filtering {ImageFiltering} Optionally override the image filtering set by [[EngineOptions.antialiasing]]
+   * @param filtering {ImageFiltering} Optionally override the image filtering set by {@apilink EngineOptions.antialiasing}
    */
-  constructor(path: string, bustCache: boolean, filtering?: ImageFiltering);
-  constructor(path: string, bustCacheOrOptions: boolean | ImageSourceOptions | undefined, filtering?: ImageFiltering) {
-    this.path = path;
+  constructor(pathOrBase64: string, bustCache: boolean, filtering?: ImageFiltering);
+  constructor(pathOrBase64: string, bustCacheOrOptions: boolean | ImageSourceOptions | undefined, filtering?: ImageFiltering) {
+    this.path = pathOrBase64;
     let bustCache: boolean | undefined = false;
     let wrapping: ImageWrapConfiguration | ImageWrapping | undefined;
     if (typeof bustCacheOrOptions === 'boolean') {
@@ -95,7 +96,7 @@ export class ImageSource implements Loadable<HTMLImageElement> {
     } else {
       ({ filtering, wrapping, bustCache } = { ...bustCacheOrOptions });
     }
-    this._resource = new Resource(path, 'blob', bustCache);
+    this._resource = new Resource(pathOrBase64, 'blob', bustCache);
     this.filtering = filtering ?? this.filtering;
     if (typeof wrapping === 'string') {
       this.wrapping = {
@@ -105,8 +106,10 @@ export class ImageSource implements Loadable<HTMLImageElement> {
     } else {
       this.wrapping = wrapping ?? this.wrapping;
     }
-    if (path.endsWith('.svg') || path.endsWith('.gif')) {
-      this._logger.warn(`Image type is not fully supported, you may have mixed results ${path}. Fully supported: jpg, bmp, and png`);
+    if (pathOrBase64.endsWith('.gif')) {
+      this._logger.warn(
+        `Use the ex.Gif type to load gifs, you may have mixed results with ${pathOrBase64} in ex.ImageSource. Fully supported: svg, jpg, bmp, and png`
+      );
     }
   }
 
@@ -149,6 +152,60 @@ export class ImageSource implements Loadable<HTMLImageElement> {
     TextureLoader.checkImageSizeSupportedAndLog(image);
     imageSource._readyFuture.resolve(image);
     return imageSource;
+  }
+
+  static fromHtmlCanvasElement(image: HTMLCanvasElement, options?: ImageSourceOptions): ImageSource {
+    const imageSource = new ImageSource('');
+    imageSource._src = 'canvas-element-blob';
+    imageSource.data.setAttribute('data-original-src', 'canvas-element-blob');
+
+    if (options?.filtering) {
+      imageSource.data.setAttribute(ImageSourceAttributeConstants.Filtering, options?.filtering);
+    } else {
+      imageSource.data.setAttribute(ImageSourceAttributeConstants.Filtering, ImageFiltering.Blended);
+    }
+
+    if (options?.wrapping) {
+      let wrapping: ImageWrapConfiguration;
+      if (typeof options.wrapping === 'string') {
+        wrapping = {
+          x: options.wrapping,
+          y: options.wrapping
+        };
+      } else {
+        wrapping = {
+          x: options.wrapping.x,
+          y: options.wrapping.y
+        };
+      }
+      imageSource.data.setAttribute(ImageSourceAttributeConstants.WrappingX, wrapping.x);
+      imageSource.data.setAttribute(ImageSourceAttributeConstants.WrappingY, wrapping.y);
+    } else {
+      imageSource.data.setAttribute(ImageSourceAttributeConstants.WrappingX, ImageWrapping.Clamp);
+      imageSource.data.setAttribute(ImageSourceAttributeConstants.WrappingY, ImageWrapping.Clamp);
+    }
+
+    TextureLoader.checkImageSizeSupportedAndLog(image);
+
+    image.toBlob((blob) => {
+      // TODO throw? if blob null?
+      const url = URL.createObjectURL(blob!);
+      imageSource.image.onload = () => {
+        // no longer need to read the blob so it's revoked
+        URL.revokeObjectURL(url);
+        imageSource.data = imageSource.image;
+        imageSource._readyFuture.resolve(imageSource.image);
+      };
+      imageSource.image.src = url;
+    });
+
+    return imageSource;
+  }
+
+  static fromSvgString(svgSource: string, options?: ImageSourceOptions) {
+    const blob = new Blob([svgSource], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    return new ImageSource(url, options);
   }
 
   /**
@@ -216,8 +273,8 @@ export class ImageSource implements Loadable<HTMLImageElement> {
   /**
    * Build a sprite from this ImageSource
    */
-  public toSprite(): Sprite {
-    return Sprite.from(this);
+  public toSprite(options?: Omit<GraphicOptions & SpriteOptions, 'image'>): Sprite {
+    return Sprite.from(this, options);
   }
 
   /**

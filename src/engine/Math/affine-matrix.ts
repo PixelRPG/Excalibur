@@ -62,15 +62,15 @@ export class AffineMatrix {
   }
 
   /**
-   * Creates a brand new rotation matrix with the specified angle
-   * @param angleRadians
+   * Creates a brand new rotation matrix with the specified angle in radians
+   * @param angle
    */
-  public static rotation(angleRadians: number): AffineMatrix {
+  public static rotation(angle: number): AffineMatrix {
     const mat = AffineMatrix.identity();
-    mat.data[0] = Math.cos(angleRadians);
-    mat.data[1] = Math.sin(angleRadians);
-    mat.data[2] = -Math.sin(angleRadians);
-    mat.data[3] = Math.cos(angleRadians);
+    mat.data[0] = Math.cos(angle);
+    mat.data[1] = Math.sin(angle);
+    mat.data[2] = -Math.sin(angle);
+    mat.data[3] = Math.cos(angle);
     return mat;
   }
 
@@ -173,7 +173,10 @@ export class AffineMatrix {
     // We don't actually use the 3rd or 4th dimension
 
     const det = this.determinant();
-    const inverseDet = 1 / det; // TODO zero check, or throw custom error for degenerate matrix
+    let inverseDet = det; // default to a zero matrix if we have a singular matrix
+    if (det !== 0) {
+      inverseDet = 1 / det;
+    }
     const a = this.data[0];
     const b = this.data[2];
     const c = this.data[1];
@@ -255,9 +258,10 @@ export class AffineMatrix {
       result.data[4] = a11 * b13 + a12 * b23 + a13; // * b33; // one
       result.data[5] = a21 * b13 + a22 * b23 + a23; // * b33; // one
 
-      const s = this.getScale();
-      result._scaleSignX = sign(s.x) * sign(result._scaleSignX);
-      result._scaleSignY = sign(s.y) * sign(result._scaleSignY);
+      const signX = this._scaleSignX;
+      const signY = this._scaleSignY;
+      result._scaleSignX = signX * sign(result._scaleSignX);
+      result._scaleSignY = signY * sign(result._scaleSignY);
 
       return result;
     }
@@ -411,7 +415,7 @@ export class AffineMatrix {
   }
 
   /**
-   * Creates a new Matrix with the same data as the current [[AffineMatrix]]
+   * Creates a new Matrix with the same data as the current {@apilink AffineMatrix}
    */
   public clone(dest?: AffineMatrix): AffineMatrix {
     const mat = dest || new AffineMatrix();

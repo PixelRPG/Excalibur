@@ -35,8 +35,8 @@ describe('A particle', () => {
       height: 30,
       isEmitting: true,
       particle: {
-        minVel: 40,
-        maxVel: 50,
+        minSpeed: 40,
+        maxSpeed: 50,
         acc: ex.Vector.Zero.clone(),
         minAngle: 0,
         maxAngle: Math.PI / 2,
@@ -64,8 +64,8 @@ describe('A particle', () => {
     expect(emitter.width).toBe(20);
     expect(emitter.height).toBe(30);
     expect(emitter.isEmitting).toBe(true);
-    expect(emitter.particle.minVel).toBe(40);
-    expect(emitter.particle.maxVel).toBe(50);
+    expect(emitter.particle.minSpeed).toBe(40);
+    expect(emitter.particle.maxSpeed).toBe(50);
     expect(emitter.acc.toString()).toBe(ex.Vector.Zero.clone().toString());
     expect(emitter.particle.minAngle).toBe(0);
     expect(emitter.particle.maxAngle).toBe(Math.PI / 2);
@@ -97,8 +97,8 @@ describe('A particle', () => {
       isEmitting: true,
       emitRate: 5,
       particle: {
-        minVel: 100,
-        maxVel: 200,
+        minSpeed: 100,
+        maxSpeed: 200,
         acc: ex.Vector.Zero.clone(),
         minAngle: 0,
         maxAngle: Math.PI / 2,
@@ -131,6 +131,49 @@ describe('A particle', () => {
     await expectAsync(engine.canvas).toEqualImage('src/spec/images/ParticleSpec/Particles.png');
   });
 
+  it('should clear particles', async () => {
+    const emitter = new ex.ParticleEmitter({
+      pos: new ex.Vector(400, 100),
+      width: 20,
+      height: 30,
+      isEmitting: true,
+      emitRate: 5,
+      particle: {
+        minSpeed: 100,
+        maxSpeed: 200,
+        acc: ex.Vector.Zero.clone(),
+        minAngle: 0,
+        maxAngle: Math.PI / 2,
+        life: 4000,
+        opacity: 0.5,
+        fade: false,
+        startSize: 30,
+        endSize: 40,
+        beginColor: ex.Color.Red.clone(),
+        endColor: ex.Color.Blue.clone(),
+        graphic: null,
+        angularVelocity: 3,
+        randomRotation: false
+      },
+      focus: null,
+      focusAccel: null,
+      emitterType: ex.EmitterType.Circle,
+      radius: 20,
+      random: new ex.Random(1337)
+    });
+    engine.backgroundColor = ex.Color.Transparent;
+    engine.add(emitter);
+    emitter.emitParticles(10);
+    emitter.clearParticles();
+
+    engine.currentScene.update(engine, 100);
+    engine.currentScene.update(engine, 100);
+    engine.currentScene.update(engine, 100);
+    engine.currentScene.draw(engine.graphicsContext, 100);
+    engine.graphicsContext.flush();
+    await expectAsync(engine.canvas).toEqualImage('src/spec/images/ParticleSpec/clear.png');
+  });
+
   it('can be parented', async () => {
     const emitter = new ex.ParticleEmitter({
       pos: new ex.Vector(0, 0),
@@ -139,8 +182,8 @@ describe('A particle', () => {
       isEmitting: true,
       emitRate: 5,
       particle: {
-        minVel: 100,
-        maxVel: 200,
+        minSpeed: 100,
+        maxSpeed: 200,
         acc: ex.Vector.Zero.clone(),
         minAngle: 0,
         maxAngle: Math.PI / 2,
@@ -185,8 +228,8 @@ describe('A particle', () => {
     const emitter = new ex.ParticleEmitter({
       particle: {
         transform: ex.ParticleTransform.Local,
-        minVel: 100,
-        maxVel: 200,
+        minSpeed: 100,
+        maxSpeed: 200,
         acc: ex.Vector.Zero.clone(),
         minAngle: 0,
         maxAngle: Math.PI / 2,
@@ -222,8 +265,8 @@ describe('A particle', () => {
     const emitter = new ex.ParticleEmitter({
       particle: {
         transform: ex.ParticleTransform.Global,
-        minVel: 100,
-        maxVel: 200,
+        minSpeed: 100,
+        maxSpeed: 200,
         acc: ex.Vector.Zero.clone(),
         minAngle: 0,
         maxAngle: Math.PI / 2,

@@ -14,20 +14,15 @@ export * from './Engine';
 export * from './GarbageCollector';
 export * from './Screen';
 export * from './Actor';
-export * from './Math/Index';
+export * from './Math/index';
 export * from './Camera';
-export * from './Configurable';
 export * from './Debug/index';
-export * from './EventDispatcher';
 export * from './EventEmitter';
 export * from './Events/MediaEvents';
 export * from './Events';
 export * from './Label';
 export { FontStyle, FontUnit, TextAlign, BaseAlign } from './Graphics/FontCommon';
-export * from './EmitterType';
-export { Particle, ParticleTransform, type ParticleConfig as ParticleArgs, type ParticleEmitterArgs } from './Particles/Particles';
-export * from './Particles/ParticleEmitter';
-export * from './Collision/Physics';
+export * from './Particles/index';
 export * from './Scene';
 
 export * from './TileMap/index';
@@ -36,7 +31,7 @@ export * from './Timer';
 export * from './Trigger';
 export * from './ScreenElement';
 
-export * from './Actions/Index';
+export * from './Actions/index';
 export * from './Collision/Index';
 
 export * from './Interfaces/Index';
@@ -53,11 +48,6 @@ export * from './Graphics/index';
 // ex.Events namespace
 import * as events from './Events';
 export { events as Events };
-
-// ex.Input namespace
-// TODO deprecated import site remove in v0.29.0
-import * as input from './Input/Index';
-export { input as Input };
 
 export { WheelEvent } from './Input/WheelEvent';
 
@@ -121,6 +111,8 @@ export * from './Util/StateMachine';
 export * from './Util/Future';
 export * from './Util/Semaphore';
 export * from './Util/Coroutine';
+export * from './Util/Assert';
+export * from './Util/RentalPool';
 
 // ex.Deprecated
 // import * as deprecated from './Deprecated';

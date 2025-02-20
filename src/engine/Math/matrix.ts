@@ -185,15 +185,15 @@ export class Matrix {
   }
 
   /**
-   * Creates a brand new rotation matrix with the specified angle
-   * @param angleRadians
+   * Creates a brand new rotation matrix with the specified angle in radians
+   * @param angle
    */
-  public static rotation(angleRadians: number): Matrix {
+  public static rotation(angle: number): Matrix {
     const mat = Matrix.identity();
-    mat.data[0] = Math.cos(angleRadians);
-    mat.data[4] = -Math.sin(angleRadians);
-    mat.data[1] = Math.sin(angleRadians);
-    mat.data[5] = Math.cos(angleRadians);
+    mat.data[0] = Math.cos(angle);
+    mat.data[4] = -Math.sin(angle);
+    mat.data[1] = Math.sin(angle);
+    mat.data[5] = Math.cos(angle);
     return mat;
   }
 
@@ -415,13 +415,13 @@ export class Matrix {
 
   public getScaleX(): number {
     // absolute scale of the matrix (we lose sign so need to add it back)
-    const xscale = vec(this.data[0], this.data[4]).size;
+    const xscale = vec(this.data[0], this.data[4]).magnitude;
     return this._scaleSignX * xscale;
   }
 
   public getScaleY(): number {
     // absolute scale of the matrix (we lose sign so need to add it back)
-    const yscale = vec(this.data[1], this.data[5]).size;
+    const yscale = vec(this.data[1], this.data[5]).magnitude;
     return this._scaleSignY * yscale;
   }
 

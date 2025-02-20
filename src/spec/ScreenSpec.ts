@@ -439,7 +439,7 @@ describe('A Screen', () => {
       viewport: { width: 800, height: 600 }
     });
 
-    sut.goFullScreen();
+    sut.enterFullscreen();
 
     expect(mockCanvas.requestFullscreen).toHaveBeenCalled();
   });
@@ -461,7 +461,7 @@ describe('A Screen', () => {
     const fakeElement = jasmine.createSpyObj('element', ['requestFullscreen', 'getAttribute', 'setAttribute', 'addEventListener']);
     spyOn(document, 'getElementById').and.returnValue(fakeElement);
 
-    sut.goFullScreen('some-id');
+    sut.enterFullscreen('some-id');
 
     expect(document.getElementById).toHaveBeenCalledWith('some-id');
     expect(fakeElement.getAttribute).toHaveBeenCalledWith('ex-fullscreen-listener');
@@ -751,6 +751,54 @@ describe('A Screen', () => {
     expect(sut.worldToScreenCoordinates(ex.vec(600, 150))).toBeVector(ex.vec(800, 0));
     expect(sut.worldToScreenCoordinates(ex.vec(200, 450))).toBeVector(ex.vec(0, 600));
     expect(sut.worldToScreenCoordinates(ex.vec(600, 450))).toBeVector(ex.vec(800, 600));
+  });
+
+  it('can calculate the excalibur worldToPagePixelRatio 2x', () => {
+    Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1600 });
+    Object.defineProperty(window, 'innerHeight', { writable: true, configurable: true, value: 1200 });
+    const sut = new ex.Screen({
+      canvas,
+      context,
+      browser,
+      displayMode: ex.DisplayMode.FitScreen,
+      viewport: { width: 800, height: 600 },
+      pixelRatio: 2
+    });
+
+    expect(sut.worldToPagePixelRatio).toBe(2);
+    expect(document.documentElement.style.getPropertyValue('--ex-pixel-ratio')).toBe('2');
+  });
+
+  it('can calculate the excalibur worldToPagePixelRatio .5x', () => {
+    Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 400 });
+    Object.defineProperty(window, 'innerHeight', { writable: true, configurable: true, value: 300 });
+    const sut = new ex.Screen({
+      canvas,
+      context,
+      browser,
+      displayMode: ex.DisplayMode.FitScreen,
+      viewport: { width: 800, height: 600 },
+      pixelRatio: 2
+    });
+
+    expect(sut.worldToPagePixelRatio).toBe(0.5);
+    expect(document.documentElement.style.getPropertyValue('--ex-pixel-ratio')).toBe('0.5');
+  });
+
+  it('can calculate the excalibur worldToPagePixelRatio 1.5x', () => {
+    Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1200 });
+    Object.defineProperty(window, 'innerHeight', { writable: true, configurable: true, value: 1000 });
+    const sut = new ex.Screen({
+      canvas,
+      context,
+      browser,
+      displayMode: ex.DisplayMode.FitScreen,
+      viewport: { width: 800, height: 600 },
+      pixelRatio: 2
+    });
+
+    expect(sut.worldToPagePixelRatio).toBe(1.5);
+    expect(document.documentElement.style.getPropertyValue('--ex-pixel-ratio')).toBe('1.5');
   });
 
   it('can return world bounds', () => {

@@ -1,6 +1,8 @@
 import { ImageSource } from './ImageSource';
 import { SourceView, Sprite } from './Sprite';
 import { GraphicOptions } from './Graphic';
+import { TiledSprite, TiledSpriteOptions } from './TiledSprite';
+import { Vector } from '../Math/vector';
 
 /**
  * Specify sprite sheet spacing options, useful if your sprites are not tightly packed
@@ -11,13 +13,13 @@ export interface SpriteSheetSpacingDimensions {
    * The starting point to offset and start slicing the sprite sheet from the top left of the image.
    * Default is (0, 0)
    */
-  originOffset?: { x?: number; y?: number };
+  originOffset?: { x?: number; y?: number } | Vector;
 
   /**
    * The margin between sprites.
    * Default is (0, 0)
    */
-  margin?: { x?: number; y?: number };
+  margin?: { x?: number; y?: number } | Vector;
 }
 
 /**
@@ -94,7 +96,7 @@ export class SpriteSheet {
   /**
    * Build a new sprite sheet from a list of sprites
    *
-   * Use [[SpriteSheet.fromImageSource]] to create a SpriteSheet from an [[ImageSource]] organized in a grid
+   * Use {@apilink SpriteSheet.fromImageSource} to create a SpriteSheet from an {@apilink ImageSource} organized in a grid
    * @param options
    */
   constructor(options: SpriteSheetOptions) {
@@ -105,17 +107,17 @@ export class SpriteSheet {
   }
 
   /**
-   * Find a sprite by their x/y integer coordinates in the SpriteSheet, for example `getSprite(0, 0)` is the [[Sprite]] in the top-left
+   * Find a sprite by their x/y integer coordinates in the SpriteSheet, for example `getSprite(0, 0)` is the {@apilink Sprite} in the top-left
    * and `getSprite(1, 0)` is the sprite one to the right.
    * @param x
    * @param y
    */
   public getSprite(x: number, y: number, options?: GetSpriteOptions): Sprite {
     if (x >= this.columns || x < 0) {
-      throw Error(`No sprite exists in the SpriteSheet at (${x}, ${y}), x: ${x} should be between 0 and ${this.columns - 1}`);
+      throw Error(`No sprite exists in the SpriteSheet at (${x}, ${y}), x: ${x} should be between 0 and ${this.columns - 1} columns`);
     }
     if (y >= this.rows || y < 0) {
-      throw Error(`No sprite exists in the SpriteSheet at (${x}, ${y}), y: ${y} should be between 0 and ${this.rows - 1}`);
+      throw Error(`No sprite exists in the SpriteSheet at (${x}, ${y}), y: ${y} should be between 0 and ${this.rows - 1} rows`);
     }
     const spriteIndex = x + y * this.columns;
     const sprite = this.sprites[spriteIndex];
@@ -135,11 +137,47 @@ export class SpriteSheet {
       }
       return sprite;
     }
-    throw Error(`Invalid sprite coordinates (${x}, ${y}`);
+    throw Error(`Invalid sprite coordinates (${x}, ${y})`);
   }
 
   /**
-   * Create a sprite sheet from a sparse set of [[SourceView]] rectangles
+   * Find a sprite by their x/y integer coordinates in the SpriteSheet and configures tiling to repeat by default,
+   * for example `getTiledSprite(0, 0)` is the {@apilink TiledSprite} in the top-left
+   * and `getTiledSprite(1, 0)` is the sprite one to the right.
+   *
+   * Example:
+   *
+   * ```typescript
+   * spriteSheet.getTiledSprite(1, 0, {
+   * width: game.screen.width,
+   * height: 200,
+   * wrapping: {
+   * x: ex.ImageWrapping.Repeat,
+   * y: ex.ImageWrapping.Clamp
+   * }
+   * });
+   * ```
+   * @param x
+   * @param y
+   * @param options
+   */
+  public getTiledSprite(x: number, y: number, options?: Partial<Omit<TiledSpriteOptions & GraphicOptions, 'image'>>): TiledSprite {
+    if (x >= this.columns || x < 0) {
+      throw Error(`No sprite exists in the SpriteSheet at (${x}, ${y}), x: ${x} should be between 0 and ${this.columns - 1} columns`);
+    }
+    if (y >= this.rows || y < 0) {
+      throw Error(`No sprite exists in the SpriteSheet at (${x}, ${y}), y: ${y} should be between 0 and ${this.rows - 1} rows`);
+    }
+    const spriteIndex = x + y * this.columns;
+    const sprite = this.sprites[spriteIndex];
+    if (sprite) {
+      return TiledSprite.fromSprite(sprite, options);
+    }
+    throw Error(`Invalid sprite coordinates (${x}, ${y})`);
+  }
+
+  /**
+   * Create a sprite sheet from a sparse set of {@apilink SourceView} rectangles
    * @param options
    */
   public static fromImageSourceWithSourceViews(options: SpriteSheetSparseOptions): SpriteSheet {
@@ -153,7 +191,7 @@ export class SpriteSheet {
   }
 
   /**
-   * Create a SpriteSheet from an [[ImageSource]] organized in a grid
+   * Create a SpriteSheet from an {@apilink ImageSource} organized in a grid
    *
    * Example:
    * ```
@@ -190,8 +228,27 @@ export class SpriteSheet {
       grid: { rows, columns: cols, spriteWidth, spriteHeight },
       spacing: { originOffset, margin }
     } = options;
-    const offsetDefaults = { x: 0, y: 0, ...originOffset };
-    const marginDefaults = { x: 0, y: 0, ...margin };
+    let newmargin: { x: number; y: number } | undefined;
+    let neworiginOffset: { x: number; y: number } | undefined;
+
+    if (originOffset instanceof Vector) {
+      neworiginOffset = { x: originOffset.x, y: originOffset.y };
+    } else {
+      if (originOffset) {
+        neworiginOffset = { x: originOffset.x as number, y: originOffset.y as number };
+      }
+    }
+
+    if (margin instanceof Vector) {
+      newmargin = { x: margin.x, y: margin.y };
+    } else {
+      if (margin) {
+        newmargin = { x: margin.x as number, y: margin.y as number };
+      }
+    }
+
+    const offsetDefaults = { x: 0, y: 0, ...neworiginOffset };
+    const marginDefaults = { x: 0, y: 0, ...newmargin };
     for (let x = 0; x < cols; x++) {
       for (let y = 0; y < rows; y++) {
         sprites[x + y * cols] = new Sprite({

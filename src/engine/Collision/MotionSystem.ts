@@ -8,8 +8,9 @@ import { EulerIntegrator } from './Integrator';
 import { PhysicsWorld } from './PhysicsWorld';
 
 export class MotionSystem extends System {
+  static priority = SystemPriority.Higher;
+
   public systemType = SystemType.Update;
-  public priority = SystemPriority.Higher;
   private _physicsConfigDirty = false;
   query: Query<typeof TransformComponent | typeof MotionComponent>;
   constructor(
@@ -21,10 +22,12 @@ export class MotionSystem extends System {
     this.query = this.world.query([TransformComponent, MotionComponent]);
   }
 
-  update(elapsedMs: number): void {
+  update(elapsed: number): void {
     let transform: TransformComponent;
     let motion: MotionComponent;
     const entities = this.query.entities;
+    const substep = this.physics.config.substep;
+
     for (let i = 0; i < entities.length; i++) {
       transform = entities[i].get(TransformComponent);
       motion = entities[i].get(MotionComponent);
@@ -34,7 +37,7 @@ export class MotionSystem extends System {
         optionalBody.updatePhysicsConfig(this.physics.config.bodies);
       }
 
-      if (optionalBody?.sleeping) {
+      if (optionalBody?.isSleeping) {
         continue;
       }
 
@@ -50,7 +53,7 @@ export class MotionSystem extends System {
       }
 
       // Update transform and motion based on Euler linear algebra
-      EulerIntegrator.integrate(transform, motion, totalAcc, elapsedMs);
+      EulerIntegrator.integrate(transform, motion, totalAcc, elapsed / substep);
     }
     this._physicsConfigDirty = false;
   }

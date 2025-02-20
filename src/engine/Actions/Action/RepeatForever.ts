@@ -23,7 +23,7 @@ export class RepeatForever implements Action {
     this._repeatBuilder(this._repeatContext);
   }
 
-  public update(delta: number): void {
+  public update(elapsed: number): void {
     if (this._stopped) {
       return;
     }
@@ -33,7 +33,7 @@ export class RepeatForever implements Action {
       this._repeatBuilder(this._repeatContext);
     }
 
-    this._actionQueue.update(delta);
+    this._actionQueue.update(elapsed);
   }
 
   public isComplete(): boolean {

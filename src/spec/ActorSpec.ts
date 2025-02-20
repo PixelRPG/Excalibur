@@ -143,6 +143,42 @@ describe('A game actor', () => {
     expect(sut.color).toEqual(original.color);
   });
 
+  it('can be cloned with null collider', () => {
+    const original = new ex.Actor({
+      width: 10,
+      height: 100,
+      anchor: ex.vec(0, 1),
+      color: ex.Color.Azure
+    });
+    original.pos = ex.vec(10, 20);
+    original.vel = ex.vec(30, 30);
+
+    original.collider.clear();
+    const sut = original.clone();
+
+    expect(sut.get(ex.TransformComponent)).not.toBe(original.get(ex.TransformComponent));
+    expect(sut.get(ex.MotionComponent)).not.toBe(original.get(ex.MotionComponent));
+    expect(sut.get(ex.ActionsComponent)).not.toBe(original.get(ex.ActionsComponent));
+    expect(sut.get(ex.PointerComponent)).not.toBe(original.get(ex.PointerComponent));
+    expect(sut.get(ex.BodyComponent)).not.toBe(original.get(ex.BodyComponent));
+    expect(sut.get(ex.ColliderComponent)).not.toBe(original.get(ex.ColliderComponent));
+    expect(sut.get(ex.GraphicsComponent)).not.toBe(original.get(ex.GraphicsComponent));
+
+    // New refs
+    expect(sut).not.toBe(original);
+    expect(sut.id).not.toBe(original.id);
+    expect(sut.color).not.toBe(original.color);
+    expect(sut.anchor).not.toBe(original.anchor);
+
+    // Same values
+    expect(sut.pos).toBeVector(original.pos);
+    expect(sut.vel).toBeVector(original.vel);
+    expect(sut.width).toBe(original.width);
+    expect(sut.height).toBe(original.height);
+    expect(sut.anchor).toEqual(original.anchor);
+    expect(sut.color).toEqual(original.color);
+  });
+
   it('should have default properties set', () => {
     const actor = new ex.Actor();
 
@@ -937,10 +973,10 @@ describe('A game actor', () => {
   });
 
   it('with an active collision type can be placed on a fixed type', async () => {
-    ex.Physics.useArcadePhysics();
     const scene = new ex.Scene();
     engine.add('somescene', scene);
     await engine.goToScene('somescene');
+    engine.currentScene.physics.config.solver = ex.SolverStrategy.Arcade;
 
     const active = new ex.Actor({ x: 0, y: -50, width: 100, height: 100 });
     active.body.collisionType = ex.CollisionType.Active;
@@ -977,7 +1013,6 @@ describe('A game actor', () => {
     const active = new ex.Actor({ x: 0, y: -50, width: 100, height: 100 });
     active.body.collisionType = ex.CollisionType.Active;
     active.vel.y = -100;
-    ex.Physics.acc.setTo(0, 0);
 
     const fixed = new ex.Actor({ x: -100, y: 50, width: 1000, height: 100 });
     fixed.body.collisionType = ex.CollisionType.Fixed;
@@ -997,7 +1032,6 @@ describe('A game actor', () => {
       scene.update(engine, 1000);
     }
 
-    expect(ex.Physics.acc.y).toBe(0);
     expect(active.pos.x).toBeCloseTo(0, 0.0001);
     expect(active.pos.y).toBeCloseTo(-100 * iterations + -50 /* original y is -50 */, 0.0001);
 
@@ -1383,9 +1417,9 @@ describe('A game actor', () => {
     });
 
     it('can have onPostUpdate overridden safely', () => {
-      actor.onPostUpdate = (engine, delta) => {
+      actor.onPostUpdate = (engine, elapsedMs) => {
         expect(engine).not.toBe(null);
-        expect(delta).toBe(100);
+        expect(elapsedMs).toBe(100);
       };
 
       spyOn(actor, 'onPostUpdate').and.callThrough();
@@ -1398,9 +1432,9 @@ describe('A game actor', () => {
     });
 
     it('can have onPreUpdate overridden safely', () => {
-      actor.onPreUpdate = (engine, delta) => {
+      actor.onPreUpdate = (engine, elapsedMs) => {
         expect(engine).not.toBe(null);
-        expect(delta).toBe(100);
+        expect(elapsedMs).toBe(100);
       };
 
       spyOn(actor, 'onPreUpdate').and.callThrough();
@@ -1438,6 +1472,29 @@ describe('A game actor', () => {
       actor.kill();
       expect(actor._postkill).toHaveBeenCalledTimes(1);
       expect(actor.onPostKill).toHaveBeenCalledTimes(1);
+    });
+
+    it('can run onAdd and onRemove', () => {
+      actor.onRemove = (engine: ex.Engine) => {
+        expect(engine).not.toBe(null);
+      };
+
+      actor.onAdd = (engine: ex.Engine) => {
+        expect(engine).not.toBe(null);
+      };
+
+      spyOn(actor, 'onAdd').and.callThrough();
+      spyOn(actor, 'onRemove').and.callThrough();
+      engine.add(actor);
+      engine.currentScene.update(engine, 100);
+      engine.remove(actor);
+      engine.currentScene.update(engine, 100);
+      expect(actor.onAdd).toHaveBeenCalledTimes(1);
+      expect(actor.onRemove).toHaveBeenCalledTimes(1);
+      engine.add(actor);
+      engine.currentScene.update(engine, 100);
+      expect(actor.onAdd).toHaveBeenCalledTimes(2);
+      expect(actor.onRemove).toHaveBeenCalledTimes(1);
     });
   });
 });

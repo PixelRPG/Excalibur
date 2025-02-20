@@ -19,7 +19,7 @@ export class Blink implements Action {
     this._duration = (timeVisible + timeNotVisible) * numBlinks;
   }
 
-  public update(delta: number): void {
+  public update(elapsed: number): void {
     if (!this._started) {
       this._started = true;
       this._elapsedTime = 0;
@@ -29,20 +29,20 @@ export class Blink implements Action {
       return;
     }
 
-    this._elapsedTime += delta;
-    this._totalTime += delta;
-    if (this._graphics.visible && this._elapsedTime >= this._timeVisible) {
-      this._graphics.visible = false;
+    this._elapsedTime += elapsed;
+    this._totalTime += elapsed;
+    if (this._graphics.isVisible && this._elapsedTime >= this._timeVisible) {
+      this._graphics.isVisible = false;
       this._elapsedTime = 0;
     }
 
-    if (!this._graphics.visible && this._elapsedTime >= this._timeNotVisible) {
-      this._graphics.visible = true;
+    if (!this._graphics.isVisible && this._elapsedTime >= this._timeNotVisible) {
+      this._graphics.isVisible = true;
       this._elapsedTime = 0;
     }
 
     if (this.isComplete()) {
-      this._graphics.visible = true;
+      this._graphics.isVisible = true;
     }
   }
 
@@ -52,7 +52,7 @@ export class Blink implements Action {
 
   public stop(): void {
     if (this._graphics) {
-      this._graphics.visible = true;
+      this._graphics.isVisible = true;
     }
     this._stopped = true;
   }

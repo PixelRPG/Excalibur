@@ -20,7 +20,7 @@ export class TextureLoader {
   ) {
     this._gl = gl;
     TextureLoader._MAX_TEXTURE_SIZE = gl.getParameter(gl.MAX_TEXTURE_SIZE);
-    if (_garbageCollector) {
+    if (this._garbageCollector) {
       TextureLoader._LOGGER.debug('WebGL Texture collection interval:', this._garbageCollector.collectionInterval);
       this._garbageCollector.garbageCollector?.registerCollector('texture', this._garbageCollector.collectionInterval, this._collect);
     }
@@ -35,7 +35,7 @@ export class TextureLoader {
   }
 
   /**
-   * Sets the default filtering for the Excalibur texture loader, default [[ImageFiltering.Blended]]
+   * Sets the default filtering for the Excalibur texture loader, default {@apilink ImageFiltering.Blended}
    */
   public static filtering: ImageFiltering = ImageFiltering.Blended;
   public static wrapping: ImageWrapConfiguration = { x: ImageWrapping.Clamp, y: ImageWrapping.Clamp };
@@ -153,7 +153,7 @@ export class TextureLoader {
 
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
 
-    this._textureMap.set(image, tex);
+    this._textureMap.set(image, tex!);
     this._garbageCollector?.garbageCollector.addCollectableResource('texture', image);
     return tex;
   }

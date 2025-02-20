@@ -10,7 +10,7 @@ import { clamp } from '../Math/util';
 import { ColliderComponent } from './ColliderComponent';
 import { Transform } from '../Math/transform';
 import { EventEmitter } from '../EventEmitter';
-import { DefaultPhysicsConfig, PhysicsConfig } from './PhysicsConfig';
+import { getDefaultPhysicsConfig, PhysicsConfig } from './PhysicsConfig';
 import { DeepRequired } from '../Util/Required';
 import { Entity } from '../EntityComponentSystem';
 
@@ -52,7 +52,7 @@ export class BodyComponent extends Component implements Clonable<BodyComponent> 
 
   private _bodyConfig: DeepRequired<Pick<PhysicsConfig, 'bodies'>['bodies']>;
   private static _DEFAULT_CONFIG: DeepRequired<Pick<PhysicsConfig, 'bodies'>['bodies']> = {
-    ...DefaultPhysicsConfig.bodies
+    ...getDefaultPhysicsConfig().bodies
   };
   public wakeThreshold: number;
 
@@ -63,12 +63,12 @@ export class BodyComponent extends Component implements Clonable<BodyComponent> 
       this.group = options.group ?? this.group;
       this.useGravity = options.useGravity ?? this.useGravity;
       this._bodyConfig = {
-        ...DefaultPhysicsConfig.bodies,
+        ...getDefaultPhysicsConfig().bodies,
         ...options.config
       };
     } else {
       this._bodyConfig = {
-        ...DefaultPhysicsConfig.bodies
+        ...getDefaultPhysicsConfig().bodies
       };
     }
     this.updatePhysicsConfig(this._bodyConfig);
@@ -85,7 +85,7 @@ export class BodyComponent extends Component implements Clonable<BodyComponent> 
    */
   public updatePhysicsConfig(config: DeepRequired<Pick<PhysicsConfig, 'bodies'>['bodies']>) {
     this._bodyConfig = {
-      ...DefaultPhysicsConfig.bodies,
+      ...getDefaultPhysicsConfig().bodies,
       ...config
     };
     this.canSleep = this._bodyConfig.canSleepByDefault;
@@ -101,7 +101,7 @@ export class BodyComponent extends Component implements Clonable<BodyComponent> 
   }
 
   /**
-   * Collision type for the rigidbody physics simulation, by default [[CollisionType.PreventCollision]]
+   * Collision type for the rigidbody physics simulation, by default {@apilink CollisionType.PreventCollision}
    */
   public collisionType: CollisionType = CollisionType.PreventCollision;
 
@@ -125,14 +125,14 @@ export class BodyComponent extends Component implements Clonable<BodyComponent> 
   }
 
   /**
-   * The inverse mass (1/mass) of the body. If [[CollisionType.Fixed]] this is 0, meaning "infinite" mass
+   * The inverse mass (1/mass) of the body. If {@apilink CollisionType.Fixed} this is 0, meaning "infinite" mass
    */
   public get inverseMass(): number {
     return this.collisionType === CollisionType.Fixed ? 0 : 1 / this.mass;
   }
 
   /**
-   * Amount of "motion" the body has before sleeping. If below [[Physics.sleepEpsilon]] it goes to "sleep"
+   * Amount of "motion" the body has before sleeping. If below {@apilink Physics.sleepEpsilon} it goes to "sleep"
    */
   public sleepMotion: number;
 
@@ -144,16 +144,29 @@ export class BodyComponent extends Component implements Clonable<BodyComponent> 
   private _sleeping = false;
   /**
    * Whether this body is sleeping or not
+   * @deprecated use isSleeping
    */
   public get sleeping(): boolean {
+    return this.isSleeping;
+  }
+
+  /**
+   * Whether this body is sleeping or not
+   */
+  public get isSleeping(): boolean {
     return this._sleeping;
   }
 
   /**
    * Set the sleep state of the body
    * @param sleeping
+   * @deprecated use isSleeping
    */
   public setSleeping(sleeping: boolean) {
+    this.isSleeping = sleeping;
+  }
+
+  public set isSleeping(sleeping: boolean) {
     this._sleeping = sleeping;
     if (!sleeping) {
       // Give it a kick to keep it from falling asleep immediately
@@ -167,24 +180,24 @@ export class BodyComponent extends Component implements Clonable<BodyComponent> 
   }
 
   /**
-   * Update body's [[BodyComponent.sleepMotion]] for the purpose of sleeping
+   * Update body's {@apilink BodyComponent.sleepMotion} for the purpose of sleeping
    */
   public updateMotion() {
     if (this._sleeping) {
-      this.setSleeping(true);
+      this.isSleeping = true;
     }
-    const currentMotion = this.vel.size * this.vel.size + Math.abs(this.angularVelocity * this.angularVelocity);
+    const currentMotion = this.vel.magnitude * this.vel.magnitude + Math.abs(this.angularVelocity * this.angularVelocity);
     const bias = this._bodyConfig.sleepBias;
     this.sleepMotion = bias * this.sleepMotion + (1 - bias) * currentMotion;
     this.sleepMotion = clamp(this.sleepMotion, 0, 10 * this._bodyConfig.sleepEpsilon);
     if (this.canSleep && this.sleepMotion < this._bodyConfig.sleepEpsilon) {
-      this.setSleeping(true);
+      this.isSleeping = true;
     }
   }
 
   private _cachedInertia: number;
   /**
-   * Get the moment of inertia from the [[ColliderComponent]]
+   * Get the moment of inertia from the {@apilink ColliderComponent}
    */
   public get inertia() {
     if (this._cachedInertia) {
@@ -210,7 +223,7 @@ export class BodyComponent extends Component implements Clonable<BodyComponent> 
 
   private _cachedInverseInertia: number;
   /**
-   * Get the inverse moment of inertial from the [[ColliderComponent]]. If [[CollisionType.Fixed]] this is 0, meaning "infinite" mass
+   * Get the inverse moment of inertial from the {@apilink ColliderComponent}. If {@apilink CollisionType.Fixed} this is 0, meaning "infinite" mass
    */
   public get inverseInertia() {
     if (this._cachedInverseInertia) {
@@ -226,12 +239,15 @@ export class BodyComponent extends Component implements Clonable<BodyComponent> 
   public bounciness: number = 0.2;
 
   /**
-   * The coefficient of friction on this actor
+   * The coefficient of friction on this actor.
+   *
+   * The {@apilink SolverStrategy.Arcade} does not support this property.
+   *
    */
   public friction: number = 0.99;
 
   /**
-   * Should use global gravity [[Physics.gravity]] in it's physics simulation, default is true
+   * Should use global gravity {@apilink Physics.gravity} in it's physics simulation, default is true
    */
   public useGravity: boolean = true;
 
@@ -244,9 +260,17 @@ export class BodyComponent extends Component implements Clonable<BodyComponent> 
 
   /**
    * Returns if the owner is active
+   * @deprecated use isActive
    */
   public get active() {
-    return !!this.owner?.active;
+    return !!this.owner?.isActive;
+  }
+
+  /**
+   * Returns if the owner is active
+   */
+  public get isActive() {
+    return !!this.owner?.isActive;
   }
 
   /**
@@ -274,7 +298,7 @@ export class BodyComponent extends Component implements Clonable<BodyComponent> 
 
   /**
    * The (x, y) position of the actor this will be in the middle of the actor if the
-   * [[Actor.anchor]] is set to (0.5, 0.5) which is default.
+   * {@apilink Actor.anchor} is set to (0.5, 0.5) which is default.
    * If you want the (x, y) position to be the top left of the actor specify an anchor of (0, 0).
    */
   public get globalPos(): Vector {
@@ -330,7 +354,7 @@ export class BodyComponent extends Component implements Clonable<BodyComponent> 
   }
 
   /**
-   * Gets/sets the acceleration of the actor from the last frame. This does not include the global acc [[Physics.acc]].
+   * Gets/sets the acceleration of the actor from the last frame. This does not include the global acc {@apilink Physics.acc}.
    */
   public oldAcc: Vector = Vector.Zero;
 

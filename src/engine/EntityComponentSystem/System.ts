@@ -11,7 +11,7 @@ export enum SystemType {
 }
 
 /**
- * An Excalibur [[System]] that updates entities of certain types.
+ * An Excalibur {@apilink System} that updates entities of certain types.
  * Systems are scene specific
  *
  *
@@ -23,9 +23,14 @@ export enum SystemType {
  *
  * ```typescript
  * class MySystem extends System {
- *   public readonly types = ['a', 'b'] as const;
+ *   static priority = SystemPriority.Lowest;
  *   public readonly systemType = SystemType.Update;
- *   public update(elapsedMs) {
+ *   public query: Query<typeof TransformComponent>;
+ *   constructor(public world: World) {
+ *   super();
+ *      this.query = this.world.query([TransformComponent]);
+ *   }
+ *   public update(elapsed: number) {
  *      ...
  *   }
  * }
@@ -33,7 +38,7 @@ export enum SystemType {
  */
 export abstract class System {
   /**
-   * Determine whether the system is called in the [[SystemType.Update]] or the [[SystemType.Draw]] phase. Update is first, then Draw.
+   * Determine whether the system is called in the {@apilink SystemType.Update} or the {@apilink SystemType.Draw} phase. Update is first, then Draw.
    */
   abstract readonly systemType: SystemType;
 
@@ -42,7 +47,7 @@ export abstract class System {
    * For a system to execute before all other a lower priority value (-1 for example) must be set.
    * For a system to execute after all other a higher priority value (10 for example) must be set.
    */
-  public priority: number = SystemPriority.Average;
+  public static priority: number = SystemPriority.Average;
 
   /**
    * Optionally specify an initialize handler
@@ -52,21 +57,21 @@ export abstract class System {
 
   /**
    * Update all entities that match this system's types
-   * @param elapsedMs Time in milliseconds
+   * @param elapsed Time in milliseconds
    */
-  abstract update(elapsedMs: number): void;
+  abstract update(elapsed: number): void;
 
   /**
    * Optionally run a preupdate before the system processes matching entities
    * @param scene
-   * @param elapsedMs Time in milliseconds since the last frame
+   * @param elapsed Time in milliseconds since the last frame
    */
-  preupdate?(scene: Scene, elapsedMs: number): void;
+  preupdate?(scene: Scene, elapsed: number): void;
 
   /**
    * Optionally run a postupdate after the system processes matching entities
    * @param scene
-   * @param elapsedMs Time in milliseconds since the last frame
+   * @param elapsed Time in milliseconds since the last frame
    */
-  postupdate?(scene: Scene, elapsedMs: number): void;
+  postupdate?(scene: Scene, elapsed: number): void;
 }

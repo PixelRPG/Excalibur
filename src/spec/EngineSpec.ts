@@ -457,6 +457,31 @@ describe('The engine', () => {
     expect(fired).toHaveBeenCalled();
   });
 
+  it('should prevent the context menu from opening when enableCanvasContextMenu not set to true', () => {
+    const mockEvent = new Event('contextmenu', {
+      cancelable: true,
+      bubbles: true
+    });
+    const spyPreventDefault = spyOn(mockEvent, 'preventDefault');
+    engine.canvas.dispatchEvent(mockEvent);
+
+    expect(spyPreventDefault).toHaveBeenCalled();
+  });
+
+  it('should NOT prevent the context menu from opening when enableCanvasContextMenu set to true', () => {
+    engine.dispose();
+    engine = null;
+    engine = TestUtils.engine({ width: 100, height: 100, enableCanvasContextMenu: true });
+    const mockEvent = new Event('contextmenu', {
+      cancelable: true,
+      bubbles: true
+    });
+    const spyPreventDefault = spyOn(mockEvent, 'preventDefault');
+    engine.canvas.dispatchEvent(mockEvent);
+
+    expect(spyPreventDefault).not.toHaveBeenCalled();
+  });
+
   it('should tell engine is running', () => {
     const status = engine.isRunning();
     expect(status).toBe(true);
@@ -730,9 +755,10 @@ describe('The engine', () => {
     TestUtils.runToReady(engine).then(() => {
       clock.step(1);
 
+      const canvas = flushWebGLCanvasTo2D(engine.canvas);
       engine.screenshot().then((image) => {
         expectAsync(image)
-          .toEqualImage(flushWebGLCanvasTo2D(engine.canvas))
+          .toEqualImage(canvas)
           .then(() => {
             done();
             engine.dispose();
@@ -764,6 +790,7 @@ describe('The engine', () => {
     clock.step(1);
     const screenShotPromise = engine.screenshot();
     clock.step(1);
+    const canvas = flushWebGLCanvasTo2D(engine.canvas);
     const hidpiImagePromise = engine.screenshot(true);
     clock.step(1);
 
@@ -775,7 +802,7 @@ describe('The engine', () => {
 
     expect(hidpiImage.width).toBe(1000);
     expect(hidpiImage.height).toBe(1000);
-    await expectAsync(hidpiImage).toEqualImage(flushWebGLCanvasTo2D(engine.canvas));
+    await expectAsync(hidpiImage).toEqualImage(canvas);
     engine.dispose();
   });
 
@@ -875,13 +902,6 @@ describe('The engine', () => {
   it('can do subpixel AA on pixel art', async () => {
     const engine = TestUtils.engine({
       pixelArt: true,
-      antialiasing: {
-        nativeContextAntialiasing: false,
-        multiSampleAntialiasing: true,
-        pixelArtSampler: true,
-        canvasImageRendering: 'auto',
-        filtering: ex.ImageFiltering.Blended
-      },
       width: 256,
       height: 256,
       suppressHiDPIScaling: false,
@@ -976,9 +996,9 @@ describe('The engine', () => {
       const clock = engine.clock as ex.TestClock;
       expect(engine.clock.isRunning()).toBe(true);
 
-      engine.onPostUpdate = (engine, delta) => {
+      engine.onPostUpdate = (engine, elapsedMs) => {
         expect(engine).not.toBe(null);
-        expect(delta).toBe(100);
+        expect(elapsedMs).toBe(100);
       };
 
       spyOn(engine, 'onPostUpdate').and.callThrough();
@@ -996,9 +1016,9 @@ describe('The engine', () => {
       const clock = engine.clock as ex.TestClock;
       expect(engine.clock.isRunning()).toBe(true);
 
-      engine.onPreUpdate = (engine, delta) => {
+      engine.onPreUpdate = (engine, elapsedMs) => {
         expect(engine).not.toBe(null);
-        expect(delta).toBe(100);
+        expect(elapsedMs).toBe(100);
       };
 
       spyOn(engine, 'onPreUpdate').and.callThrough();
@@ -1017,9 +1037,9 @@ describe('The engine', () => {
       expect(engine.clock.isRunning()).toBe(true);
 
       engine.currentScene._initialize(engine);
-      engine.onPreDraw = (ctx, delta) => {
+      engine.onPreDraw = (ctx, elapsedMs) => {
         expect(<any>ctx).not.toBe(null);
-        expect(delta).toBe(100);
+        expect(elapsedMs).toBe(100);
       };
       spyOn(engine, 'onPreDraw').and.callThrough();
       spyOn(engine, '_predraw').and.callThrough();
@@ -1037,9 +1057,9 @@ describe('The engine', () => {
       expect(engine.clock.isRunning()).toBe(true);
 
       engine.currentScene._initialize(engine);
-      engine.onPostDraw = (ctx, delta) => {
+      engine.onPostDraw = (ctx, elapsedMs) => {
         expect(<any>ctx).not.toBe(null);
-        expect(delta).toBe(100);
+        expect(elapsedMs).toBe(100);
       };
 
       spyOn(engine, 'onPostDraw').and.callThrough();

@@ -25,10 +25,16 @@ export * from './Font';
 export * from './FontCache';
 export * from './SpriteFont';
 export * from './Canvas';
+export * from './NineSlice';
+export * from './TiledSprite';
+export * from './TiledAnimation';
 
 export * from './Context/ExcaliburGraphicsContext';
 export * from './Context/ExcaliburGraphicsContext2DCanvas';
 export * from './Context/ExcaliburGraphicsContextWebGL';
+
+// TODO DELETEME
+export * from './Context/particle-renderer/particle-renderer';
 
 export * from './Context/debug-text';
 
@@ -48,6 +54,7 @@ export * from './Context/vertex-buffer';
 export * from './Context/vertex-layout';
 export * from './Context/quad-index-buffer';
 export * from './Context/material';
+export * from './Context/renderer';
 
 // Debug
 export * from './Debug';

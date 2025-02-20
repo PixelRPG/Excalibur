@@ -131,18 +131,9 @@ describe('A Director', () => {
     const clock = engine.clock as ex.TestClock;
     clock.start();
     const scene1 = new ex.Scene();
-    scene1._initialize(engine);
-    const scene2 = new ex.Scene();
-    scene2._initialize(engine);
-    const sut = new ex.Director(engine, {
-      scene1,
-      scene2
-    });
-    sut.rootScene._initialize(engine);
-    engine.rootScene._initialize(engine);
+    const sut = new ex.Director(engine, { scene1 });
+    engine.director = sut;
     const fadeIn = new ex.FadeInOut({ direction: 'in', duration: 1000 });
-    engine.screen.setCurrentCamera(engine.currentScene.camera);
-    fadeIn._initialize(engine);
     const loader = new ex.DefaultLoader();
     sut.configureStart('scene1', {
       inTransition: fadeIn,
@@ -242,14 +233,14 @@ describe('A Director', () => {
     });
     sut.configureStart('scene1');
     sut.onInitialize();
-    await sut.goto('scene2');
+    await sut.goToScene('scene2');
     expect(sut.currentScene).toBe(scene2);
     sut.remove('scene1');
 
     const newScene = new ex.Scene();
     sut.add('scene1', newScene);
 
-    await sut.goto('scene1');
+    await sut.goToScene('scene1');
     expect(sut.currentScene).toBe(newScene);
     engine.dispose();
   });
@@ -272,12 +263,12 @@ describe('A Director', () => {
     await engine.load(sut.mainLoader);
     await (engine as any)._overrideInitialize(engine);
 
-    await sut.goto('scene2');
+    await sut.goToScene('scene2');
 
     expect(sut.currentScene).toBe(scene2);
     expect(sut.currentSceneName).toBe('scene2');
 
-    await sut.goto('scene4');
+    await sut.goToScene('scene4');
     expect(sut.currentSceneName).toBe('scene4');
     expect(sut.currentScene).toBeInstanceOf(MyScene);
     engine.dispose();

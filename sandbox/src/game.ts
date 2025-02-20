@@ -51,7 +51,7 @@ var game = new ex.Engine({
   // pixelRatio: 1,
   // suppressPlayButton: true,
   pointerScope: ex.PointerScope.Canvas,
-  displayMode: ex.DisplayMode.Fixed,
+  displayMode: ex.DisplayMode.FitScreenAndFill,
   snapToPixel: false,
   // fixedUpdateFps: 30,
   pixelRatio: 2,
@@ -85,15 +85,43 @@ var game = new ex.Engine({
     threshold: { fps: 20, numberOfFrames: 100 }
   }
 });
+
+game.currentScene.onTransition = () => {
+  console.log('initial scene transition');
+};
+
+game.on('navigation', (evt) => {
+  console.log('navigation', evt);
+});
+
+game.on('navigationstart', (evt) => {
+  console.log('navigationstart', evt);
+});
+
+game.on('navigationend', (evt) => {
+  console.log('navigationend', evt);
+});
+
 game.screen.events.on('fullscreen', (evt) => {
   console.log('fullscreen', evt);
 });
+
 game.screen.events.on('resize', (evt) => {
   console.log('resize', evt);
 });
+
 game.screen.events.on('pixelratio', (evt) => {
   console.log('pixelratio', evt);
 });
+
+game.currentScene.on('transitionstart', (evt) => {
+  console.log('transitionstart', evt);
+});
+
+game.currentScene.on('transitionend', (evt) => {
+  console.log('transitionend', evt);
+});
+
 game.currentScene.onPreDraw = (ctx: ex.ExcaliburGraphicsContext) => {
   ctx.save();
   ctx.z = 99;
@@ -109,12 +137,37 @@ game.currentScene.onPreDraw = (ctx: ex.ExcaliburGraphicsContext) => {
   bb.right--;
   bb.draw(ctx, ex.Color.Yellow);
 
+  // (ctx as ex.ExcaliburGraphicsContextWebGL).draw('custom', 1, 2, 3, 'custom args');
+
   ctx.drawCircle(ex.vec(bb.left + 6, bb.top + 6), 10, green);
   ctx.drawCircle(ex.vec(bb.right - 6, bb.top + 6), 10, blue);
   ctx.drawCircle(ex.vec(bb.left + 6, bb.bottom - 6), 10, yellow);
   ctx.drawCircle(ex.vec(bb.right - 6, bb.bottom - 6), 10, red);
   ctx.restore();
 };
+
+class CustomRenderer implements ex.RendererPlugin {
+  type = 'custom';
+  priority = 99;
+  initialize(gl: WebGL2RenderingContext, context: ex.ExcaliburGraphicsContextWebGL): void {
+    console.log('custom init');
+  }
+  draw(...args: any[]): void {
+    console.log('custom draw', ...args);
+  }
+  hasPendingDraws(): boolean {
+    return false;
+  }
+  flush(): void {
+    // pass
+  }
+  dispose(): void {
+    // pass
+  }
+}
+const customRenderer = new CustomRenderer();
+
+(game.graphicsContext as ex.ExcaliburGraphicsContextWebGL).register(customRenderer);
 
 game.on('fallbackgraphicscontext', (ctx) => {
   console.log('fallback triggered', ctx);
@@ -126,10 +179,10 @@ game.on('fallbackgraphicscontext', (ctx) => {
 // game.graphicsContext.addPostProcessor(colorblind);
 
 fullscreenButton.addEventListener('click', () => {
-  if (game.screen.isFullScreen) {
-    game.screen.exitFullScreen();
+  if (game.screen.isFullscreen) {
+    game.screen.exitFullscreen();
   } else {
-    game.screen.goFullScreen('container');
+    game.screen.enterFullscreen('container');
   }
 });
 game.showDebug(true);
@@ -152,12 +205,56 @@ cards2.draw(game.graphicsContext, 0, 0);
 
 jump.volume = 0.3;
 
+var svgExternal = new ex.ImageSource('../images/arrows.svg');
+var svg = (tags: TemplateStringsArray) => tags[0];
+
+var svgImage = ex.ImageSource.fromSvgString(svg`
+  <svg version="1.1"
+       id="svg2"
+       xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+       xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+       sodipodi:docname="resize-full.svg" inkscape:version="0.48.4 r9939"
+       xmlns="http://www.w3.org/2000/svg" 
+       width="800px" height="800px"
+       viewBox="0 0 1200 1200" enable-background="new 0 0 1200 1200" xml:space="preserve">
+  <path id="path18934" fill="#000000ff" inkscape:connector-curvature="0"  d="M670.312,0l177.246,177.295L606.348,418.506l175.146,175.146
+      l241.211-241.211L1200,529.688V0H670.312z M418.506,606.348L177.295,847.559L0,670.312V1200h529.688l-177.246-177.295
+      l241.211-241.211L418.506,606.348z"/>
+  </svg>
+`);
+
+var svgActor = new ex.Actor({
+  name: 'svg',
+  pos: ex.vec(200, 200)
+});
+svgActor.graphics.add(
+  svgImage.toSprite({
+    destSize: {
+      width: 100,
+      height: 100
+    },
+    sourceView: {
+      x: 400,
+      y: 0,
+      width: 400,
+      height: 400
+    }
+  })
+);
+// svgActor.graphics.add(svgExternal.toSprite());
+game.add(svgActor);
+
+var fontSource = new ex.FontSource('./html/Gorgeous Pixel.ttf', 'Gorgeous Pixel');
+
 var boot = new ex.Loader();
 // var boot = new ex.Loader({
 //   fullscreenAfterLoad: true,
 //   fullscreenContainer: document.getElementById('container')
 // });
 // boot.suppressPlayButton = true;
+boot.addResource(fontSource);
+boot.addResource(svgExternal);
+boot.addResource(svgImage);
 boot.addResource(heartImageSource);
 boot.addResource(heartTex);
 boot.addResource(imageRun);
@@ -362,7 +459,7 @@ heart.graphics.add(group);
 heart.pos = ex.vec(10, 10);
 game.add(heart);
 
-var label = new ex.Label({ text: 'Test Label', x: 200, y: 200 });
+var label = new ex.Label({ text: 'Test Label', maxWidth: 20, x: 200, y: 200 });
 game.add(label);
 
 var testSpriteLabel = new ex.Label({ text: 'Test Sprite Label', x: 200, y: 100, spriteFont: spriteFont });
@@ -556,6 +653,24 @@ follower.graphics.add(new ex.Rectangle({ color: ex.Color.Black, width: 20, heigh
 follower.body.collisionType = ex.CollisionType.PreventCollision;
 game.add(follower);
 
+var font2 = fontSource.toFont({
+  family: 'Gorgeous Pixel',
+  color: ex.Color.White,
+  size: 30,
+  shadow: {
+    blur: 15,
+    color: ex.Color.Black
+  }
+});
+
+game.add(
+  new ex.Label({
+    text: 'Hello this is a pixel font',
+    pos: ex.vec(200, 200),
+    font: font2
+  })
+);
+
 // Create the player
 var player = new ex.Actor({
   name: 'player',
@@ -598,7 +713,7 @@ player.on('collisionstart', () => {
 });
 
 player.on('collisionend', (e) => {
-  console.log('collision end', e.other.collider);
+  console.log('collision end', e.other);
 });
 
 // Health bar example
@@ -768,6 +883,9 @@ game.input.keyboard.on('up', (e?: ex.KeyEvent) => {
 
 player.on('pointerdown', (e?: ex.PointerEvent) => {
   // alert('Player clicked!');
+  if (e.button === ex.PointerButton.Right) {
+    console.log('right click');
+  }
 });
 player.on('pointerdown', () => {
   console.log('pointer down');
@@ -789,7 +907,16 @@ player.on('pointerwheel', () => {
 });
 
 var newScene = new ex.Scene();
-newScene.backgroundColor = ex.Color.Yellow;
+
+newScene.on('transitionstart', (evt) => {
+  console.log('transitionstart', evt);
+});
+
+newScene.on('transitionend', (evt) => {
+  console.log('transitionend', evt);
+});
+
+newScene.backgroundColor = ex.Color.ExcaliburBlue;
 newScene.add(new ex.Label({ text: 'MAH LABEL!', x: 200, y: 100 }));
 newScene.on('activate', (evt?: ex.ActivateEvent) => {
   console.log('activate newScene');
@@ -825,9 +952,43 @@ game.input.keyboard.on('down', (keyDown?: ex.KeyEvent) => {
     });
     game.add(a);
   } else if (keyDown.key === ex.Keys.U) {
-    game.goToScene('label');
+    game.goToScene('label', {
+      destinationIn: new ex.Slide({
+        duration: 1000,
+        easingFunction: ex.EasingFunctions.EaseInOutCubic,
+        slideDirection: 'up'
+      })
+    });
+  } else if (keyDown.key === ex.Keys.D) {
+    game.goToScene('label', {
+      destinationIn: new ex.Slide({
+        duration: 1000,
+        easingFunction: ex.EasingFunctions.EaseInOutCubic,
+        slideDirection: 'down'
+      })
+    });
+  } else if (keyDown.key === ex.Keys.L) {
+    game.goToScene('label', {
+      destinationIn: new ex.Slide({
+        duration: 1000,
+        easingFunction: ex.EasingFunctions.EaseInOutCubic,
+        slideDirection: 'left'
+      })
+    });
+  } else if (keyDown.key === ex.Keys.R) {
+    game.goToScene('label', {
+      destinationIn: new ex.Slide({
+        duration: 1000,
+        easingFunction: ex.EasingFunctions.EaseInOutCubic,
+        slideDirection: 'right'
+      })
+    });
   } else if (keyDown.key === ex.Keys.I) {
-    game.goToScene('root');
+    game.goToScene('root', {
+      destinationIn: new ex.CrossFade({
+        duration: 1000
+      })
+    });
   }
 });
 
@@ -849,8 +1010,8 @@ player.on('postcollision', (data: ex.PostCollisionEvent) => {
         game.input.keyboard.isHeld(ex.Keys.Down)
       )
     ) {
-      player.vel.x = data.other.vel.x;
-      player.vel.y = data.other.vel.y;
+      player.vel.x = data.other.owner.vel.x;
+      player.vel.y = data.other.owner.vel.y;
     }
 
     if (!data.other) {
@@ -861,7 +1022,7 @@ player.on('postcollision', (data: ex.PostCollisionEvent) => {
 
   if (data.side === ex.Side.Top) {
     if (data.other) {
-      player.vel.y = data.other.vel.y - player.vel.y;
+      player.vel.y = data.other.owner.vel.y - player.vel.y;
     } else {
       player.vel.y = 0;
     }
@@ -922,8 +1083,8 @@ var emitter = new ex.ParticleEmitter({
   width: 2,
   height: 2,
   particle: {
-    minVel: 417,
-    maxVel: 589,
+    minSpeed: 417,
+    maxSpeed: 589,
     minAngle: Math.PI,
     maxAngle: Math.PI * 2,
     opacity: 0.84,
@@ -981,9 +1142,19 @@ game.input.pointers.primary.on('down', (evt: ex.PointerEvent) => {
   }
 });
 
-tileMap.tiles[0].events.on('pointerdown', (evt) => {
-  console.log('tile clicked', evt);
-});
+for (let i = 0; i < tileMap.tiles.length; i++) {
+  tileMap.tiles[i].events.on('pointerdown', (evt) => {
+    console.log('tile clicked', tileMap.tiles[i]);
+  });
+
+  tileMap.tiles[i].events.on('pointerenter', (evt) => {
+    console.log('pointer entered tile', tileMap.tiles[i].x, tileMap.tiles[i].y);
+  });
+
+  tileMap.tiles[i].events.on('pointerleave', (evt) => {
+    console.log('pointer left tile', tileMap.tiles[i].x, tileMap.tiles[i].y);
+  });
+}
 
 game.input.keyboard.on('up', (evt?: ex.KeyEvent) => {
   if (evt.key == ex.Keys.F) {
@@ -999,6 +1170,11 @@ game.currentScene.camera.strategy.lockToActorAxis(player, ex.Axis.X);
 game.currentScene.camera.y = 200;
 
 // Run the mainloop
-game.start(boot).then(() => {
-  logger.info('All Resources have finished loading');
-});
+game
+  .start('root', {
+    inTransition: new ex.FadeInOut({ duration: 2000, direction: 'in', color: ex.Color.ExcaliburBlue }),
+    loader: boot
+  })
+  .then(() => {
+    logger.info('All Resources have finished loading');
+  });

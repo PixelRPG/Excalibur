@@ -36,7 +36,7 @@ export class ColliderComponent extends Component {
   /**
    * Get the current collider geometry
    */
-  public get() {
+  public get(): Collider | undefined {
     return this._collider;
   }
 
@@ -157,16 +157,10 @@ export class ColliderComponent extends Component {
       const precollision = evt as PreCollisionEvent<Collider>;
       entity.events.emit(
         'precollision',
-        new PreCollisionEvent(
-          precollision.target.owner,
-          precollision.other.owner,
-          precollision.side,
-          precollision.intersection,
-          precollision.contact
-        )
+        new PreCollisionEvent(precollision.self, precollision.other, precollision.side, precollision.intersection, precollision.contact)
       );
       if (entity instanceof Actor) {
-        entity.onPreCollisionResolve(precollision.target, precollision.other, precollision.side, precollision.contact);
+        entity.onPreCollisionResolve(precollision.self, precollision.other, precollision.side, precollision.contact);
       }
     });
     this.events.on('postcollision', (evt: any) => {
@@ -174,29 +168,29 @@ export class ColliderComponent extends Component {
       entity.events.emit(
         'postcollision',
         new PostCollisionEvent(
-          postcollision.target.owner,
-          postcollision.other.owner,
+          postcollision.self,
+          postcollision.other,
           postcollision.side,
           postcollision.intersection,
           postcollision.contact
         )
       );
       if (entity instanceof Actor) {
-        entity.onPostCollisionResolve(postcollision.target, postcollision.other, postcollision.side, postcollision.contact);
+        entity.onPostCollisionResolve(postcollision.self, postcollision.other, postcollision.side, postcollision.contact);
       }
     });
     this.events.on('collisionstart', (evt: any) => {
       const start = evt as CollisionStartEvent<Collider>;
-      entity.events.emit('collisionstart', new CollisionStartEvent(start.target.owner, start.other.owner, start.side, start.contact));
+      entity.events.emit('collisionstart', new CollisionStartEvent(start.self, start.other, start.side, start.contact));
       if (entity instanceof Actor) {
-        entity.onCollisionStart(start.target, start.other, start.side, start.contact);
+        entity.onCollisionStart(start.self, start.other, start.side, start.contact);
       }
     });
     this.events.on('collisionend', (evt: any) => {
       const end = evt as CollisionEndEvent<Collider>;
-      entity.events.emit('collisionend', new CollisionEndEvent(end.target.owner, end.other.owner, end.side, end.lastContact));
+      entity.events.emit('collisionend', new CollisionEndEvent(end.self, end.other, end.side, end.lastContact));
       if (entity instanceof Actor) {
-        entity.onCollisionEnd(end.target, end.other, end.side, end.lastContact);
+        entity.onCollisionEnd(end.self, end.other, end.side, end.lastContact);
       }
     });
   }
@@ -219,7 +213,7 @@ export class ColliderComponent extends Component {
   }
 
   /**
-   * Sets up a [[PolygonCollider|polygon]] collision geometry based on a list of of points relative
+   * Sets up a {@apilink PolygonCollider | `polygon`} collision geometry based on a list of of points relative
    *  to the anchor of the associated actor
    * of this physics body.
    *
@@ -233,7 +227,7 @@ export class ColliderComponent extends Component {
   }
 
   /**
-   * Sets up a [[Circle|circle collision geometry]] as the only collider with a specified radius in pixels.
+   * Sets up a {@apilink Circle | `circle collision geometry`} as the only collider with a specified radius in pixels.
    *
    * By default, the box is center is at (0, 0) which means it is centered around the actors anchor.
    */
@@ -243,7 +237,7 @@ export class ColliderComponent extends Component {
   }
 
   /**
-   * Sets up an [[Edge|edge collision geometry]] with a start point and an end point relative to the anchor of the associated actor
+   * Sets up an {@apilink Edge | `edge collision geometry`} with a start point and an end point relative to the anchor of the associated actor
    * of this physics body.
    *
    * By default, the box is center is at (0, 0) which means it is centered around the actors anchor.
@@ -254,7 +248,7 @@ export class ColliderComponent extends Component {
   }
 
   /**
-   * Setups up a [[CompositeCollider]] which can define any arbitrary set of excalibur colliders
+   * Setups up a {@apilink CompositeCollider} which can define any arbitrary set of excalibur colliders
    * @param colliders
    */
   useCompositeCollider(colliders: Collider[]): CompositeCollider {

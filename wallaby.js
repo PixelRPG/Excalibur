@@ -10,6 +10,7 @@ module.exports = function (wallaby) {
       { pattern: 'src/engine/**/*.glsl', load: false },
       { pattern: 'src/spec/images/**/*.mp3' },
       { pattern: 'src/spec/images/**/*.ogg' },
+      { pattern: 'src/spec/images/**/*.svg' },
       { pattern: 'src/spec/images/**/*.png' },
       { pattern: 'src/spec/images/**/*.gif' },
       { pattern: 'src/spec/images/**/*.txt' },
@@ -42,6 +43,11 @@ module.exports = function (wallaby) {
       plugins: [
         new webpack.DefinePlugin({
           'process.env.__EX_VERSION': "'test-runner'"
+        }),
+        new webpack.DefinePlugin({
+          'process.env': {
+            NODE_ENV: JSON.stringify('development')
+          }
         })
       ],
       module: {

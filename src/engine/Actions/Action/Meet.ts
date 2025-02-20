@@ -10,13 +10,13 @@ export class Meet implements Action {
   private _motion: MotionComponent;
   private _meetTx: TransformComponent;
   private _meetMotion: MotionComponent;
-  public x: number;
-  public y: number;
+  public x!: number;
+  public y!: number;
   private _current: Vector;
   private _end: Vector;
-  private _dir: Vector;
+  private _dir!: Vector;
   private _speed: number;
-  private _distanceBetween: number;
+  private _distanceBetween!: number;
   private _started = false;
   private _stopped = false;
   private _speedWasSpecified = false;
@@ -35,7 +35,7 @@ export class Meet implements Action {
     }
   }
 
-  public update(_delta: number): void {
+  public update(elapsed: number): void {
     if (!this._started) {
       this._started = true;
       this._distanceBetween = this._current.distance(this._end);
@@ -73,6 +73,6 @@ export class Meet implements Action {
   public reset(): void {
     this._started = false;
     this._stopped = false;
-    this._distanceBetween = undefined;
+    this._distanceBetween = Infinity;
   }
 }

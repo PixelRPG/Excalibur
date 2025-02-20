@@ -4,8 +4,9 @@ import { IsometricEntityComponent } from './IsometricEntityComponent';
 import { Query, SystemPriority, World } from '../EntityComponentSystem';
 
 export class IsometricEntitySystem extends System {
+  static priority: number = SystemPriority.Lower;
+
   public readonly systemType = SystemType.Update;
-  priority: number = SystemPriority.Lower;
   query: Query<typeof TransformComponent | typeof IsometricEntityComponent>;
   constructor(public world: World) {
     super();
@@ -15,7 +16,8 @@ export class IsometricEntitySystem extends System {
   update(): void {
     let transform: TransformComponent;
     let iso: IsometricEntityComponent;
-    for (const entity of this.query.entities) {
+    for (let i = 0; i < this.query.entities.length; i++) {
+      const entity = this.query.entities[i];
       transform = entity.get(TransformComponent);
       iso = entity.get(IsometricEntityComponent);
 

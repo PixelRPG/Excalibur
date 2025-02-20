@@ -38,6 +38,7 @@ const config: Config = {
   projectName: 'Excalibur', // Usually your repo name.
 
   onBrokenLinks: 'warn',
+  onBrokenAnchors: 'warn',
   onBrokenMarkdownLinks: 'warn',
 
   // Even if you don't use internalization, you can use this field to set useful
@@ -255,13 +256,18 @@ const config: Config = {
           items: [
             {
               label: 'Tutorial',
-              to: '/docs/intro'
+              to: '/docs/excalibird-flappy-bird'
             }
           ]
         },
         {
           title: 'Community',
           items: [
+            {
+              label: 'BlueSky',
+              href: 'https://bsky.app/profile/excaliburjs.com',
+              rel: 'me'
+            },
             {
               label: 'Mastodon',
               href: 'https://mastodon.gamedev.place/@excaliburjs',

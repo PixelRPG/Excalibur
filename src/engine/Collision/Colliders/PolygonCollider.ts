@@ -23,6 +23,7 @@ export interface PolygonColliderOptions {
   offset?: Vector;
   /**
    * Points in the polygon in order around the perimeter in local coordinates. These are relative from the body transform position.
+   * **Must be at least 3 points**
    */
   points: Vector[];
 
@@ -61,6 +62,9 @@ export class PolygonCollider extends Collider {
    * Excalibur stores these in counter-clockwise order
    */
   public set points(points: Vector[]) {
+    if (points.length < 3) {
+      throw new Error('PolygonCollider cannot be created with less that 3 points');
+    }
     this._points = points;
     this._checkAndUpdateWinding(this._points);
     this._calculateNormals();
@@ -97,7 +101,7 @@ export class PolygonCollider extends Collider {
     this.offset = options.offset ?? Vector.Zero;
     this._transform.pos.x += this.offset.x;
     this._transform.pos.y += this.offset.y;
-    this.points = options.points ?? [];
+    this.points = options.points;
 
     if (!this.isConvex()) {
       if (!options.suppressConvexWarning) {
@@ -129,7 +133,7 @@ export class PolygonCollider extends Collider {
 
   /**
    * Returns if the polygon collider is convex, Excalibur does not handle non-convex collision shapes.
-   * Call [[Polygon.triangulate]] to generate a [[CompositeCollider]] from this non-convex shape
+   * Call {@apilink Polygon.triangulate} to generate a {@apilink CompositeCollider} from this non-convex shape
    */
   public isConvex(): boolean {
     // From SO: https://stackoverflow.com/a/45372025
@@ -172,7 +176,7 @@ export class PolygonCollider extends Collider {
   }
 
   /**
-   * Tessellates the polygon into a triangle fan as a [[CompositeCollider]] of triangle polygons
+   * Tessellates the polygon into a triangle fan as a {@apilink CompositeCollider} of triangle polygons
    */
   public tessellate(): CompositeCollider {
     const polygons: Vector[][] = [];
@@ -186,7 +190,7 @@ export class PolygonCollider extends Collider {
 
   /**
    * Triangulate the polygon collider using the "Ear Clipping" algorithm.
-   * Returns a new [[CompositeCollider]] made up of smaller triangles.
+   * Returns a new {@apilink CompositeCollider} made up of smaller triangles.
    */
   public triangulate(): CompositeCollider {
     // https://www.youtube.com/watch?v=hTJFcHutls8
@@ -520,13 +524,17 @@ export class PolygonCollider extends Collider {
   public contains(point: Vector): boolean {
     // Always cast to the right, as long as we cast in a consistent fixed direction we
     // will be fine
-    const testRay = new Ray(point, new Vector(1, 0));
-    const intersectCount = this.getSides().reduce(function (accum, side) {
+    const localPoint = this._transform.applyInverse(point);
+    const testRay = new Ray(localPoint, new Vector(1, 0));
+
+    let intersectCount = 0;
+    const sides = this.getLocalSides();
+    for (let sideIndex = 0; sideIndex < sides.length; sideIndex++) {
+      const side = sides[sideIndex];
       if (testRay.intersect(side) >= 0) {
-        return accum + 1;
+        intersectCount++;
       }
-      return accum;
-    }, 0);
+    }
 
     if (intersectCount % 2 === 0) {
       return false;

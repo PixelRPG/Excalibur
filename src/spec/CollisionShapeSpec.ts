@@ -17,8 +17,9 @@ describe('Collision Shape', () => {
     let actor: ex.Actor;
 
     beforeEach(async () => {
-      engine = TestUtils.engine();
-      engine.backgroundColor = ex.Color.Transparent;
+      engine = TestUtils.engine({
+        backgroundColor: ex.Color.ExcaliburBlue
+      });
       scene = new ex.Scene();
       engine.add('test', scene);
       await engine.goToScene('test');
@@ -179,6 +180,25 @@ describe('Collision Shape', () => {
 
       expect(point.x).toBe(10);
       expect(point.y).toBe(0);
+    });
+
+    it('can be raycast at a tangent', () => {
+      const circle = new ex.CircleCollider({
+        offset: ex.vec(10, -5),
+        radius: 5
+      });
+      const ray = new ex.Ray(new ex.Vector(0, 0), ex.Vector.Right.clone());
+      const ray2 = new ex.Ray(new ex.Vector(5, 0), ex.Vector.Up.clone());
+
+      const hit = circle.rayCast(ray);
+
+      expect(hit.point.x).toBe(10);
+      expect(hit.point.y).toBe(0);
+
+      const hit2 = circle.rayCast(ray2);
+
+      expect(hit2.point.x).toBe(5);
+      expect(hit2.point.y).toBe(-5);
     });
 
     it("doesn't have axes", () => {
@@ -433,8 +453,9 @@ describe('Collision Shape', () => {
     let engine: ex.Engine;
     let scene: ex.Scene;
     beforeEach(async () => {
-      engine = TestUtils.engine();
-      engine.backgroundColor = ex.Color.Transparent;
+      engine = TestUtils.engine({
+        backgroundColor: ex.Color.ExcaliburBlue
+      });
       scene = new ex.Scene();
       engine.addScene('test', scene);
       await engine.goToScene('test');
@@ -455,21 +476,30 @@ describe('Collision Shape', () => {
 
     it('can be constructed with empty args', () => {
       const poly = new ex.PolygonCollider({
-        points: [ex.Vector.One]
+        points: [ex.Vector.One, ex.Vector.Zero, ex.Vector.Right]
       });
       expect(poly).not.toBe(null);
     });
 
+    it('does not allow degenerate polygons', () => {
+      const action = () => {
+        const poly = new ex.PolygonCollider({
+          points: [ex.Vector.One]
+        });
+      };
+      expect(action).toThrowError('PolygonCollider cannot be created with less that 3 points');
+    });
+
     it('can be cloned', () => {
       const actor1 = new ex.Actor({ x: 0, y: 0, width: 20, height: 20 });
-      const poly = actor1.collider.usePolygonCollider([ex.Vector.One, ex.Vector.Half], new ex.Vector(20, 25));
+      const poly = actor1.collider.usePolygonCollider([ex.Vector.One, ex.Vector.Half, ex.Vector.Right], new ex.Vector(20, 25));
 
       const sut = poly.clone();
 
       expect(sut).not.toBe(poly);
       expect(sut.offset).toBeVector(poly.offset);
       expect(sut.offset).not.toBe(poly.offset);
-      expect(sut.points.length).toBe(2);
+      expect(sut.points.length).toBe(3);
     });
 
     it('can be constructed with points', () => {
@@ -884,8 +914,9 @@ describe('Collision Shape', () => {
     });
 
     beforeEach(async () => {
-      engine = TestUtils.engine();
-      engine.backgroundColor = ex.Color.Transparent;
+      engine = TestUtils.engine({
+        backgroundColor: ex.Color.ExcaliburBlue
+      });
       scene = new ex.Scene();
       engine.addScene('test', scene);
       await engine.goToScene('test');
