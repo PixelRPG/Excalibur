@@ -41,7 +41,7 @@ export class PolygonCollider extends Collider {
   /**
    * Pixel offset relative to a collider's body transform position.
    */
-  public offset: Vector;
+  declare offset: Vector;
 
   public flagDirty() {
     this._localBoundsDirty = true;
@@ -107,7 +107,7 @@ export class PolygonCollider extends Collider {
       if (!options.suppressConvexWarning) {
         this._logger.warn(
           'Excalibur only supports convex polygon colliders and will not behave properly.' +
-            'Call PolygonCollider.triangulate() to build a new collider composed of smaller convex triangles'
+          'Call PolygonCollider.triangulate() to build a new collider composed of smaller convex triangles'
         );
       }
     }

@@ -211,8 +211,8 @@ export class Loader extends DefaultLoader {
   constructor(loadablesOrOptions?: Loadable<any>[] | LoaderOptions) {
     const options = Array.isArray(loadablesOrOptions)
       ? {
-          loadables: loadablesOrOptions
-        }
+        loadables: loadablesOrOptions
+      }
       : loadablesOrOptions;
     super(options);
     this._originalOptions = { ...Loader._DEFAULT_LOADER_OPTIONS, ...options };
@@ -312,7 +312,7 @@ export class Loader extends DefaultLoader {
     }
   }
 
-  data!: Loadable<any>[];
+  declare data: Loadable<any>[];
 
   public override async onUserAction(): Promise<void> {
     // short delay in showing the button for aesthetics
