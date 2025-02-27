@@ -114,6 +114,11 @@ export class TileMap extends Entity implements HasNestedPointerEvents {
   public readonly rows: number;
   public readonly columns: number;
 
+  /**
+   * Arbitrary data storage per TileMap, useful for any game specific data
+   */
+  public data = new Map<string, any>();
+
   public renderFromTopOfGraphic = false;
   public meshingLookBehind = 10;
 
